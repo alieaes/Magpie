@@ -1,0 +1,9 @@
+packages:
+  - client
+  - server
+  - shared
+  - games/*
+
+# 설치 스크립트를 돌려도 되는 패키지 (pnpm은 기본으로 막는다)
+allowBuilds:
+  esbuild: true

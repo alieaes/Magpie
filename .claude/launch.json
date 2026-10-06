@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "magpie-server",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@magpie/server", "dev"],
+      "port": 3473
+    },
+    {
+      "name": "magpie-client",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@magpie/client", "dev"],
+      "port": 5480
+    }
+  ]
+}

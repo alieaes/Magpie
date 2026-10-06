@@ -1,0 +1,11 @@
+node_modules/
+dist/
+release/
+*.log
+*.tsbuildinfo
+.vite/
+
+# 비밀값. 저장소에는 .env.example만 올린다
+.env
+.env.*
+!.env.example
