@@ -22,7 +22,7 @@ export interface GameMeta {
  * 전체 게임 목록. 게임을 추가할 때 고치는 곳은 여기 하나다.
  * 순서는 로비 카드 순서다. 근거: docs/design/261006-01-game-catalog.md
  */
-export const GAMES = [
+const GAME_DEFS = [
   {
     id: 'apple-ten',
     name: '사과게임',
@@ -71,9 +71,16 @@ export const GAMES = [
 ] as const satisfies readonly GameMeta[];
 
 /** 게임 id 문자열 타입 */
-export type GameId = (typeof GAMES)[number]['id'];
+export type GameId = (typeof GAME_DEFS)[number]['id'];
 
-const GAME_BY_ID = new Map<string, GameMeta>(GAMES.map((g) => [g.id, g]));
+/** 등록된 게임. id만 GameId로 좁히고 나머지(상태 등)는 넓은 타입으로 둔다 */
+export interface Game extends GameMeta {
+  id: GameId;
+}
+
+export const GAMES: readonly Game[] = GAME_DEFS;
+
+const GAME_BY_ID = new Map<string, Game>(GAMES.map((g) => [g.id, g]));
 
 /** 문자열이 등록된 게임 id인지 확인한다 */
 export function isGameId(id: string): id is GameId {
@@ -81,6 +88,6 @@ export function isGameId(id: string): id is GameId {
 }
 
 /** id로 게임 정보를 찾는다. 없으면 undefined */
-export function findGame(id: string): GameMeta | undefined {
+export function findGame(id: string): Game | undefined {
   return GAME_BY_ID.get(id);
 }

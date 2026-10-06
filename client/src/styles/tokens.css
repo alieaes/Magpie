@@ -1,0 +1,87 @@
+/*
+  디자인 토큰. 근거: docs/design/261006-05-main-page.md §6
+  까치 깃털의 흑백 대비 + 액센트 하나(날개·꼬리의 청록 광택). 라이트·다크는 시스템 설정을 따른다.
+*/
+
+:root {
+  color-scheme: light;
+
+  --bg: #f7f6f3;
+  --surface: #ffffff;
+  --surface-2: #f9f9f8;
+  --surface-hover: #f3f2ef;
+  --border: #eaeaea;
+  --border-strong: #dcdbd7;
+
+  --text-strong: #111111;
+  --text: #2f3437;
+  --text-2: #787774;
+  --text-3: #a5a4a0;
+
+  --accent: #0e7c86;
+  --accent-text: #0b6a72;
+  --accent-soft: #e3f1f1;
+
+  --button-bg: #111111;
+  --button-bg-hover: #333333;
+  --button-text: #ffffff;
+
+  /* 게임 그림 바탕 (흐린 파스텔) */
+  --tint-red: #fdebec;
+  --tint-green: #edf3ec;
+  --tint-blue: #e1f3fe;
+  --tint-yellow: #fbf3db;
+  --tint-teal: #e3f1f1;
+  --thumb-ink: #2f3437;
+  --thumb-paper: #ffffff;
+
+  --skeleton: #efeeeb;
+  --shadow-hover: 0 2px 8px rgba(0, 0, 0, 0.04);
+
+  --radius-control: 8px;
+  --radius-card: 12px;
+
+  --font-sans: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Malgun Gothic',
+    sans-serif;
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --topbar-height: 56px;
+  --content-width: 1200px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+
+    --bg: #121314;
+    --surface: #1a1b1d;
+    --surface-2: #1e1f22;
+    --surface-hover: #232427;
+    --border: rgba(255, 255, 255, 0.08);
+    --border-strong: rgba(255, 255, 255, 0.14);
+
+    --text-strong: #f4f3f0;
+    --text: #e3e2df;
+    --text-2: #a09f9b;
+    --text-3: #6e6d6a;
+
+    --accent: #4fb8be;
+    --accent-text: #7fd3d7;
+    --accent-soft: rgba(79, 184, 190, 0.14);
+
+    --button-bg: #f4f3f0;
+    --button-bg-hover: #d9d8d4;
+    --button-text: #111111;
+
+    --tint-red: rgba(232, 112, 104, 0.12);
+    --tint-green: rgba(120, 180, 110, 0.12);
+    --tint-blue: rgba(100, 170, 230, 0.12);
+    --tint-yellow: rgba(220, 180, 80, 0.12);
+    --tint-teal: rgba(79, 184, 190, 0.12);
+    --thumb-ink: #e3e2df;
+    --thumb-paper: #26272a;
+
+    --skeleton: #232427;
+    --shadow-hover: 0 2px 10px rgba(0, 0, 0, 0.3);
+  }
+}

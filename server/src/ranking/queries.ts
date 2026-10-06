@@ -81,8 +81,7 @@ export async function rankTotal(
 
 /** 총합 계산에서 게임별 정렬 기준 식. 오름차순으로 정렬하면 좋은 기록이 앞에 온다 */
 function sortKey(): RawBuilder<unknown> {
-  const games: readonly GameMeta[] = GAMES;
-  const ascIds = games.filter((g) => g.sort === 'asc').map((g) => g.id);
+  const ascIds = GAMES.filter((g) => g.sort === 'asc').map((g) => g.id);
   if (ascIds.length === 0) return sql`-b.score`;
   return sql`(CASE WHEN b.game_id IN (${sql.join(ascIds)}) THEN b.score ELSE -b.score END)`;
 }
