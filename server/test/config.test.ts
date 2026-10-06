@@ -13,7 +13,7 @@ describe('loadConfig', () => {
     const config = loadConfig(BASE_ENV);
     expect(config.PORT).toBe(3473);
     expect(config.DB_PORT).toBe(3306);
-    expect(config.BASE_URL).toBe('http://localhost:5480');
+    expect(config.SITE_URL).toBe('http://localhost:5480');
   });
 
   it('숫자 값은 문자열에서 바꾼다', () => {

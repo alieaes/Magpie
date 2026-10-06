@@ -62,7 +62,7 @@ pnpm dev          # client(5480) + server(3473) 동시 실행
   | 키 | 예시 | 비고 |
   |---|---|---|
   | `PORT` | `3473` | |
-  | `BASE_URL` | `http://localhost:5480` | 로그인 리디렉션 주소를 만들 때 쓴다 |
+  | `SITE_URL` | `http://localhost:5480` | 로그인 리디렉션 주소를 만들 때 쓴다 |
   | `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` | | `DB_NAME`은 개발 `magpie-dev`, 운영 `magpie` |
   | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | | 로그인 설계에서 쓴다 |
 
