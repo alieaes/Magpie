@@ -1,3 +1,6 @@
 [submodule "AviaryHub-Resource"]
 	path = AviaryHub-Resource
 	url = ../AviaryHub-Resource
+[submodule "AI-Reference-Pack"]
+	path = AI-Reference-Pack
+	url = ../AI-Reference-Pack
