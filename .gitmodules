@@ -1,0 +1,3 @@
+[submodule "AviaryHub-Resource"]
+	path = AviaryHub-Resource
+	url = ../AviaryHub-Resource
