@@ -13,27 +13,25 @@ const { loggedIn } = storeToRefs(useAuthStore());
 const { data: summaries } = useAsyncData(fetchGamesSummary, [loggedIn]);
 
 const summaryById = computed(() => new Map<string, GameSummary>((summaries.value ?? []).map((s) => [s.gameId, s])));
-const playableCount = computed(() => GAMES.filter((g) => g.status === 'playable').length);
+// 준비 중(coming-soon) 게임은 로비에 보이지 않는다
+const playableGames = GAMES.filter((g) => g.status === 'playable');
 </script>
 
 <template>
   <main class="home">
     <section class="intro">
       <h1 class="headline">오늘은 어떤 게임?</h1>
-      <p class="lede">
-        사과게임부터 광고에서만 보던 그 게임까지. 랭킹은 매일 밤 12시에 새로 시작해요.
-      </p>
+      <p class="lede">랭킹은 매일 밤 12시에 새로 시작해요.</p>
     </section>
 
     <div class="layout">
       <section class="games" aria-labelledby="games-title">
         <header class="section-head">
           <h2 id="games-title" class="section-title">게임</h2>
-          <span class="count num">{{ playableCount }} / {{ GAMES.length }}</span>
         </header>
         <div class="grid">
           <GameCard
-            v-for="(game, i) in GAMES"
+            v-for="(game, i) in playableGames"
             :key="game.id"
             class="rise-in"
             :style="{ '--index': i }"
@@ -95,11 +93,6 @@ const playableCount = computed(() => GAMES.filter((g) => g.status === 'playable'
   font-size: 17px;
   font-weight: 700;
   color: var(--text-strong);
-}
-
-.count {
-  font-size: 13px;
-  color: var(--text-3);
 }
 
 .grid {

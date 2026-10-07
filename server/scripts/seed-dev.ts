@@ -61,7 +61,7 @@ async function insertBest(
   }
 }
 
-/** 테스트 데이터를 만든다: 사과게임·과일 합치기 두 게임의 오늘 기록과 역대 기록 */
+/** 테스트 데이터를 만든다: 사과게임의 오늘 기록과 역대 기록 */
 async function main(): Promise<void> {
   loadEnvFile();
   const config = loadConfig();
@@ -98,17 +98,7 @@ async function main(): Promise<void> {
         await insertBest(db, { userId, gameId: 'apple-ten', score: appleBest - Math.floor(random() * 30), achievedAt: todayAt(), day: today });
         daily += 1;
       }
-
-      // 과일 합치기: 점수 규모가 다른 게임. 총합 환산을 확인하려고 넣는다
-      if (random() < 0.7) {
-        const mergeBest = 800 + Math.floor(random() * 3200);
-        await insertBest(db, { userId, gameId: 'fruit-merge', score: mergeBest, achievedAt: pastAt() });
-        alltime += 1;
-        if (random() < 0.6) {
-          await insertBest(db, { userId, gameId: 'fruit-merge', score: mergeBest - Math.floor(random() * 600), achievedAt: todayAt(), day: today });
-          daily += 1;
-        }
-      }
+      // 숨긴(준비 중) 게임의 기록은 넣지 않는다. 총합 환산은 서버 통합 테스트가 여러 게임으로 확인한다
     }
     console.log(`[seed-dev] ${config.DB_NAME}: 유저 ${USER_COUNT}명, 오늘(${today}) 기록 ${daily}개, 역대 기록 ${alltime}개`);
   } finally {
