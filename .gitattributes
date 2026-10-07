@@ -1,0 +1,3 @@
+# Windows 배치 파일은 CRLF여야 goto/call 라벨이 제대로 동작한다
+*.cmd text eol=crlf
+*.bat text eol=crlf

@@ -1,0 +1,45 @@
+{
+  // F5 디버깅 구성. 보통은 "Magpie: 전체"를 쓴다.
+  //   API 서버  — Node로 server/src/main.ts를 띄운다. TS 파일에 바로 중단점을 걸 수 있다
+  //   브라우저  — Vite 개발 서버(5480)를 먼저 띄우고 Chrome을 연다. Vue·TS 파일에 중단점을 걸 수 있다
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Magpie: API 서버",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/server",
+      "runtimeArgs": ["--import", "tsx"],
+      "program": "${workspaceFolder}/server/src/main.ts",
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**", "**/node_modules/**"]
+    },
+    {
+      "name": "Magpie: 브라우저 (Chrome)",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://localhost:5480",
+      "webRoot": "${workspaceFolder}/client",
+      "preLaunchTask": "client: dev",
+      "skipFiles": ["**/node_modules/**", "**/@vite/**"]
+    },
+    {
+      "name": "Magpie: 현재 테스트 파일",
+      "type": "node",
+      "request": "launch",
+      // 테스트 파일은 <패키지>/test/ 아래에 있으므로 그 위 폴더(패키지)에서 실행한다
+      "cwd": "${fileDirname}/..",
+      "program": "${workspaceFolder}/node_modules/vitest/vitest.mjs",
+      "args": ["run", "${file}"],
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**", "**/node_modules/**"]
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Magpie: 전체",
+      "configurations": ["Magpie: API 서버", "Magpie: 브라우저 (Chrome)"],
+      "stopAll": true
+    }
+  ]
+}

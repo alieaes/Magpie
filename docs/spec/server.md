@@ -33,6 +33,28 @@ pnpm 워크스페이스. TypeScript 6.0.3 고정 (vue-tsc가 TypeScript 7을 아
 
 개발 중에는 Vite가 `/api`, `/auth`, `/health`를 3473으로 넘긴다.
 
+## 실행 스크립트 (Windows)
+
+| 파일 | 하는 일 |
+|---|---|
+| `run_dev.cmd` | `pnpm dev`. `server` / `client` 인자로 하나만 띄울 수 있다. pnpm이나 `server/.env`가 없으면 알려주고 멈춘다. `node_modules`가 없으면 설치부터 한다 |
+| `run_build.cmd` | `pnpm install --frozen-lockfile` → `pnpm build` → `pnpm test`. `notest`로 테스트 생략, `nopause`로 끝에 멈추지 않음. 결과물 경로를 찍는다 |
+
+배포 패키지(`release/`)는 아직 만들지 않는다. 배포 설계에서 정한다.
+`.cmd` 파일은 CRLF여야 한다 (`.gitattributes`로 고정).
+
+## VS Code 디버깅 (`.vscode/`)
+
+| 구성 | 내용 |
+|---|---|
+| Magpie: API 서버 | `node --import tsx server/src/main.ts` (작업 폴더 `server/`). TS 파일에 바로 중단점 |
+| Magpie: 브라우저 (Chrome) | 작업 `client: dev`로 Vite를 띄우고 "ready in"이 찍히면 Chrome으로 5480을 연다. Vue·TS 중단점 |
+| Magpie: 전체 | 위 둘을 같이. 하나를 멈추면 둘 다 멈춘다 |
+| Magpie: 현재 테스트 파일 | 열린 테스트 파일만 Vitest로 실행. 테스트는 `<패키지>/test/`에 있어야 한다 |
+
+- 작업(`tasks.json`): `client: dev`, `build`(기본 빌드 작업), `test`(기본 테스트 작업), `db: migrate`, `db: seed-dev`.
+- VS Code는 저장소의 TypeScript 6.0.3을 쓴다(`settings.json`). 추천 확장: Vue - Official, Vitest.
+
 ## 설정 (`server/.env`)
 
 `.env`는 저장소에 올리지 않는다. 키 목록은 `server/.env.example`.

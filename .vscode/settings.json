@@ -1,0 +1,9 @@
+{
+  // 저장소에 고정한 TypeScript(6.0.3)를 쓴다. VS Code 내장 버전과 다를 수 있다
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "typescript.enablePromptUseWorkspaceTsdk": true,
+  "search.exclude": {
+    "**/dist": true,
+    "**/pnpm-lock.yaml": true
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      // Vite 개발 서버. "ready in"이 찍히면 준비된 것으로 보고 브라우저 디버깅을 시작한다
+      "label": "client: dev",
+      "type": "shell",
+      "command": "pnpm --filter @magpie/client dev",
+      "isBackground": true,
+      "problemMatcher": {
+        "pattern": { "regexp": "^never matches$" },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "VITE",
+          "endsPattern": "ready in"
+        }
+      },
+      "presentation": { "reveal": "always", "panel": "dedicated", "group": "dev" }
+    },
+    {
+      "label": "build",
+      "type": "shell",
+      "command": "pnpm build",
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": ["$tsc"]
+    },
+    {
+      "label": "test",
+      "type": "shell",
+      "command": "pnpm test",
+      "group": { "kind": "test", "isDefault": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "db: migrate",
+      "type": "shell",
+      "command": "pnpm db:migrate",
+      "problemMatcher": []
+    },
+    {
+      "label": "db: seed-dev",
+      "type": "shell",
+      "command": "pnpm db:seed-dev",
+      "problemMatcher": []
+    }
+  ]
+}
