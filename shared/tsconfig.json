@@ -1,4 +1,9 @@
 {
   "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    // game-module.ts는 브라우저 타입을, random.ts는 crypto를 쓴다
+    "lib": ["ES2023", "DOM"],
+    "types": ["node"]
+  },
   "include": ["src", "test"]
 }

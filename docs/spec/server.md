@@ -10,8 +10,8 @@ pnpm 워크스페이스. TypeScript 6.0.3 고정 (vue-tsc가 TypeScript 7을 아
 |---|---|---|
 | `@magpie/client` | `client/` | Vue 3 + Vite. 셸 화면 |
 | `@magpie/server` | `server/` | Hono API |
-| `@magpie/shared` | `shared/` | 게임 목록, 랭킹 응답 형식, KST 날짜 계산. 빌드 없이 소스를 바로 쓴다 |
-| `@magpie/game-<id>` | `games/<id>/` | 게임 패키지 (아직 없음) |
+| `@magpie/shared` | `shared/` | 게임 목록, 랭킹 응답 형식, KST 날짜, 시드 난수, 틱 단위. 빌드 없이 소스를 바로 쓴다. 브라우저 전용 게임 모듈 규격은 `@magpie/shared/game-module`로 따로 낸다 |
+| `@magpie/game-apple-ten` | `games/apple-ten/` | 사과게임. `./logic`(순수 로직, 서버도 쓸 수 있음)과 기본 내보내기(Phaser 화면) |
 
 ## 명령
 

@@ -7,6 +7,7 @@ export const router = createRouter({
   routes: [
     { path: '/', name: 'home', component: HomePage },
     { path: '/ranking', name: 'ranking', component: () => import('./pages/RankingPage.vue') },
+    { path: '/play/:gameId', name: 'play', component: () => import('./pages/PlayPage.vue') },
     { path: '/:pathMatch(.*)*', name: 'not-found', component: () => import('./pages/NotFoundPage.vue') },
   ],
   scrollBehavior: () => ({ top: 0 }),

@@ -1,14 +1,18 @@
 {
-  "name": "@magpie/shared",
+  "name": "@magpie/game-apple-ten",
   "private": true,
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./game-module": "./src/game-module.ts"
+    "./logic": "./src/logic/index.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@magpie/shared": "workspace:*",
+    "phaser": "^4.2.1"
   }
 }

@@ -19,5 +19,7 @@ export default defineConfig({
   build: {
     // 파일명에 해시가 붙으므로 Cloudflare가 오래 캐시해도 된다
     assetsDir: 'assets',
+    // Phaser가 1MB를 넘는다. 게임 화면에 들어갈 때만 받는 덩어리라 경고 기준을 올린다
+    chunkSizeWarningLimit: 1600,
   },
 });

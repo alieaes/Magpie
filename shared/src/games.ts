@@ -16,6 +16,8 @@ export interface GameMeta {
   scoreUnit: string;
   sort: ScoreSort;
   status: GameStatus;
+  /** 시작 화면에 보여줄 규칙 설명 한두 문장 */
+  howTo?: string;
 }
 
 /**
@@ -30,7 +32,8 @@ const GAME_DEFS = [
     orientation: 'landscape',
     scoreUnit: '개',
     sort: 'desc',
-    status: 'coming-soon',
+    status: 'playable',
+    howTo: '드래그해서 사각형 안 숫자의 합을 10으로 만들면 사과가 사라져요. 120초 동안 최대한 많이 지워 보세요.',
   },
   {
     id: 'fruit-merge',
