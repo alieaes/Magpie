@@ -32,7 +32,7 @@
 | `id`, `created_at` | |
 | `admin_user_id` | 처리한 관리자 |
 | `action` | `remove_play` / `reset_nickname` |
-| `target_user_id`, `play_id` | 대상. 외래 키가 없어서 대상이 탈퇴해도 번호가 남는다 |
+| `target_user_id`, `play_id` | 대상. 외래 키가 없어서 대상이 탈퇴해도 번호가 남는다. 탈퇴하면 그 유저의 닉네임 초기화 기록에서 이전 닉네임을 지운다([auth.md](./auth.md) 탈퇴) |
 | `detail` (JSON) | 처리 전 값. 기록 삭제 `{ gameId, score, removedDaily, removedAllTime }`, 닉네임 초기화 `{ nickname }` |
 
 ## API

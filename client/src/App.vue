@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import TopBar from './components/TopBar.vue';
+import AccountDeleteDialog from './components/AccountDeleteDialog.vue';
 import NicknameDialog from './components/NicknameDialog.vue';
 import { useAuthStore } from './stores/auth';
 
@@ -10,26 +11,30 @@ const route = useRoute();
 const router = useRouter();
 const notice = ref('');
 
-// 로그인에서 돌아왔을 때 서버가 붙인 ?login= 값에 맞춰 짧게 알려준다
-const LOGIN_NOTICES: Record<string, string> = {
-  failed: '로그인하지 못했어요. 다시 시도해 주세요.',
-  unavailable: '로그인은 아직 열리지 않았어요.',
+// 로그인에서 돌아왔을 때(?login=, 서버가 붙임)와 탈퇴한 뒤(?account=)에 짧게 알려준다
+const NOTICES: Record<'login' | 'account', Record<string, string>> = {
+  login: {
+    failed: '로그인하지 못했어요. 다시 시도해 주세요.',
+    unavailable: '로그인은 아직 열리지 않았어요.',
+  },
+  account: {
+    deleted: '탈퇴했어요.',
+  },
 };
 
-/** ?login= 안내를 띄우고 주소에서는 지운다 */
-async function showLoginNotice(): Promise<void> {
+/** ?login= / ?account= 안내를 띄우고 주소에서는 지운다 */
+async function showNotice(): Promise<void> {
   await router.isReady();
-  const key = route.query.login;
-  if (typeof key !== 'string') return;
-  notice.value = LOGIN_NOTICES[key] ?? '';
-  const { login: _drop, ...rest } = route.query;
+  const { login, account, ...rest } = route.query;
+  if (typeof login !== 'string' && typeof account !== 'string') return;
+  notice.value = (typeof login === 'string' && NOTICES.login[login]) || (typeof account === 'string' && NOTICES.account[account]) || '';
   void router.replace({ query: rest });
   if (notice.value) setTimeout(() => (notice.value = ''), 5000);
 }
 
 onMounted(() => {
   void auth.load();
-  void showLoginNotice();
+  void showNotice();
 });
 </script>
 
@@ -38,6 +43,7 @@ onMounted(() => {
   <p v-if="notice" class="notice" role="status">{{ notice }}</p>
   <RouterView />
   <NicknameDialog />
+  <AccountDeleteDialog />
 </template>
 
 <style scoped>

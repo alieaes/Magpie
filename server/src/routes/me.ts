@@ -1,24 +1,29 @@
-// 내 정보: GET /api/me, PUT /api/me/nickname. 근거: docs/design/261006-07-login.md §3, §4
+// 내 정보: GET /api/me, PUT /api/me/nickname, DELETE /api/me(탈퇴).
+// 근거: docs/design/261006-07-login.md §3, §4, docs/design/261008-01-account-delete.md
 
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import type { Kysely } from 'kysely';
 import { z } from 'zod';
-import { checkNickname } from '@magpie/shared';
+import { checkNickname, deleteConfirmText } from '@magpie/shared';
 import type { AppEnv } from '../app-env';
+import { deleteAccount } from '../auth/account';
+import type { CookieSettings } from '../auth/cookies';
+import { clearSessionCookie } from '../auth/session';
 import { DuplicateNicknameError, setNickname } from '../auth/users';
 import type { Database } from '../db/types';
-import { jsonError } from '../lib/errors';
+import { jsonError, rejectInvalid } from '../lib/errors';
 import type { RankingService } from '../ranking/service';
 
 export interface MeRouteDeps {
   db: Kysely<Database>;
+  cookies: CookieSettings;
   loginAvailable: boolean;
   ranking: RankingService;
 }
 
 /** /api/me 라우트 */
-export function meRoutes({ db, loginAvailable, ranking }: MeRouteDeps) {
+export function meRoutes({ db, cookies, loginAvailable, ranking }: MeRouteDeps) {
   return new Hono<AppEnv>()
     .get('/me', (c) => {
       const user = c.get('user');
@@ -44,5 +49,18 @@ export function meRoutes({ db, loginAvailable, ranking }: MeRouteDeps) {
         ranking.invalidate();
         return c.json({ nickname: check.value }, 200);
       },
-    );
+    )
+    .delete('/me', zValidator('json', z.object({ confirm: z.string().max(100) }), rejectInvalid), async (c) => {
+      const user = c.get('user');
+      if (!user) return jsonError(c, 401, 'UNAUTHORIZED', '로그인이 필요해요.');
+      // 잘못 누르는 것을 막는다: 닉네임(닉네임 전이면 "탈퇴")을 똑같이 입력해야 한다
+      if (c.req.valid('json').confirm.trim() !== deleteConfirmText(user.nickname)) {
+        return jsonError(c, 400, 'CONFIRM_MISMATCH', '확인 문구가 맞지 않아요.');
+      }
+      await deleteAccount(db, user.id);
+      // 랭킹에서 바로 빠지도록 캐시를 비운다. 다른 서버 프로세스는 10초 안에 따라온다
+      ranking.invalidate();
+      clearSessionCookie(c, cookies);
+      return c.body(null, 204);
+    });
 }

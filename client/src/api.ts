@@ -84,6 +84,12 @@ export async function finishPlay(playId: number, body: FinishPlayRequest): Promi
   return res.json();
 }
 
+/** 탈퇴한다. confirm은 닉네임(닉네임 전이면 "탈퇴"). 다르면 ApiError(문구 포함) */
+export async function deleteAccount(confirm: string): Promise<void> {
+  const res = await client.api.me.$delete({ json: { confirm } });
+  if (!res.ok) throw await toApiError(res);
+}
+
 /** 관리자: 그 판의 기록을 지운다 (최고 기록 줄 삭제, 판은 거절 처리) */
 export async function adminRemovePlay(playId: number): Promise<void> {
   const res = await client.api.admin.plays[':playId'].remove.$post({ param: { playId: String(playId) } });

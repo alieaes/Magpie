@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { storeToRefs } from 'pinia';
-import { PhCaretDown, PhPencilSimple, PhSignIn, PhSignOut } from '@phosphor-icons/vue';
+import { PhCaretDown, PhPencilSimple, PhSignIn, PhSignOut, PhUserMinus } from '@phosphor-icons/vue';
 import { useDismiss } from '../composables/useDismiss';
 import { useAuthStore } from '../stores/auth';
 
@@ -23,6 +23,12 @@ function initial(nickname: string | null): string {
 function openNickname(): void {
   open.value = false;
   auth.nicknameDialog = user.value?.nickname ? 'change' : 'required';
+}
+
+/** 탈퇴 확인 창을 연다 */
+function openDelete(): void {
+  open.value = false;
+  auth.deleteDialog = true;
 }
 
 /** 로그아웃 */
@@ -72,6 +78,11 @@ async function onLogout(): Promise<void> {
         <button type="button" role="menuitem" class="menu-item" @click="onLogout">
           <PhSignOut :size="16" weight="bold" />
           로그아웃
+        </button>
+        <div class="menu-divider" aria-hidden="true" />
+        <button type="button" role="menuitem" class="menu-item is-danger" @click="openDelete">
+          <PhUserMinus :size="16" weight="bold" />
+          탈퇴
         </button>
       </div>
     </template>
@@ -193,6 +204,16 @@ async function onLogout(): Promise<void> {
 
 .menu-item:hover {
   background: var(--surface-hover);
+}
+
+.menu-item.is-danger {
+  color: #d9564a;
+}
+
+.menu-divider {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--border);
 }
 
 @media (max-width: 639px) {

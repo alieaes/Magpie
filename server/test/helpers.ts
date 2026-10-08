@@ -61,6 +61,7 @@ export interface TestApp {
   login(options?: { nickname?: string | null; admin?: boolean }): Promise<TestUser>;
   get(path: string, cookie?: string): Promise<Response>;
   post(path: string, body?: unknown, cookie?: string): Promise<Response>;
+  del(path: string, body?: unknown, cookie?: string): Promise<Response>;
 }
 
 /** 되돌림 트랜잭션 안에서 시계를 TEST_T0로 고정한 앱을 만들어 테스트를 돌린다 */
@@ -75,6 +76,13 @@ export function withTestApp(fn: (app: TestApp) => Promise<void>): Promise<void> 
     const plays = createPlayService(trx, { ranking, now });
     const app = createApp({ db: trx, config, ranking, plays, oidc: null });
     let seq = 0;
+    /** 우리 사이트에서 온 것처럼(Origin) JSON 본문 요청을 보낸다 */
+    const send = (method: string, path: string, body: unknown, cookie: string | undefined) =>
+      app.request(path, {
+        method,
+        headers: { origin, 'content-type': 'application/json', ...(cookie ? { cookie } : {}) },
+        body: body === undefined ? null : JSON.stringify(body),
+      });
     await fn({
       trx,
       advance: (ms) => (clock += ms),
@@ -86,12 +94,8 @@ export function withTestApp(fn: (app: TestApp) => Promise<void>): Promise<void> 
         return { id: user.id, cookie: `${cookieName}=${token}` };
       },
       get: async (path, cookie) => app.request(path, { headers: cookie ? { cookie } : {} }),
-      post: async (path, body, cookie) =>
-        app.request(path, {
-          method: 'POST',
-          headers: { origin, 'content-type': 'application/json', ...(cookie ? { cookie } : {}) },
-          body: body === undefined ? null : JSON.stringify(body),
-        }),
+      post: async (path, body, cookie) => send('POST', path, body, cookie),
+      del: async (path, body, cookie) => send('DELETE', path, body, cookie),
     });
   });
 }

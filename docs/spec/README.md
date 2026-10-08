@@ -5,7 +5,7 @@
 | 문서 | 내용 |
 |---|---|
 | [server.md](./server.md) | 저장소 구조, 실행·빌드 명령, 포트, 설정 키, `/health`, DB 스키마 관리 |
-| [auth.md](./auth.md) | Google 로그인, 세션, 요청 위조 방지, 닉네임 |
+| [auth.md](./auth.md) | Google 로그인, 세션, 요청 위조 방지, 닉네임, 탈퇴 |
 | [ranking.md](./ranking.md) | 랭킹 규칙(기간, 동점, 총합 환산), 표, 조회 API |
 | [plays.md](./plays.md) | 판 기록과 점수 제출: 판 시작·끝 API, 서버 재계산 검사, 최고 기록 갱신, 연습·기록 모드 |
 | [admin.md](./admin.md) | 관리자: 지정 명령, 기록 삭제, 닉네임 초기화, 작업 기록 |

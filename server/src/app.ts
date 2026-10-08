@@ -54,7 +54,7 @@ export function createApp({
       c.header('Cache-Control', 'no-store');
     })
     .route('/', rankingRoutes(ranking))
-    .route('/', meRoutes({ db, loginAvailable: oidc !== null, ranking }))
+    .route('/', meRoutes({ db, cookies, loginAvailable: oidc !== null, ranking }))
     .route('/', playRoutes(plays))
     .route('/', adminRoutes({ db, ranking }));
 
