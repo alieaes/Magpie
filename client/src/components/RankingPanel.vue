@@ -5,6 +5,7 @@ import { PhArrowRight } from '@phosphor-icons/vue';
 import type { RankingPeriod, RankingTarget } from '@magpie/shared';
 import { fetchRanking } from '../api';
 import { useAsyncData } from '../composables/useAsyncData';
+import { useAuthStore } from '../stores/auth';
 import { useCountdown } from '../composables/useCountdown';
 import { scoreUnit } from '../format';
 import { rankingTargetOptions } from '../rankingTargets';
@@ -16,10 +17,12 @@ const PANEL_LIMIT = 10;
 const target = ref<RankingTarget>('total');
 const period = ref<RankingPeriod>('daily');
 const options = rankingTargetOptions();
+const auth = useAuthStore();
 
 const { data, loading, error, reload } = useAsyncData(
   () => fetchRanking(target.value, period.value, PANEL_LIMIT),
-  [target, period],
+  // 로그인·로그아웃하면 내 순위가 바뀌므로 다시 불러온다
+  [target, period, () => auth.loggedIn],
 );
 // 일간 랭킹은 KST 00:00에 새로 시작하므로 그때 다시 불러온다
 useCountdown(() => data.value?.resetsAt, () => void reload());

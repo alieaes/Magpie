@@ -8,6 +8,9 @@ const EnvSchema = z.object({
   DB_USER: z.string().min(1),
   DB_PASSWORD: z.string(),
   DB_NAME: z.string().min(1),
+  // Google 로그인. 둘 다 있어야 로그인이 열린다. 없으면 서버는 뜨고 로그인만 막힌다
+  GOOGLE_CLIENT_ID: z.string().optional(),
+  GOOGLE_CLIENT_SECRET: z.string().optional(),
 });
 
 /** 서버 설정. 값은 환경 변수(.env)에서 온다 */

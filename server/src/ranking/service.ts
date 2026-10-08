@@ -20,6 +20,8 @@ const CACHE_TTL_MS = 10_000;
 export interface RankingService {
   getRanking(target: RankingTarget, period: RankingPeriod, limit: number, userId: number | null): Promise<RankingResponse>;
   getGamesSummary(userId: number | null): Promise<GameSummary[]>;
+  /** 이 프로세스의 랭킹 캐시를 비운다. 다른 프로세스는 캐시 시간(10초) 안에 따라온다 */
+  invalidate(): void;
 }
 
 /** 랭킹 서비스를 만든다. now는 테스트에서 시각을 고정할 때 바꾼다 */
@@ -38,6 +40,8 @@ export function createRankingService(db: Kysely<Database>, now: () => Date = () 
   }
 
   return {
+    invalidate: () => cache.clear(),
+
     /** 상위 limit명과 내 순위를 돌려준다 */
     async getRanking(target, period, limit, userId) {
       const at = now();

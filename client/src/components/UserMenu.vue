@@ -34,9 +34,25 @@ onBeforeUnmount(() => {
   document.removeEventListener('keydown', onKeydown);
 });
 
-/** 아바타에 넣을 글자: 닉네임 첫 글자 */
-function initial(nickname: string): string {
-  return Array.from(nickname)[0] ?? '?';
+/** 아바타에 넣을 글자: 닉네임 첫 글자. 닉네임 전이면 '?' */
+function initial(nickname: string | null): string {
+  return (nickname && Array.from(nickname)[0]) || '?';
+}
+
+/** 닉네임 창을 연다 (닉네임 전이면 정하기, 있으면 변경) */
+function openNickname(): void {
+  open.value = false;
+  auth.nicknameDialog = user.value?.nickname ? 'change' : 'required';
+}
+
+/** 로그아웃 */
+async function onLogout(): Promise<void> {
+  open.value = false;
+  try {
+    await auth.logout();
+  } catch (err) {
+    console.warn('[auth] 로그아웃 실패', err);
+  }
 }
 </script>
 
@@ -48,6 +64,7 @@ function initial(nickname: string): string {
       class="login"
       :disabled="!auth.loginAvailable"
       :title="auth.loginAvailable ? undefined : '로그인은 곧 열려요'"
+      @click="auth.login()"
     >
       <PhSignIn :size="16" weight="bold" />
       <span>로그인</span>
@@ -62,16 +79,16 @@ function initial(nickname: string): string {
         @click="open = !open"
       >
         <span class="avatar" aria-hidden="true">{{ initial(user.nickname) }}</span>
-        <span class="nickname">{{ user.nickname }}</span>
+        <span class="nickname" :class="{ 'is-empty': !user.nickname }">{{ user.nickname ?? '닉네임 정하기' }}</span>
         <PhCaretDown :size="14" weight="bold" class="caret" />
       </button>
 
       <div v-if="open" class="menu" role="menu">
-        <button type="button" role="menuitem" class="menu-item" @click="open = false">
+        <button type="button" role="menuitem" class="menu-item" @click="openNickname">
           <PhPencilSimple :size="16" weight="bold" />
-          닉네임 변경
+          {{ user.nickname ? '닉네임 변경' : '닉네임 정하기' }}
         </button>
-        <button type="button" role="menuitem" class="menu-item" @click="open = false">
+        <button type="button" role="menuitem" class="menu-item" @click="onLogout">
           <PhSignOut :size="16" weight="bold" />
           로그아웃
         </button>
@@ -147,6 +164,10 @@ function initial(nickname: string): string {
   font-size: 14px;
   font-weight: 600;
   color: var(--text-strong);
+}
+
+.nickname.is-empty {
+  color: var(--accent-text);
 }
 
 .caret {

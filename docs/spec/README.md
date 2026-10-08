@@ -5,6 +5,7 @@
 | 문서 | 내용 |
 |---|---|
 | [server.md](./server.md) | 저장소 구조, 실행·빌드 명령, 포트, 설정 키, `/health`, DB 스키마 관리 |
+| [auth.md](./auth.md) | Google 로그인, 세션, 요청 위조 방지, 닉네임 |
 | [ranking.md](./ranking.md) | 랭킹 규칙(기간, 동점, 총합 환산), 표, 조회 API |
 | [main-page.md](./main-page.md) | 페이지 주소, 상단 바, 메인·랭킹 화면, 디자인 토큰 |
 | [apple-ten.md](./apple-ten.md) | 사과게임 규칙·로직, 시드 난수, 게임·플레이 화면, 셸과 게임의 약속 |

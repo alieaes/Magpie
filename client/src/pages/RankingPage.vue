@@ -6,6 +6,7 @@ import { PhClock } from '@phosphor-icons/vue';
 import { RANKING_MAX_LIMIT, TOTAL_POINTS_PER_GAME, type RankingPeriod, type RankingTarget } from '@magpie/shared';
 import { fetchRanking } from '../api';
 import { useAsyncData } from '../composables/useAsyncData';
+import { useAuthStore } from '../stores/auth';
 import { useCountdown } from '../composables/useCountdown';
 import { formatNumber, formatRemaining, scoreUnit } from '../format';
 import { parsePeriod, parseTarget, rankingTargetOptions } from '../rankingTargets';
@@ -16,6 +17,7 @@ import TargetTabs from '../components/TargetTabs.vue';
 const route = useRoute();
 const router = useRouter();
 const options = rankingTargetOptions();
+const auth = useAuthStore();
 
 /** 주소 쿼리를 바꾼다. 기록이 쌓이지 않게 replace로 */
 function setQuery(next: { target?: RankingTarget; period?: RankingPeriod }): void {
@@ -33,7 +35,8 @@ const period = computed<RankingPeriod>({
 
 const { data, loading, error, reload } = useAsyncData(
   () => fetchRanking(target.value, period.value, RANKING_MAX_LIMIT),
-  [target, period],
+  // 로그인·로그아웃하면 내 순위가 바뀌므로 다시 불러온다
+  [target, period, () => auth.loggedIn],
 );
 const remaining = useCountdown(() => data.value?.resetsAt, () => void reload());
 const unit = computed(() => scoreUnit(target.value));

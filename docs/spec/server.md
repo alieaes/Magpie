@@ -64,14 +64,15 @@ pnpm 워크스페이스. TypeScript 6.0.3 고정 (vue-tsc가 TypeScript 7을 아
 | `PORT` | 3473 | |
 | `SITE_URL` | `http://localhost:5480` | `BASE_URL`이 아니다 (Vitest가 `BASE_URL`을 미리 채워서 충돌) |
 | `DB_HOST`, `DB_PORT`(3306), `DB_USER`, `DB_PASSWORD`, `DB_NAME` | | `DB_NAME`: 개발 `magpie-dev`, 운영 `magpie` |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | 없음 | 둘 다 있어야 로그인이 열린다. 비어 있으면 로그인만 막힌다. [auth.md](./auth.md) |
 
 빠지거나 잘못된 키가 있으면 서버가 키 이름을 알려주고 시작하지 않는다.
 
 ## API 공통
 
-- 오류 응답: `{ "error": { "code": "BAD_REQUEST", "message": "..." } }`. 코드는 `BAD_REQUEST`, `NOT_FOUND`, `INTERNAL`.
-- `/api/*` 응답에는 `Cache-Control: no-store`가 붙는다.
-- 로그인 전이라 모든 요청은 비로그인으로 처리된다 (`server/src/auth/session.ts`).
+- 오류 응답: `{ "error": { "code": "BAD_REQUEST", "message": "..." } }`. 공통 코드는 `BAD_REQUEST`, `UNAUTHORIZED`, `BAD_ORIGIN`, `NOT_FOUND`, `INTERNAL`. 기능별 코드는 각 스펙에.
+- `/api/*`, `/auth/*` 응답에는 `Cache-Control: no-store`가 붙는다.
+- `/api/*`는 세션 쿠키로 로그인 유저를 확인한다. `/api/*`, `/auth/*`의 POST·PUT·DELETE는 Origin이 `SITE_URL`과 같아야 한다. 상세는 [auth.md](./auth.md).
 
 ## `GET /health`
 
@@ -89,7 +90,8 @@ pnpm 워크스페이스. TypeScript 6.0.3 고정 (vue-tsc가 TypeScript 7을 아
 | 파일 | 표 |
 |---|---|
 | `001_users.sql` | `users` |
+| `002_sessions.sql` | `sessions` (로그인 세션, [auth.md](./auth.md)) |
 | `003_plays.sql` | `plays`, `play_replays` |
 | `004_bests.sql` | `best_daily`, `best_alltime` |
 
-`002`는 로그인 설계(세션 표)용으로 비워 두었다. 표의 열은 [ranking.md](./ranking.md) 참고.
+`002`는 `003`·`004`보다 늦게 만들었지만, 적용 기록(`schema_migrations`)이 파일 이름으로 남으므로 새로 생긴 파일은 순서와 상관없이 적용된다. 랭킹 표의 열은 [ranking.md](./ranking.md) 참고.

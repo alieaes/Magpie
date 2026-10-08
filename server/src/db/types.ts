@@ -10,6 +10,14 @@ export interface UsersTable {
   created_at: ColumnType<Date, Date | undefined, never>;
 }
 
+/** 002_sessions.sql */
+export interface SessionsTable {
+  id_hash: string;
+  user_id: number;
+  created_at: ColumnType<Date, Date | undefined, never>;
+  expires_at: Date;
+}
+
 /** 판 검증 상태 */
 export type PlayStatus = 'pending' | 'accepted' | 'rejected';
 
@@ -52,6 +60,7 @@ export interface BestAlltimeTable {
 
 export interface Database {
   users: UsersTable;
+  sessions: SessionsTable;
   plays: PlaysTable;
   play_replays: PlayReplaysTable;
   best_daily: BestDailyTable;

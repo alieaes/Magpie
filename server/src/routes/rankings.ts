@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { RANKING_MAX_LIMIT, isGameId, type RankingTarget } from '@magpie/shared';
-import { getSessionUserId } from '../auth/session';
+import type { AppEnv } from '../app-env';
 import { jsonError } from '../lib/errors';
 import type { RankingService } from '../ranking/service';
 
@@ -18,7 +18,7 @@ const RankingQuery = z.object({
 
 /** 랭킹 조회 API: GET /api/rankings, GET /api/games/summary */
 export function rankingRoutes(ranking: RankingService) {
-  return new Hono()
+  return new Hono<AppEnv>()
     .get(
       '/rankings',
       zValidator('query', RankingQuery, (result, c) => {
@@ -29,12 +29,12 @@ export function rankingRoutes(ranking: RankingService) {
       }),
       async (c) => {
         const { target, period, limit } = c.req.valid('query');
-        const userId = await getSessionUserId(c);
+        const userId = c.get('user')?.id ?? null;
         return c.json(await ranking.getRanking(target, period, limit, userId), 200);
       },
     )
     .get('/games/summary', async (c) => {
-      const userId = await getSessionUserId(c);
+      const userId = c.get('user')?.id ?? null;
       return c.json(await ranking.getGamesSummary(userId), 200);
     });
 }

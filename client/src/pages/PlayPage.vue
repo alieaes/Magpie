@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // 게임 화면 (/play/:gameId). 시작·결과 화면과 점수·시간 막대는 셸이 그리고, 판은 게임 패키지가 그린다.
-// 로그인·점수 제출이 아직 없어서 지금은 연습 모드만 있다 (docs/design/261006-09-apple-ten.md).
+// 점수 제출(docs/design/261006-08-play-submission.md)이 아직 없어서 지금은 연습 모드만 있다.
 import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { PhArrowClockwise, PhFlagCheckered, PhPlay, PhTrophy } from '@phosphor-icons/vue';
@@ -123,7 +123,7 @@ onBeforeUnmount(destroyGame);
         <div class="card">
           <h2 class="card-title">{{ game.name }}</h2>
           <p class="how">{{ game.howTo ?? game.tagline }}</p>
-          <p class="mode">연습 모드 · 기록은 로그인 기능이 열리면 남아요</p>
+          <p class="mode">연습 모드 · 기록 저장은 곧 열려요</p>
           <button type="button" class="primary-button" @click="start">
             <PhPlay :size="16" weight="fill" />
             시작

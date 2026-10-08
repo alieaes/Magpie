@@ -17,6 +17,11 @@ export class TtlCache<V> {
     return value;
   }
 
+  /** 모두 지운다 (데이터가 바뀌어서 바로 반영해야 할 때) */
+  clear(): void {
+    this.store.clear();
+  }
+
   /** 만료된 값을 지운다. 일간 키가 날마다 바뀌어도 메모리가 쌓이지 않게 한다 */
   private prune(): void {
     const t = this.now();
