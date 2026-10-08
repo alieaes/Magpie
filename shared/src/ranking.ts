@@ -22,6 +22,10 @@ export interface RankingEntry {
   nickname: string;
   /** 게임별이면 원래 점수, 총합이면 환산점 합 */
   score: number;
+  /** 관리자에게만 준다. 닉네임 초기화 대상 */
+  userId?: number;
+  /** 관리자에게만, 게임별 랭킹에서만 준다. 기록 삭제 대상 판 */
+  playId?: number;
 }
 
 /** GET /api/rankings 응답 */

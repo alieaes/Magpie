@@ -10,3 +10,8 @@ export interface ErrorBody {
 export function jsonError<S extends ContentfulStatusCode>(c: Context, status: S, code: string, message: string) {
   return c.json<ErrorBody, S>({ error: { code, message } }, status);
 }
+
+/** zValidator 검사에 실패한 요청을 400 BAD_REQUEST로 돌려보낸다. 검사 훅으로 넘겨 쓴다 */
+export function rejectInvalid(result: { success: boolean }, c: Context) {
+  if (!result.success) return jsonError(c, 400, 'BAD_REQUEST', '요청 형식이 맞지 않습니다.');
+}

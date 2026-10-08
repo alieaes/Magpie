@@ -47,11 +47,13 @@
 
 | 표 | 내용 |
 |---|---|
-| `plays` | `status`, `reject_reason`(`bad_input` / `time` / `mismatch` / `abandoned`), `score`(통과한 판만, 서버 점수), `client_score`(보낸 점수), `ended_at`(끝 요청 시각. 버려진 판은 NULL) |
+| `plays` | `status`, `reject_reason`(`bad_input` / `time` / `mismatch` / `abandoned` / `admin`(관리자가 지움, [admin.md](./admin.md))), `score`(통과한 판만, 서버 점수), `client_score`(보낸 점수), `ended_at`(끝 요청 시각. 버려진 판은 NULL) |
 | `play_replays` | 보낸 `inputs`의 JSON을 gzip. 거절된 판도 남긴다 |
 | `best_daily`, `best_alltime` | 통과한 판이 더 좋을 때만 갱신. 동점이면 먼저 달성한 기록을 둔다. 일간의 날짜는 끝 요청 시각의 KST 날짜 |
 
 - 판을 닫는 것(`status = 'pending'`일 때만 바꿈), 입력 기록, 최고 기록 갱신은 한 트랜잭션이다. 같은 판의 끝 요청이 동시에 오면 하나만 처리된다.
+- 최고 기록은 `INSERT ... ON DUPLICATE KEY UPDATE`로 더 좋을 때만 값을 바꾸고(고칠 값은 `score`를 맨 끝에 둔다), 바뀌었는지는 다시 읽어 `play_id`로 본다(`server/src/plays/bests.ts`).
+- 잠금: 조건으로 찾는 UPDATE·DELETE는 맞는 줄이 없을 때 틈(gap) 잠금을 걸어 다른 유저의 INSERT와 교착이 난다. 그래서 먼저 읽고 기본 키로 고친다(판 시작의 이전 판 버리기, 관리자 기록 삭제).
 - 최고 기록이 바뀌면 그 프로세스의 랭킹 캐시를 비운다. 다른 프로세스는 10초 안에 따라온다.
 
 ## API

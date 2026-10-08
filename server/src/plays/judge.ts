@@ -10,7 +10,7 @@ export const TIME_SLACK_RATIO = 0.1;
 
 export type Judgement =
   | { accepted: true; score: number }
-  | { accepted: false; reason: Exclude<PlayRejectReason, 'abandoned'> };
+  | { accepted: false; reason: Exclude<PlayRejectReason, 'abandoned' | 'admin'> };
 
 export interface JudgeInput {
   gameId: string;

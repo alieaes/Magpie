@@ -2,11 +2,15 @@
 
 import type { ColumnType, Generated } from 'kysely';
 
-/** 001_users.sql */
+/** 유저 권한 */
+export type UserRole = 'user' | 'admin';
+
+/** 001_users.sql, 006_users_role.sql */
 export interface UsersTable {
   id: Generated<number>;
   google_sub: string;
   nickname: string | null;
+  role: ColumnType<UserRole, UserRole | undefined, UserRole>;
   created_at: ColumnType<Date, Date | undefined, never>;
 }
 
@@ -62,6 +66,21 @@ export interface BestAlltimeTable {
   play_id: number;
 }
 
+/** 관리자 작업 종류 */
+export type AdminActionKind = 'remove_play' | 'reset_nickname';
+
+/** 006_users_role.sql. 대상 유저·판에 외래 키가 없다(탈퇴해도 기록은 남는다) */
+export interface AdminActionsTable {
+  id: Generated<number>;
+  created_at: ColumnType<Date, Date | undefined, never>;
+  admin_user_id: number;
+  action: AdminActionKind;
+  target_user_id: number | null;
+  play_id: number | null;
+  /** 처리 전 값. 넣을 때는 JSON 문자열, 읽으면 드라이버가 객체로 풀어 줄 수 있다(MariaDB JSON 열) */
+  detail: ColumnType<unknown, string | null, string | null>;
+}
+
 export interface Database {
   users: UsersTable;
   sessions: SessionsTable;
@@ -69,4 +88,5 @@ export interface Database {
   play_replays: PlayReplaysTable;
   best_daily: BestDailyTable;
   best_alltime: BestAlltimeTable;
+  admin_actions: AdminActionsTable;
 }

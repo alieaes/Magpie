@@ -2,9 +2,12 @@ import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
 import { fetchMe, goToLogin, logout as requestLogout, updateNickname } from '../api';
 
-/** 화면에 보여줄 로그인 유저. Google 프로필 사진·이메일은 받지 않는다. 닉네임 전이면 null */
+/** 화면에 보여줄 로그인 유저. Google 프로필 사진·이메일은 받지 않는다 */
 export interface SessionUser {
+  /** 닉네임 전이면 null */
   nickname: string | null;
+  /** 관리자면 관리 메뉴를 보여준다. 실제 권한 확인은 서버가 한다 */
+  isAdmin: boolean;
 }
 
 /** 로그인 상태. 앱이 뜰 때 GET /api/me로 채운다. 근거: docs/design/261006-07-login.md */
@@ -16,6 +19,7 @@ export const useAuthStore = defineStore('auth', () => {
   const nicknameDialog = ref<'closed' | 'required' | 'change'>('closed');
 
   const loggedIn = computed(() => user.value !== null);
+  const isAdmin = computed(() => user.value?.isAdmin === true);
 
   /** 서버에 로그인 상태를 묻는다. 닉네임이 없으면 닉네임 창을 연다 */
   async function load(): Promise<void> {
@@ -50,5 +54,5 @@ export const useAuthStore = defineStore('auth', () => {
     nicknameDialog.value = 'closed';
   }
 
-  return { user, loginAvailable, loaded, loggedIn, nicknameDialog, load, login, logout, saveNickname };
+  return { user, loginAvailable, loaded, loggedIn, isAdmin, nicknameDialog, load, login, logout, saveNickname };
 });

@@ -22,7 +22,7 @@ describe.skipIf(!canRunDb)('세션 (개발 DB)', () => {
       expect(stored.map((s) => s.id_hash)).toEqual([hashToken(token)]);
       expect(stored[0]!.id_hash).not.toBe(token);
       const session = await resolveSession(trx, token);
-      expect(session).toEqual({ user: { id: user.id, nickname: null }, renewed: false });
+      expect(session).toEqual({ user: { id: user.id, nickname: null, isAdmin: false }, renewed: false });
     });
   });
 

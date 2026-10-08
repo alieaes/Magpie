@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed } from 'vue';
-import { PhArrowClockwise } from '@phosphor-icons/vue';
+import { computed, ref } from 'vue';
+import { PhArrowClockwise, PhDotsThree } from '@phosphor-icons/vue';
 import type { RankingEntry } from '@magpie/shared';
+import { useDismiss } from '../composables/useDismiss';
 import { formatNumber } from '../format';
 
 const props = defineProps<{
@@ -15,9 +16,37 @@ const props = defineProps<{
   emptyText: string;
   /** 내 순위가 목록 밖일 때 목록 아래에 붙일지. 랭킹 페이지는 하단 막대로 따로 보여줘서 끈다 */
   showMeBelow?: boolean;
+  /** 관리자 메뉴(줄마다 점 세 개)를 보여줄지. 랭킹 페이지에서 관리자일 때만 켠다 */
+  manageable?: boolean;
 }>();
 
-const emit = defineEmits<{ retry: [] }>();
+const emit = defineEmits<{ retry: []; removePlay: [entry: RankingEntry]; resetNickname: [entry: RankingEntry] }>();
+
+/** 관리자 메뉴가 열린 줄의 순위. 한 번에 하나만 연다 */
+const menuRank = ref<number | null>(null);
+const menuOpen = computed({
+  get: () => menuRank.value !== null,
+  set: (open) => {
+    if (!open) menuRank.value = null;
+  },
+});
+// 열린 줄의 메뉴·버튼 바깥을 누르거나 Esc를 누르면 닫는다
+useDismiss(menuOpen, (target) => {
+  const el = target instanceof Element ? target : target.parentElement;
+  return el?.closest(`[data-actions-for="${menuRank.value}"]`) != null;
+});
+
+/** 그 줄의 관리자 메뉴를 열거나 닫는다 */
+function toggleMenu(rank: number): void {
+  menuRank.value = menuRank.value === rank ? null : rank;
+}
+
+/** 메뉴 항목을 고르면 메뉴를 닫고 부모에게 알린다 */
+function choose(kind: 'removePlay' | 'resetNickname', entry: RankingEntry): void {
+  menuRank.value = null;
+  if (kind === 'removePlay') emit('removePlay', entry);
+  else emit('resetNickname', entry);
+}
 
 /** 내 순위가 목록 안에 있으면 그 줄을 강조하고, 밖이면 목록 아래에 따로 붙인다 */
 const meOutside = computed(() => {
@@ -56,11 +85,36 @@ const meOutside = computed(() => {
           v-for="entry in entries"
           :key="entry.rank"
           class="row"
-          :class="{ 'is-top': entry.rank <= 3, 'is-me': me?.rank === entry.rank }"
+          :class="{ 'is-top': entry.rank <= 3, 'is-me': me?.rank === entry.rank, 'has-actions': manageable }"
         >
           <span class="rank num">{{ entry.rank }}</span>
           <span class="nickname">{{ entry.nickname }}</span>
           <span class="score num">{{ formatNumber(entry.score) }}<small>{{ unit }}</small></span>
+          <div v-if="manageable" class="actions" :data-actions-for="entry.rank">
+            <button
+              v-if="entry.userId !== undefined"
+              type="button"
+              class="more"
+              aria-label="관리"
+              aria-haspopup="menu"
+              :aria-expanded="menuRank === entry.rank"
+              @click="toggleMenu(entry.rank)"
+            >
+              <PhDotsThree :size="18" weight="bold" />
+            </button>
+            <div v-if="menuRank === entry.rank" class="menu" role="menu">
+              <button
+                v-if="entry.playId !== undefined"
+                type="button"
+                role="menuitem"
+                class="menu-item is-danger"
+                @click="choose('removePlay', entry)"
+              >
+                기록 삭제
+              </button>
+              <button type="button" role="menuitem" class="menu-item" @click="choose('resetNickname', entry)">닉네임 초기화</button>
+            </div>
+          </div>
         </li>
       </ol>
       <template v-if="me && meOutside && showMeBelow !== false">
@@ -100,6 +154,69 @@ const meOutside = computed(() => {
 
 .row + .row {
   margin-top: 2px;
+}
+
+.row.has-actions {
+  grid-template-columns: 36px 1fr auto 32px;
+}
+
+.actions {
+  position: relative;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.more {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: none;
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.more:hover,
+.more[aria-expanded='true'] {
+  background: var(--surface-hover);
+  color: var(--text-strong);
+}
+
+.menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 10;
+  min-width: 140px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  box-shadow: var(--shadow-hover);
+}
+
+.menu-item {
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: none;
+  color: var(--text-strong);
+  font-size: 14px;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.menu-item:hover {
+  background: var(--surface-hover);
+}
+
+.menu-item.is-danger {
+  color: #d9564a;
 }
 
 .rank {

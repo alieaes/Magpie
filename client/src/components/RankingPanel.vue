@@ -21,8 +21,8 @@ const auth = useAuthStore();
 
 const { data, loading, error, reload } = useAsyncData(
   () => fetchRanking(target.value, period.value, PANEL_LIMIT),
-  // 로그인·로그아웃하면 내 순위가 바뀌므로 다시 불러온다
-  [target, period, () => auth.loggedIn],
+  // 로그인·로그아웃하면 내 순위가, 닉네임을 바꾸면 보이는 이름이 바뀌므로 다시 불러온다
+  [target, period, () => auth.loggedIn, () => auth.user?.nickname],
 );
 // 일간 랭킹은 KST 00:00에 새로 시작하므로 그때 다시 불러온다
 useCountdown(() => data.value?.resetsAt, () => void reload());

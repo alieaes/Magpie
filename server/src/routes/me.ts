@@ -22,7 +22,7 @@ export function meRoutes({ db, loginAvailable, ranking }: MeRouteDeps) {
   return new Hono<AppEnv>()
     .get('/me', (c) => {
       const user = c.get('user');
-      return c.json({ user: user ? { nickname: user.nickname } : null, loginAvailable }, 200);
+      return c.json({ user: user ? { nickname: user.nickname, isAdmin: user.isAdmin } : null, loginAvailable }, 200);
     })
     .put(
       '/me/nickname',

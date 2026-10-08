@@ -18,7 +18,14 @@ import { rankGame, rankTotal, type RankedRow } from './queries';
 const CACHE_TTL_MS = 10_000;
 
 export interface RankingService {
-  getRanking(target: RankingTarget, period: RankingPeriod, limit: number, userId: number | null): Promise<RankingResponse>;
+  /** withIds면 각 줄에 userId·playId를 붙인다 (관리자 화면용) */
+  getRanking(
+    target: RankingTarget,
+    period: RankingPeriod,
+    limit: number,
+    userId: number | null,
+    withIds?: boolean,
+  ): Promise<RankingResponse>;
   getGamesSummary(userId: number | null): Promise<GameSummary[]>;
   /** 이 프로세스의 랭킹 캐시를 비운다. 다른 프로세스는 캐시 시간(10초) 안에 따라온다 */
   invalidate(): void;
@@ -43,7 +50,7 @@ export function createRankingService(db: Kysely<Database>, now: () => Date = () 
     invalidate: () => cache.clear(),
 
     /** 상위 limit명과 내 순위를 돌려준다 */
-    async getRanking(target, period, limit, userId) {
+    async getRanking(target, period, limit, userId, withIds = false) {
       const at = now();
       const day = kstDayKey(at);
       const rows = await loadRows(target, period, day);
@@ -53,7 +60,11 @@ export function createRankingService(db: Kysely<Database>, now: () => Date = () 
         target,
         period,
         participants: rows.length,
-        entries: rows.slice(0, limit).map(({ rank, nickname, score }) => ({ rank, nickname, score })),
+        entries: rows
+          .slice(0, limit)
+          .map(({ rank, nickname, score, userId: id, playId }) =>
+            withIds ? { rank, nickname, score, userId: id, ...(playId === undefined ? {} : { playId }) } : { rank, nickname, score },
+          ),
       };
       if (period === 'daily') {
         response.day = day;

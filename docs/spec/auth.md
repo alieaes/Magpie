@@ -26,7 +26,7 @@
 | 쿠키 | 개발 `magpie_session`, https `__Host-magpie_session`. HttpOnly, SameSite=Lax, Path=/, https면 Secure |
 | 값 | 무작위 32바이트(base64url). DB(`sessions.id_hash`)에는 SHA-256만 |
 | 기간 | 30일. 남은 기간이 15일 아래일 때 요청이 오면 30일로 다시 늘리고 쿠키도 다시 준다 |
-| 확인 | `/api/*` 요청마다 미들웨어가 확인해 `c.get('user')`(`{ id, nickname }`)를 채운다. 쿠키가 없으면 DB를 보지 않는다. 없는·만료 세션이면 쿠키를 지운다 |
+| 확인 | `/api/*` 요청마다 미들웨어가 확인해 `c.get('user')`(`{ id, nickname, isAdmin }`)를 채운다. 쿠키가 없으면 DB를 보지 않는다. 없는·만료 세션이면 쿠키를 지운다 |
 | 정리 | 만료 세션은 서버 시작 때와 하루에 한 번 지운다 |
 
 유저 줄을 지우면 세션도 같이 지워진다(외래 키 `ON DELETE CASCADE`).
@@ -44,7 +44,7 @@
 
 | 요청 | 응답 |
 |---|---|
-| `GET /api/me` | `{ user: { nickname } \| null, loginAvailable }` |
+| `GET /api/me` | `{ user: { nickname, isAdmin } \| null, loginAvailable }`. 관리자는 [admin.md](./admin.md) |
 | `PUT /api/me/nickname` `{ nickname }` | `200 { nickname }`. 비로그인 `401`, 규칙 위반 `400 NICKNAME_LENGTH / NICKNAME_CHARS / NICKNAME_RESERVED`, 중복 `409 NICKNAME_TAKEN` |
 
 ## 화면

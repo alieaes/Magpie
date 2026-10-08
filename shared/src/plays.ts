@@ -3,9 +3,10 @@
 /**
  * 판이 거절된 사유.
  * bad_input = 입력 기록 형식이 틀렸거나 재계산에 실패, time = 게임 시간과 실제 흐른 시간이 안 맞음,
- * mismatch = 재계산 점수가 보낸 점수와 다름, abandoned = 끝내지 않고 새 판을 시작했거나 하루가 지남
+ * mismatch = 재계산 점수가 보낸 점수와 다름, abandoned = 끝내지 않고 새 판을 시작했거나 하루가 지남,
+ * admin = 통과했던 판을 관리자가 지움
  */
-export type PlayRejectReason = 'bad_input' | 'time' | 'mismatch' | 'abandoned';
+export type PlayRejectReason = 'bad_input' | 'time' | 'mismatch' | 'abandoned' | 'admin';
 
 /** POST /api/plays 응답 */
 export interface StartPlayResponse {

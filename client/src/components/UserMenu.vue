@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { onBeforeUnmount, ref, watch } from 'vue';
+import { ref } from 'vue';
 import { storeToRefs } from 'pinia';
 import { PhCaretDown, PhPencilSimple, PhSignIn, PhSignOut } from '@phosphor-icons/vue';
+import { useDismiss } from '../composables/useDismiss';
 import { useAuthStore } from '../stores/auth';
 
 const auth = useAuthStore();
@@ -10,29 +11,8 @@ const { user } = storeToRefs(auth);
 const open = ref(false);
 const root = ref<HTMLElement | null>(null);
 
-/** 메뉴 바깥을 누르면 닫는다 */
-function onDocumentPointerDown(e: PointerEvent): void {
-  if (root.value && !root.value.contains(e.target as Node)) open.value = false;
-}
-
-/** Esc를 누르면 닫는다 */
-function onKeydown(e: KeyboardEvent): void {
-  if (e.key === 'Escape') open.value = false;
-}
-
-watch(open, (isOpen) => {
-  if (isOpen) {
-    document.addEventListener('pointerdown', onDocumentPointerDown);
-    document.addEventListener('keydown', onKeydown);
-  } else {
-    document.removeEventListener('pointerdown', onDocumentPointerDown);
-    document.removeEventListener('keydown', onKeydown);
-  }
-});
-onBeforeUnmount(() => {
-  document.removeEventListener('pointerdown', onDocumentPointerDown);
-  document.removeEventListener('keydown', onKeydown);
-});
+// 메뉴 바깥을 누르거나 Esc를 누르면 닫는다
+useDismiss(open, (target) => root.value?.contains(target) ?? false);
 
 /** 아바타에 넣을 글자: 닉네임 첫 글자. 닉네임 전이면 '?' */
 function initial(nickname: string | null): string {
@@ -80,6 +60,7 @@ async function onLogout(): Promise<void> {
       >
         <span class="avatar" aria-hidden="true">{{ initial(user.nickname) }}</span>
         <span class="nickname" :class="{ 'is-empty': !user.nickname }">{{ user.nickname ?? '닉네임 정하기' }}</span>
+        <span v-if="user.isAdmin" class="admin-badge">관리자</span>
         <PhCaretDown :size="14" weight="bold" class="caret" />
       </button>
 
@@ -172,6 +153,16 @@ async function onLogout(): Promise<void> {
 
 .caret {
   color: var(--text-2);
+}
+
+.admin-badge {
+  padding: 1px 6px;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  color: var(--accent-text);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 16px;
 }
 
 .menu {

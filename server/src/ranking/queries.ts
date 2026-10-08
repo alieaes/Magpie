@@ -12,6 +12,8 @@ export interface RankedRow {
   nickname: string;
   score: number;
   rank: number;
+  /** 게임별 랭킹에서만. 그 기록을 만든 판 */
+  playId?: number;
 }
 
 const NO_NICKNAME = '이름 없음';
@@ -36,6 +38,7 @@ export async function rankGame(
     SELECT b.user_id AS userId,
            COALESCE(u.nickname, ${NO_NICKNAME}) AS nickname,
            b.score AS score,
+           b.play_id AS playId,
            ROW_NUMBER() OVER (ORDER BY b.score ${direction}, b.achieved_at ASC, b.user_id ASC) AS \`rank\`
       FROM ${table} b
       JOIN users u ON u.id = b.user_id
@@ -88,10 +91,12 @@ function sortKey(): RawBuilder<unknown> {
 
 /** DB 드라이버가 준 값을 숫자로 맞춘다 (BIGINT가 문자열로 올 때를 대비) */
 function toRankedRow(row: RankedRow): RankedRow {
-  return {
+  const out: RankedRow = {
     userId: Number(row.userId),
     nickname: row.nickname,
     score: Number(row.score),
     rank: Number(row.rank),
   };
+  if (row.playId !== undefined && row.playId !== null) out.playId = Number(row.playId);
+  return out;
 }

@@ -2,9 +2,15 @@
 
 import type { Kysely } from 'kysely';
 import { COLS, ROWS, createBoard, rectSum, trySelect, type AppleInput, type CellRect } from '@magpie/game-apple-ten/logic';
+import { createApp } from '../src/app';
+import { cookieSettings } from '../src/auth/cookies';
+import { createSession } from '../src/auth/session';
+import { findOrCreateUser, setNickname } from '../src/auth/users';
 import { loadConfig, loadEnvFile, type Config } from '../src/config';
 import { createDb } from '../src/db';
 import type { Database } from '../src/db/types';
+import { createPlayService } from '../src/plays/service';
+import { createRankingService } from '../src/ranking/service';
 
 loadEnvFile();
 
@@ -35,6 +41,59 @@ export async function inRollback(fn: (trx: Kysely<Database>) => Promise<void>): 
   } finally {
     await db.destroy();
   }
+}
+
+/** 테스트 앱의 시계 시작점. 실제 데이터의 오늘 랭킹과 겹치지 않는 날이다 (KST 2000-01-02 12:00) */
+export const TEST_T0 = new Date('2000-01-02T03:00:00Z');
+
+/** 테스트 유저: 번호와 세션 쿠키 헤더 값 */
+export interface TestUser {
+  id: number;
+  cookie: string;
+}
+
+/** 되돌림 트랜잭션 안에서 만든 앱과 도구 */
+export interface TestApp {
+  trx: Kysely<Database>;
+  /** 시계를 앞으로 돌린다 */
+  advance(ms: number): void;
+  /** 유저를 만들고 세션을 연다. nickname이 null이면 닉네임 전 유저, admin이면 관리자 */
+  login(options?: { nickname?: string | null; admin?: boolean }): Promise<TestUser>;
+  get(path: string, cookie?: string): Promise<Response>;
+  post(path: string, body?: unknown, cookie?: string): Promise<Response>;
+}
+
+/** 되돌림 트랜잭션 안에서 시계를 TEST_T0로 고정한 앱을 만들어 테스트를 돌린다 */
+export function withTestApp(fn: (app: TestApp) => Promise<void>): Promise<void> {
+  const config = devConfig!;
+  const cookieName = cookieSettings(config.SITE_URL).session;
+  const origin = new URL(config.SITE_URL).origin;
+  return inRollback(async (trx) => {
+    let clock = TEST_T0.getTime();
+    const now = () => new Date(clock);
+    const ranking = createRankingService(trx, now);
+    const plays = createPlayService(trx, { ranking, now });
+    const app = createApp({ db: trx, config, ranking, plays, oidc: null });
+    let seq = 0;
+    await fn({
+      trx,
+      advance: (ms) => (clock += ms),
+      async login({ nickname = `테스트${Date.now() % 100000}${(seq += 1)}`, admin = false } = {}) {
+        const user = await findOrCreateUser(trx, `test-sub:${Date.now()}:${Math.random()}`);
+        if (nickname !== null) await setNickname(trx, user.id, nickname);
+        if (admin) await trx.updateTable('users').set({ role: 'admin' }).where('id', '=', user.id).execute();
+        const { token } = await createSession(trx, user.id);
+        return { id: user.id, cookie: `${cookieName}=${token}` };
+      },
+      get: async (path, cookie) => app.request(path, { headers: cookie ? { cookie } : {} }),
+      post: async (path, body, cookie) =>
+        app.request(path, {
+          method: 'POST',
+          headers: { origin, 'content-type': 'application/json', ...(cookie ? { cookie } : {}) },
+          body: body === undefined ? null : JSON.stringify(body),
+        }),
+    });
+  });
 }
 
 /** 사과게임 판에서 합이 10인 사각형을 하나 찾는다 (작은 것부터). 없으면 null */

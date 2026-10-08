@@ -23,7 +23,7 @@
 
 | 표 | 키 | 열 |
 |---|---|---|
-| `users` | `id` | `google_sub`(유일), `nickname`(유일, NULL 가능, 최대 20자), `created_at` |
+| `users` | `id` | `google_sub`(유일), `nickname`(유일, NULL 가능, 최대 20자), `role`(`user`/`admin`), `created_at` |
 | `plays` | `id` | `user_id`, `game_id`, `seed`, `score`(통과한 판의 서버 점수, 아니면 NULL), `client_score`, `status`(`pending`/`accepted`/`rejected`), `reject_reason`, `started_at`, `ended_at` |
 | `play_replays` | `play_id` | `data`(압축한 입력 기록) |
 | `best_daily` | (`user_id`, `game_id`, `day`) | `score`, `achieved_at`, `play_id`. `day`는 KST 날짜 |
@@ -49,6 +49,7 @@
 `target`, `period`, `participants`, `entries[{rank, nickname, score}]`,
 일간이면 `day`(KST 날짜), `resetsAt`(다음 KST 00:00, ISO UTC), 로그인했고 기록이 있으면 `me{rank, score}`.
 총합이면 `score`는 환산점 합. 잘못된 값은 `400 BAD_REQUEST`.
+요청한 사람이 관리자면 각 줄에 `userId`, 게임별이면 `playId`도 붙는다([admin.md](./admin.md)).
 
 ### `GET /api/games/summary`
 

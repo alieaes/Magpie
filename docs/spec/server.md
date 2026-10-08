@@ -22,6 +22,7 @@ pnpm 워크스페이스. TypeScript 6.0.3 고정 (vue-tsc가 TypeScript 7을 아
 | `pnpm test` | Vitest. 서버의 랭킹 SQL 테스트는 `.env`의 DB가 `-dev`일 때만 돈다 (트랜잭션 후 되돌림) |
 | `pnpm db:migrate` | `db/*.sql`을 번호 순으로 적용 |
 | `pnpm db:seed-dev` | 개발 DB에 테스트 유저 20명과 기록을 넣는다 (`-dev` 스키마에서만) |
+| `pnpm admin:grant <닉네임>` / `admin:revoke <닉네임>` / `admin:list` | 관리자 지정·해제·목록 ([admin.md](./admin.md)) |
 
 ## 포트
 
@@ -70,7 +71,8 @@ pnpm 워크스페이스. TypeScript 6.0.3 고정 (vue-tsc가 TypeScript 7을 아
 
 ## API 공통
 
-- 오류 응답: `{ "error": { "code": "BAD_REQUEST", "message": "..." } }`. 공통 코드는 `BAD_REQUEST`, `UNAUTHORIZED`, `BAD_ORIGIN`, `NOT_FOUND`, `INTERNAL`. 기능별 코드는 각 스펙에.
+- 오류 응답: `{ "error": { "code": "BAD_REQUEST", "message": "..." } }`. 공통 코드는 `BAD_REQUEST`, `UNAUTHORIZED`, `FORBIDDEN`, `BAD_ORIGIN`, `NOT_FOUND`, `INTERNAL`. 기능별 코드는 각 스펙에.
+- 요청 검사(zValidator)에 실패하면 `400 BAD_REQUEST`(`rejectInvalid`, `server/src/lib/errors.ts`).
 - `/api/*`, `/auth/*` 응답에는 `Cache-Control: no-store`가 붙는다.
 - 하루 한 번 정리(서버 시작 때 한 번, 그 뒤 24시간마다): 만료 세션 삭제, 하루 지난 미완료 판 정리.
 - `/api/*`는 세션 쿠키로 로그인 유저를 확인한다. `/api/*`, `/auth/*`의 POST·PUT·DELETE는 Origin이 `SITE_URL`과 같아야 한다. 상세는 [auth.md](./auth.md).
@@ -95,5 +97,6 @@ pnpm 워크스페이스. TypeScript 6.0.3 고정 (vue-tsc가 TypeScript 7을 아
 | `003_plays.sql` | `plays`, `play_replays` |
 | `004_bests.sql` | `best_daily`, `best_alltime` |
 | `005_plays_reason.sql` | `plays`에 `reject_reason`, `client_score`, 색인 `ix_plays_pending` ([plays.md](./plays.md)) |
+| `006_users_role.sql` | `users.role`, `admin_actions` ([admin.md](./admin.md)) |
 
 `002`는 `003`·`004`보다 늦게 만들었지만, 적용 기록(`schema_migrations`)이 파일 이름으로 남으므로 새로 생긴 파일은 순서와 상관없이 적용된다. 랭킹 표의 열은 [ranking.md](./ranking.md) 참고.

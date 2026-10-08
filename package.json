@@ -11,7 +11,10 @@
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "db:migrate": "pnpm --filter @magpie/server db:migrate",
-    "db:seed-dev": "pnpm --filter @magpie/server db:seed-dev"
+    "db:seed-dev": "pnpm --filter @magpie/server db:seed-dev",
+    "admin:grant": "pnpm --filter @magpie/server admin grant",
+    "admin:revoke": "pnpm --filter @magpie/server admin revoke",
+    "admin:list": "pnpm --filter @magpie/server admin list"
   },
   "devDependencies": {
     "@types/node": "^26.6.4",

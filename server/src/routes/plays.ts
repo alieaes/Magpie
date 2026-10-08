@@ -6,7 +6,7 @@ import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { isGameId, type GameId } from '@magpie/shared';
 import type { AppEnv } from '../app-env';
-import { jsonError } from '../lib/errors';
+import { jsonError, rejectInvalid } from '../lib/errors';
 import { RateLimiter } from '../lib/rate-limit';
 import { isRecordable } from '../plays/logics';
 import type { PlayService } from '../plays/service';
@@ -32,17 +32,12 @@ const FinishBody = z.object({
   score: z.int().min(-INT32_MAX).max(INT32_MAX),
 });
 
-/** 검사에 실패한 요청은 판을 건드리지 않고 400으로 돌려보낸다 */
-const badRequest = (result: { success: boolean }, c: Parameters<typeof jsonError>[0]) => {
-  if (!result.success) return jsonError(c, 400, 'BAD_REQUEST', '요청 형식이 맞지 않습니다.');
-};
-
 /** /api/plays 라우트 */
 export function playRoutes(plays: PlayService) {
   const startLimiter = new RateLimiter(START_LIMIT, START_WINDOW_MS);
 
   return new Hono<AppEnv>()
-    .post('/plays', zValidator('json', StartBody, badRequest), async (c) => {
+    .post('/plays', zValidator('json', StartBody, rejectInvalid), async (c) => {
       const user = c.get('user');
       if (!user) return jsonError(c, 401, 'UNAUTHORIZED', '로그인이 필요해요.');
       if (!user.nickname) return jsonError(c, 403, 'NICKNAME_REQUIRED', '닉네임을 정하면 기록이 남아요.');
@@ -59,8 +54,8 @@ export function playRoutes(plays: PlayService) {
         maxSize: FINISH_MAX_BYTES,
         onError: (c) => jsonError(c, 413, 'TOO_LARGE', '기록이 너무 큽니다.'),
       }),
-      zValidator('param', FinishParam, badRequest),
-      zValidator('json', FinishBody, badRequest),
+      zValidator('param', FinishParam, rejectInvalid),
+      zValidator('json', FinishBody, rejectInvalid),
       async (c) => {
         const user = c.get('user');
         if (!user) return jsonError(c, 401, 'UNAUTHORIZED', '로그인이 필요해요.');

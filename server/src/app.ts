@@ -9,6 +9,7 @@ import { jsonError } from './lib/errors';
 import { sameOriginOnly } from './lib/origin';
 import { createPlayService, type PlayService } from './plays/service';
 import { createRankingService, type RankingService } from './ranking/service';
+import { adminRoutes } from './routes/admin';
 import { authRoutes } from './routes/auth';
 import { healthRoutes } from './routes/health';
 import { meRoutes } from './routes/me';
@@ -54,7 +55,8 @@ export function createApp({
     })
     .route('/', rankingRoutes(ranking))
     .route('/', meRoutes({ db, loginAvailable: oidc !== null, ranking }))
-    .route('/', playRoutes(plays));
+    .route('/', playRoutes(plays))
+    .route('/', adminRoutes({ db, ranking }));
 
   const auth = new Hono<AppEnv>()
     .use(sameOrigin)

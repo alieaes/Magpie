@@ -13,7 +13,8 @@
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
     "db:migrate": "tsx scripts/migrate.ts",
-    "db:seed-dev": "tsx scripts/seed-dev.ts"
+    "db:seed-dev": "tsx scripts/seed-dev.ts",
+    "admin": "tsx scripts/admin.ts"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.3",

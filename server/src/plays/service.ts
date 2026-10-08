@@ -43,13 +43,23 @@ export function createPlayService(
   return {
     async start(userId, gameId) {
       return inTransaction(db, async (trx) => {
-        await trx
-          .updateTable('plays')
-          .set({ status: 'rejected', reject_reason: 'abandoned' })
+        // 안 끝난 판을 먼저 읽고 기본 키로 고친다. 조건으로 바로 UPDATE하면 맞는 줄이 없을 때 틈(gap) 잠금이 걸려
+        // 다른 유저가 동시에 판을 열 때 INSERT끼리 교착(deadlock)이 난다
+        const pending = await trx
+          .selectFrom('plays')
+          .select('id')
           .where('user_id', '=', userId)
           .where('game_id', '=', gameId)
           .where('status', '=', 'pending')
           .execute();
+        if (pending.length > 0) {
+          await trx
+            .updateTable('plays')
+            .set({ status: 'rejected', reject_reason: 'abandoned' })
+            .where('id', 'in', pending.map((p) => p.id))
+            .where('status', '=', 'pending')
+            .execute();
+        }
         const seed = randomSeed();
         const inserted = await trx
           .insertInto('plays')

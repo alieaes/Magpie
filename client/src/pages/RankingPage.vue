@@ -1,15 +1,23 @@
 <script setup lang="ts">
 // 랭킹 전체 페이지. 고른 대상·기간은 주소 쿼리(?target=&period=)에 남긴다.
-import { computed } from 'vue';
+// 관리자에게는 줄마다 관리 메뉴(기록 삭제·닉네임 초기화)가 생긴다. 근거: docs/design/261008-02-admin.md §5
+import { computed, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { PhClock } from '@phosphor-icons/vue';
-import { RANKING_MAX_LIMIT, TOTAL_POINTS_PER_GAME, type RankingPeriod, type RankingTarget } from '@magpie/shared';
-import { fetchRanking } from '../api';
+import {
+  RANKING_MAX_LIMIT,
+  TOTAL_POINTS_PER_GAME,
+  type RankingEntry,
+  type RankingPeriod,
+  type RankingTarget,
+} from '@magpie/shared';
+import { ApiError, adminRemovePlay, adminResetNickname, fetchRanking } from '../api';
 import { useAsyncData } from '../composables/useAsyncData';
 import { useAuthStore } from '../stores/auth';
 import { useCountdown } from '../composables/useCountdown';
-import { formatNumber, formatRemaining, scoreUnit } from '../format';
+import { formatNumber, formatRemaining, scoreUnit, targetLabel } from '../format';
 import { parsePeriod, parseTarget, rankingTargetOptions } from '../rankingTargets';
+import ConfirmDialog from '../components/ConfirmDialog.vue';
 import PeriodToggle from '../components/PeriodToggle.vue';
 import RankingList from '../components/RankingList.vue';
 import TargetTabs from '../components/TargetTabs.vue';
@@ -35,11 +43,56 @@ const period = computed<RankingPeriod>({
 
 const { data, loading, error, reload } = useAsyncData(
   () => fetchRanking(target.value, period.value, RANKING_MAX_LIMIT),
-  // 로그인·로그아웃하면 내 순위가 바뀌므로 다시 불러온다
-  [target, period, () => auth.loggedIn],
+  // 로그인·로그아웃하면 내 순위가, 관리자면 관리용 번호가, 닉네임을 바꾸면 보이는 이름이 바뀌므로 다시 불러온다
+  [target, period, () => auth.loggedIn, () => auth.isAdmin, () => auth.user?.nickname],
 );
 const remaining = useCountdown(() => data.value?.resetsAt, () => void reload());
 const unit = computed(() => scoreUnit(target.value));
+
+/** 확인을 기다리는 관리 작업 */
+const pending = ref<{ kind: 'removePlay' | 'resetNickname'; entry: RankingEntry } | null>(null);
+const acting = ref(false);
+const actionError = ref('');
+const confirmCopy = computed(() => {
+  const p = pending.value;
+  if (!p) return { title: '', message: '', confirm: '' };
+  const name = p.entry.nickname;
+  if (p.kind === 'removePlay') {
+    const record = `${targetLabel(target.value)} ${formatNumber(p.entry.score)}${unit.value}`;
+    return { title: '기록 삭제', message: `${name}의 ${record} 기록을 지울까요? 되돌릴 수 없어요.`, confirm: '기록 삭제' };
+  }
+  return {
+    title: '닉네임 초기화',
+    message: `${name}의 닉네임을 초기화할까요? 그 유저는 다음 접속 때 닉네임을 다시 정해야 해요.`,
+    confirm: '초기화',
+  };
+});
+
+/** 관리 메뉴에서 고른 작업의 확인 창을 연다 */
+function ask(kind: 'removePlay' | 'resetNickname', entry: RankingEntry): void {
+  actionError.value = '';
+  pending.value = { kind, entry };
+}
+
+/** 확인한 관리 작업을 서버에 보내고 랭킹을 다시 불러온다 */
+async function runAction(): Promise<void> {
+  const p = pending.value;
+  if (!p) return;
+  acting.value = true;
+  actionError.value = '';
+  try {
+    if (p.kind === 'removePlay') await adminRemovePlay(p.entry.playId!);
+    else await adminResetNickname(p.entry.userId!);
+    pending.value = null;
+    void reload();
+    // 내 닉네임을 초기화했을 수도 있으니 로그인 상태도 다시 받는다
+    if (p.kind === 'resetNickname') void auth.load();
+  } catch (err) {
+    actionError.value = err instanceof ApiError && err.status < 500 ? err.message : '처리하지 못했어요. 잠시 뒤 다시 해 주세요.';
+  } finally {
+    acting.value = false;
+  }
+}
 </script>
 
 <template>
@@ -75,8 +128,11 @@ const unit = computed(() => scoreUnit(target.value));
       :error="error !== null"
       :skeleton-rows="12"
       :show-me-below="false"
+      :manageable="auth.isAdmin"
       :empty-text="period === 'daily' ? '아직 오늘 기록이 없어요' : '아직 기록이 없어요'"
       @retry="reload"
+      @remove-play="ask('removePlay', $event)"
+      @reset-nickname="ask('resetNickname', $event)"
     >
       <template #empty-action>
         <RouterLink to="/" class="empty-link">게임하러 가기</RouterLink>
@@ -89,6 +145,18 @@ const unit = computed(() => scoreUnit(target.value));
       <span class="dot" aria-hidden="true">·</span>
       <strong class="num">{{ formatNumber(data.me.score) }}{{ unit }}</strong>
     </div>
+
+    <ConfirmDialog
+      :open="pending !== null"
+      :title="confirmCopy.title"
+      :message="confirmCopy.message"
+      :confirm-label="confirmCopy.confirm"
+      danger
+      :busy="acting"
+      :error="actionError"
+      @confirm="runAction"
+      @cancel="pending = null"
+    />
   </main>
 </template>
 

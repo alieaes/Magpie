@@ -44,7 +44,7 @@ export async function resolveSession(
   const row = await db
     .selectFrom('sessions')
     .innerJoin('users', 'users.id', 'sessions.user_id')
-    .select(['users.id as id', 'users.nickname as nickname', 'sessions.expires_at as expiresAt'])
+    .select(['users.id as id', 'users.nickname as nickname', 'users.role as role', 'sessions.expires_at as expiresAt'])
     .where('sessions.id_hash', '=', idHash)
     .where('sessions.expires_at', '>', now)
     .executeTakeFirst();
@@ -59,7 +59,7 @@ export async function resolveSession(
       .execute();
     renewed = true;
   }
-  return { user: { id: Number(row.id), nickname: row.nickname }, renewed };
+  return { user: { id: Number(row.id), nickname: row.nickname, isAdmin: row.role === 'admin' }, renewed };
 }
 
 /** 세션을 지운다 (로그아웃) */

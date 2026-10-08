@@ -21,6 +21,7 @@ const REJECT_MESSAGES: Record<PlayRejectReason, string> = {
   bad_input: '기록을 확인하지 못해 저장하지 않았어요.',
   mismatch: '기록을 확인하지 못해 저장하지 않았어요.',
   abandoned: '새 판을 시작해서 이 판은 기록되지 않았어요.',
+  admin: '관리자가 지운 기록이에요.',
 };
 
 const route = useRoute();

@@ -29,8 +29,9 @@ export function rankingRoutes(ranking: RankingService) {
       }),
       async (c) => {
         const { target, period, limit } = c.req.valid('query');
-        const userId = c.get('user')?.id ?? null;
-        return c.json(await ranking.getRanking(target, period, limit, userId), 200);
+        const user = c.get('user');
+        // 관리자에게는 관리 메뉴가 쓸 유저·판 번호를 같이 준다
+        return c.json(await ranking.getRanking(target, period, limit, user?.id ?? null, user?.isAdmin === true), 200);
       },
     )
     .get('/games/summary', async (c) => {
