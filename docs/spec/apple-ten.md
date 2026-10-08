@@ -1,8 +1,12 @@
 # 스펙: 사과게임 (`apple-ten`)
 
-설계: [261006-09-apple-ten.md](../design/261006-09-apple-ten.md). 지금은 **연습 모드만** 있다(기록이 남지 않는다).
+설계: [261006-09-apple-ten.md](../design/261006-09-apple-ten.md). 기록 모드(로그인 + 닉네임)와 연습 모드가 있다. 점수 제출은 [plays.md](./plays.md).
 
 ## 규칙 (`games/apple-ten/src/logic`)
+
+- `rules.ts`: 규칙 함수와 상수. 화면(scene)은 이 파일만 가져간다.
+- `index.ts`: `rules.ts`를 다시 내보내고, 서버용 `appleTenLogic`(`GameLogic`: 최대 7200틱, 최고 170점, 입력 형식 Zod, `replay`)을 더한다.
+  Zod가 게임 번들에 들어가지 않게 나눴다. 서버는 `@magpie/game-apple-ten/logic`(= `index.ts`)을 쓴다.
 
 | 항목 | 값 |
 |---|---|
@@ -23,6 +27,7 @@
 | `no_match` | 그 선택으로 지워지는 사과가 없음 |
 
 - 입력 기록: 사과가 실제로 지워진 선택만 `{ t, c1, r1, c2, r2 }`로 남긴다. `t`는 그때의 틱.
+- 입력 형식(`appleTenLogic.inputSchema`): 0 이상 정수 다섯 개짜리 객체의 배열, 최대 85개. 범위·순서는 `replay`가 본다.
 - 결정성: 정수 연산과 시드 난수(`shared/src/random.ts`)만 쓴다. 테스트: `games/apple-ten/test/logic.test.ts`.
 
 ## 시드 난수 (`shared/src/random.ts`)
@@ -64,11 +69,11 @@
 ### 플레이 페이지 (`/play/:gameId`, `client/src/pages/PlayPage.vue`)
 
 - `playable`이고 게임 코드가 등록된 게임(`client/src/games/registry.ts`)만 연다. 아니면 "페이지를 찾을 수 없어요".
-- 시작 전: 게임 이름, 규칙 설명(`howTo`), "연습 모드 · 기록 저장은 곧 열려요"(점수 제출 설계 08이 들어오기 전까지), "시작".
+- 시작 전: 게임 이름, 규칙 설명(`howTo`), 모드 안내([plays.md](./plays.md) 화면), "시작".
 - 플레이 중: 남은 시간 막대(10초 이하면 빨강)와 초, 점수, 소리 켜기/끄기, "끝내기". 게임 영역은 상단 바·머리줄을 뺀 화면 높이.
-- 끝: "시간 종료"(시간이 다 됨) 또는 "게임 끝", 점수, "연습 모드라 기록은 남지 않아요", "다시 하기", "랭킹 보기"(사과게임 탭).
+- 끝: "시간 종료"(시간이 다 됨) 또는 "게임 끝", 점수, 기록 결과(기록 모드) 또는 "연습 모드라 기록은 남지 않아요", "다시 하기", "랭킹 보기"(사과게임 탭).
 - 게임 영역에서는 페이지가 스크롤되지 않는다(`touch-action: none`).
-- 개발 중에는 `?seed=`로 시드를 고정할 수 있다.
+- 개발 중에는 `?seed=`로 시드를 고정할 수 있다(연습 모드).
 
 ## 셸과 게임의 약속 (`@magpie/shared/game-module`)
 

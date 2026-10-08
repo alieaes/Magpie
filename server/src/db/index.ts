@@ -29,6 +29,14 @@ export function createDb(config: Config): Db {
   });
 }
 
+/**
+ * fn을 트랜잭션 안에서 돌린다. 이미 트랜잭션 안이면 그 트랜잭션을 그대로 쓴다
+ * (Kysely는 트랜잭션 안에서 다시 트랜잭션을 열 수 없다. 테스트가 되돌림 트랜잭션 안에서 부를 때도 이 경우다).
+ */
+export function inTransaction<T>(db: Kysely<Database>, fn: (trx: Kysely<Database>) => Promise<T>): Promise<T> {
+  return db.isTransaction ? fn(db) : db.transaction().execute(fn);
+}
+
 /** DB가 응답하는지 확인한다. timeoutMs 안에 답이 없으면 실패로 본다 */
 export async function pingDb(db: Db, timeoutMs: number): Promise<void> {
   let timer: NodeJS.Timeout | undefined;

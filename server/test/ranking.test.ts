@@ -4,39 +4,12 @@
 import { describe, expect, it } from 'vitest';
 import type { Kysely } from 'kysely';
 import { findGame, rankToPoints, type GameMeta } from '@magpie/shared';
-import { loadConfig, loadEnvFile } from '../src/config';
-import { createDb } from '../src/db';
 import type { Database } from '../src/db/types';
 import { rankGame, rankTotal } from '../src/ranking/queries';
-
-loadEnvFile();
-const config = (() => {
-  try {
-    return loadConfig();
-  } catch {
-    return null;
-  }
-})();
-const canRun = config !== null && config.DB_NAME.endsWith('-dev');
+import { canRunDb, inRollback } from './helpers';
 
 // 실제 데이터와 겹치지 않는 날짜
 const TEST_DAY = '2000-01-01';
-const ROLLBACK = new Error('rollback');
-
-/** 트랜잭션 안에서 테스트를 돌리고 항상 되돌린다 */
-async function inRollback(fn: (trx: Kysely<Database>) => Promise<void>): Promise<void> {
-  const db = createDb(config!);
-  try {
-    await db.transaction().execute(async (trx) => {
-      await fn(trx);
-      throw ROLLBACK;
-    });
-  } catch (err) {
-    if (err !== ROLLBACK) throw err;
-  } finally {
-    await db.destroy();
-  }
-}
 
 /** 테스트 유저 하나를 만든다 */
 async function addUser(trx: Kysely<Database>, nickname: string): Promise<number> {
@@ -60,7 +33,7 @@ async function addDaily(trx: Kysely<Database>, userId: number, gameId: string, s
     .execute();
 }
 
-describe.skipIf(!canRun)('랭킹 SQL (개발 DB)', () => {
+describe.skipIf(!canRunDb)('랭킹 SQL (개발 DB)', () => {
   const apple = findGame('apple-ten')!;
   const merge = findGame('fruit-merge')!;
 

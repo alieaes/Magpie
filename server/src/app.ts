@@ -7,10 +7,12 @@ import type { Config } from './config';
 import type { Db } from './db';
 import { jsonError } from './lib/errors';
 import { sameOriginOnly } from './lib/origin';
+import { createPlayService, type PlayService } from './plays/service';
 import { createRankingService, type RankingService } from './ranking/service';
 import { authRoutes } from './routes/auth';
 import { healthRoutes } from './routes/health';
 import { meRoutes } from './routes/me';
+import { playRoutes } from './routes/plays';
 import { rankingRoutes } from './routes/rankings';
 
 /** 라우트가 쓰는 의존성. 테스트에서는 서비스와 로그인 설정을 바꿔 끼울 수 있다 */
@@ -18,6 +20,7 @@ export interface AppDeps {
   db: Db;
   config: Config;
   ranking?: RankingService;
+  plays?: PlayService;
   /** 없으면 .env의 Google 설정으로 만든다. null이면 로그인을 막는다 */
   oidc?: OidcConfigLoader | null;
 }
@@ -30,7 +33,13 @@ function defaultOidc(config: Config): OidcConfigLoader | null {
 }
 
 /** API 앱을 만든다. 라우트를 여기서 모두 붙인다 */
-export function createApp({ db, config, ranking = createRankingService(db), oidc = defaultOidc(config) }: AppDeps) {
+export function createApp({
+  db,
+  config,
+  ranking = createRankingService(db),
+  plays = createPlayService(db, { ranking }),
+  oidc = defaultOidc(config),
+}: AppDeps) {
   const cookies = cookieSettings(config.SITE_URL);
   const session = sessionMiddleware(db, cookies);
   const sameOrigin = sameOriginOnly(config.SITE_URL);
@@ -44,7 +53,8 @@ export function createApp({ db, config, ranking = createRankingService(db), oidc
       c.header('Cache-Control', 'no-store');
     })
     .route('/', rankingRoutes(ranking))
-    .route('/', meRoutes({ db, loginAvailable: oidc !== null, ranking }));
+    .route('/', meRoutes({ db, loginAvailable: oidc !== null, ranking }))
+    .route('/', playRoutes(plays));
 
   const auth = new Hono<AppEnv>()
     .use(sameOrigin)

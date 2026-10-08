@@ -14,7 +14,7 @@ import {
   type AppleInput,
   type Board,
   type CellRect,
-} from '../logic';
+} from '../logic/rules';
 import type { AppleAudio } from '../audio';
 
 /** 판 방향. 세로 화면에서는 판을 전치해서(가로·세로를 맞바꿔) 10 × 17로 그린다 */

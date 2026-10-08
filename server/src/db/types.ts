@@ -21,14 +21,18 @@ export interface SessionsTable {
 /** 판 검증 상태 */
 export type PlayStatus = 'pending' | 'accepted' | 'rejected';
 
-/** 003_plays.sql */
+/** 003_plays.sql, 005_plays_reason.sql */
 export interface PlaysTable {
   id: Generated<number>;
   user_id: number;
   game_id: string;
   seed: string;
   score: number | null;
+  /** 클라이언트가 보낸 점수 (분석용) */
+  client_score: ColumnType<number | null, number | null | undefined, number | null>;
   status: ColumnType<PlayStatus, PlayStatus | undefined, PlayStatus>;
+  /** 거절 사유 (PlayRejectReason). 통과·대기면 NULL */
+  reject_reason: ColumnType<string | null, string | null | undefined, string | null>;
   started_at: Date;
   ended_at: Date | null;
 }

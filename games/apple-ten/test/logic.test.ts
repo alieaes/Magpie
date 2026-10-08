@@ -3,7 +3,9 @@ import {
   CELL_COUNT,
   COLS,
   ROWS,
+  MAX_SCORE,
   TIME_LIMIT_TICKS,
+  appleTenLogic,
   cellIndex,
   createBoard,
   rectSum,
@@ -142,5 +144,33 @@ describe('replay', () => {
   it('기록이 85개를 넘으면 실패', () => {
     const many = Array.from({ length: 86 }, (_, i) => ({ t: i, c1: 0, r1: 0, c2: 0, r2: 0 }));
     expect(replay('many', many)).toMatchObject({ ok: false, reason: 'too_many_inputs' });
+  });
+});
+
+describe('appleTenLogic', () => {
+  it('최대 틱 7200, 최고 점수 170', () => {
+    expect(appleTenLogic.maxTicks).toBe(TIME_LIMIT_TICKS);
+    expect(appleTenLogic.maxScore).toBe(MAX_SCORE);
+    expect(MAX_SCORE).toBe(170);
+  });
+
+  it('형식 검사: 정상 기록은 통과하고 그대로 재계산된다', () => {
+    const { inputs, score } = playGreedy('schema');
+    const parsed = appleTenLogic.inputSchema.safeParse(JSON.parse(JSON.stringify(inputs)));
+    expect(parsed.success).toBe(true);
+    expect(appleTenLogic.replay('schema', parsed.data!)).toMatchObject({ ok: true, score });
+  });
+
+  it('형식 검사: 배열이 아니거나 숫자가 아니거나 85개를 넘으면 실패', () => {
+    const bad: unknown[] = [
+      null,
+      { t: 1, c1: 0, r1: 0, c2: 1, r2: 0 },
+      [{ t: '1', c1: 0, r1: 0, c2: 1, r2: 0 }],
+      [{ t: 1.5, c1: 0, r1: 0, c2: 1, r2: 0 }],
+      [{ t: 1, c1: -1, r1: 0, c2: 1, r2: 0 }],
+      [{ t: 1, c1: 0, r1: 0, c2: 1 }],
+      Array.from({ length: 86 }, (_, i) => ({ t: i, c1: 0, r1: 0, c2: 1, r2: 0 })),
+    ];
+    for (const value of bad) expect(appleTenLogic.inputSchema.safeParse(value).success).toBe(false);
   });
 });

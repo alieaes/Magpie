@@ -10,8 +10,8 @@ pnpm 워크스페이스. TypeScript 6.0.3 고정 (vue-tsc가 TypeScript 7을 아
 |---|---|---|
 | `@magpie/client` | `client/` | Vue 3 + Vite. 셸 화면 |
 | `@magpie/server` | `server/` | Hono API |
-| `@magpie/shared` | `shared/` | 게임 목록, 랭킹 응답 형식, KST 날짜, 시드 난수, 틱 단위. 빌드 없이 소스를 바로 쓴다. 브라우저 전용 게임 모듈 규격은 `@magpie/shared/game-module`로 따로 낸다 |
-| `@magpie/game-apple-ten` | `games/apple-ten/` | 사과게임. `./logic`(순수 로직, 서버도 쓸 수 있음)과 기본 내보내기(Phaser 화면) |
+| `@magpie/shared` | `shared/` | 게임 목록, 게임 로직 규격(`GameLogic`), 랭킹·판 기록 API 형식, KST 날짜, 시드 난수, 틱 단위. 빌드 없이 소스를 바로 쓴다. 브라우저 전용 게임 모듈 규격은 `@magpie/shared/game-module`로 따로 낸다 |
+| `@magpie/game-apple-ten` | `games/apple-ten/` | 사과게임. `./logic`(순수 로직과 서버용 `appleTenLogic`)과 기본 내보내기(Phaser 화면). 서버는 `./logic`만 가져간다 |
 
 ## 명령
 
@@ -72,6 +72,7 @@ pnpm 워크스페이스. TypeScript 6.0.3 고정 (vue-tsc가 TypeScript 7을 아
 
 - 오류 응답: `{ "error": { "code": "BAD_REQUEST", "message": "..." } }`. 공통 코드는 `BAD_REQUEST`, `UNAUTHORIZED`, `BAD_ORIGIN`, `NOT_FOUND`, `INTERNAL`. 기능별 코드는 각 스펙에.
 - `/api/*`, `/auth/*` 응답에는 `Cache-Control: no-store`가 붙는다.
+- 하루 한 번 정리(서버 시작 때 한 번, 그 뒤 24시간마다): 만료 세션 삭제, 하루 지난 미완료 판 정리.
 - `/api/*`는 세션 쿠키로 로그인 유저를 확인한다. `/api/*`, `/auth/*`의 POST·PUT·DELETE는 Origin이 `SITE_URL`과 같아야 한다. 상세는 [auth.md](./auth.md).
 
 ## `GET /health`
@@ -93,5 +94,6 @@ pnpm 워크스페이스. TypeScript 6.0.3 고정 (vue-tsc가 TypeScript 7을 아
 | `002_sessions.sql` | `sessions` (로그인 세션, [auth.md](./auth.md)) |
 | `003_plays.sql` | `plays`, `play_replays` |
 | `004_bests.sql` | `best_daily`, `best_alltime` |
+| `005_plays_reason.sql` | `plays`에 `reject_reason`, `client_score`, 색인 `ix_plays_pending` ([plays.md](./plays.md)) |
 
 `002`는 `003`·`004`보다 늦게 만들었지만, 적용 기록(`schema_migrations`)이 파일 이름으로 남으므로 새로 생긴 파일은 순서와 상관없이 적용된다. 랭킹 표의 열은 [ranking.md](./ranking.md) 참고.

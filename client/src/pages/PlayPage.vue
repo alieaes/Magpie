@@ -1,23 +1,42 @@
 <script setup lang="ts">
 // 게임 화면 (/play/:gameId). 시작·결과 화면과 점수·시간 막대는 셸이 그리고, 판은 게임 패키지가 그린다.
-// 점수 제출(docs/design/261006-08-play-submission.md)이 아직 없어서 지금은 연습 모드만 있다.
+// 로그인하고 닉네임이 있으면 기록 모드(서버가 시드를 주고 끝난 판을 다시 계산), 아니면 연습 모드.
+// 근거: docs/design/261006-08-play-submission.md, docs/design/261006-09-apple-ten.md §3
 import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue';
 import { useRoute } from 'vue-router';
+import { storeToRefs } from 'pinia';
 import { PhArrowClockwise, PhFlagCheckered, PhPlay, PhSpeakerHigh, PhSpeakerSlash, PhTrophy } from '@phosphor-icons/vue';
-import { findGame, isGameId, randomSeed, type Game } from '@magpie/shared';
+import { findGame, isGameId, randomSeed, type FinishPlayResponse, type Game, type PlayRejectReason } from '@magpie/shared';
 import type { GameInstance, HudState, PlayResult } from '@magpie/shared/game-module';
+import { ApiError, finishPlay, startPlay } from '../api';
 import { formatNumber } from '../format';
 import { hasGameModule, loadGameModule } from '../games/registry';
+import { useAuthStore } from '../stores/auth';
 import NotFoundPage from './NotFoundPage.vue';
 
-type Phase = 'ready' | 'loading' | 'playing' | 'ended' | 'error';
+type Phase = 'ready' | 'loading' | 'playing' | 'submitting' | 'ended' | 'error';
+
+const REJECT_MESSAGES: Record<PlayRejectReason, string> = {
+  time: '게임 시간이 맞지 않아 기록되지 않았어요.',
+  bad_input: '기록을 확인하지 못해 저장하지 않았어요.',
+  mismatch: '기록을 확인하지 못해 저장하지 않았어요.',
+  abandoned: '새 판을 시작해서 이 판은 기록되지 않았어요.',
+};
 
 const route = useRoute();
+const auth = useAuthStore();
+const { user } = storeToRefs(auth);
 const host = ref<HTMLElement | null>(null);
 const phase = ref<Phase>('ready');
 const hud = ref<HudState>({ score: 0 });
 const result = shallowRef<PlayResult | null>(null);
+const errorMessage = ref('');
+/** 지금 판이 기록 모드인지. 판을 시작할 때 정한다 */
+const recording = ref(false);
+const submission = shallowRef<FinishPlayResponse | null>(null);
+const submitFailed = ref(false);
 let instance: GameInstance | null = null;
+let playId: number | null = null;
 
 // 소리 끄기. 다음 판에도 유지하려고 브라우저에 저장한다 (저장소를 못 쓰면 기본값)
 const MUTE_KEY = 'magpie.muted';
@@ -76,6 +95,22 @@ const game = computed<Game | null>(() => {
   return meta?.status === 'playable' ? meta : null;
 });
 
+/** 개발 중에는 ?seed=로 같은 판을 다시 띄울 수 있다. 이때는 연습 모드다 */
+const fixedSeed = computed(() => {
+  const seed = route.query.seed;
+  return import.meta.env.DEV && typeof seed === 'string' && seed ? seed : null;
+});
+/** 기록 모드로 시작할 수 있는지: 로그인 + 닉네임 */
+const canRecord = computed(() => Boolean(user.value?.nickname) && fixedSeed.value === null);
+/** 시작 화면의 모드 안내 */
+const modeNote = computed(() => {
+  if (!auth.loaded) return '';
+  if (fixedSeed.value) return '연습 모드 · 시드 고정(개발용)';
+  if (!user.value) return '연습 모드 · 로그인하면 기록이 남아요';
+  if (!user.value.nickname) return '연습 모드 · 닉네임을 정하면 기록이 남아요';
+  return '기록 모드 · 점수가 랭킹에 올라가요';
+});
+
 const timeLeftRatio = computed(() => {
   const { timeLeftTicks, timeLimitTicks } = hud.value;
   return timeLeftTicks !== undefined && timeLimitTicks ? timeLeftTicks / timeLimitTicks : null;
@@ -85,37 +120,82 @@ const timeUp = computed(() => {
   const limit = hud.value.timeLimitTicks;
   return limit !== undefined && result.value !== null && result.value.ticks >= limit;
 });
+/** 끝 화면의 기록 결과 한 줄 */
+const recordNote = computed(() => {
+  const s = submission.value;
+  if (!s) return '';
+  if (!s.accepted) return REJECT_MESSAGES[s.reason];
+  return s.rank.today === null ? '기록했어요' : `기록했어요 · 오늘 ${formatNumber(s.rank.today)}위`;
+});
+/** 최고 기록을 바꿨으면 그 표시 */
+const bestBadge = computed(() => {
+  const s = submission.value;
+  if (!s?.accepted) return '';
+  if (s.best.allTime) return '역대 최고 기록';
+  return s.best.today ? '오늘 최고 기록' : '';
+});
 
-/** 개발 중에는 ?seed=로 같은 판을 다시 띄울 수 있다 */
-function pickSeed(): string {
-  const fixed = route.query.seed;
-  return import.meta.env.DEV && typeof fixed === 'string' && fixed ? fixed : randomSeed();
-}
-
-/** 새 판을 띄운다 */
+/** 새 판을 띄운다. 기록 모드면 서버에서 판을 열어 시드를 받는다 */
 async function start(): Promise<void> {
   const current = game.value;
   if (!current || !host.value) return;
   destroyGame();
   phase.value = 'loading';
   result.value = null;
+  submission.value = null;
+  submitFailed.value = false;
   hud.value = { score: 0 };
   try {
+    // 게임 코드를 먼저 받고 판을 연다. 서버는 판을 연 때부터 시간을 재므로 내려받는 시간이 들어가지 않게 한다
     const module = await loadGameModule(current.id);
+    const record = canRecord.value;
+    let seed: string;
+    if (record) {
+      const play = await startPlay(current.id);
+      playId = play.playId;
+      seed = play.seed;
+    } else {
+      playId = null;
+      seed = fixedSeed.value ?? randomSeed();
+    }
+    recording.value = record;
     instance = await module.mount(host.value, {
-      seed: pickSeed(),
+      seed,
       muted: muted.value,
       volume: volume.value / 100,
       onHud: (state) => (hud.value = state),
-      onEnd: (r) => {
-        result.value = r;
-        phase.value = 'ended';
-      },
+      onEnd: (r) => void onEnd(r),
     });
     if (phase.value === 'loading') phase.value = 'playing';
   } catch (err) {
     console.error('[play] 게임을 띄우지 못했다', err);
+    errorMessage.value = err instanceof ApiError && err.status < 500 ? err.message : '게임을 불러오지 못했어요.';
+    // 로그인이 풀렸으면 상태를 다시 받는다. 다시 시도하면 연습 모드로 시작한다
+    if (err instanceof ApiError && err.status === 401) void auth.load();
     phase.value = 'error';
+  }
+}
+
+/** 판이 끝났을 때. 기록 모드면 서버에 보낸다 */
+async function onEnd(r: PlayResult): Promise<void> {
+  result.value = r;
+  if (recording.value) await submit();
+  else phase.value = 'ended';
+}
+
+/** 끝난 판을 서버에 보낸다. 보내지 못하면 "다시 보내기"를 띄운다 */
+async function submit(): Promise<void> {
+  const r = result.value;
+  if (!r || playId === null) return;
+  phase.value = 'submitting';
+  submitFailed.value = false;
+  try {
+    submission.value = await finishPlay(playId, { inputs: r.inputs, ticks: r.ticks, score: r.score });
+  } catch (err) {
+    console.warn('[play] 기록을 보내지 못했다', err);
+    submitFailed.value = true;
+  } finally {
+    phase.value = 'ended';
   }
 }
 
@@ -136,6 +216,7 @@ watch(
     destroyGame();
     phase.value = 'ready';
     result.value = null;
+    submission.value = null;
   },
 );
 onBeforeUnmount(destroyGame);
@@ -148,7 +229,7 @@ onBeforeUnmount(destroyGame);
     <header class="head">
       <h1 class="title">{{ game.name }}</h1>
 
-      <div v-if="phase === 'playing' || phase === 'ended'" class="hud">
+      <div v-if="phase === 'playing' || phase === 'submitting' || phase === 'ended'" class="hud">
         <div v-if="timeLeftRatio !== null" class="timer" :class="{ 'is-low': secondsLeft <= 10 }">
           <div class="bar" role="progressbar" :aria-valuenow="secondsLeft" aria-valuemin="0" aria-label="남은 시간">
             <div class="fill" :style="{ transform: `scaleX(${timeLeftRatio})` }" />
@@ -197,7 +278,7 @@ onBeforeUnmount(destroyGame);
         <div class="card">
           <h2 class="card-title">{{ game.name }}</h2>
           <p class="how">{{ game.howTo ?? game.tagline }}</p>
-          <p class="mode">연습 모드 · 기록 저장은 곧 열려요</p>
+          <p class="mode">{{ modeNote }}</p>
           <button type="button" class="primary-button" @click="start">
             <PhPlay :size="16" weight="fill" />
             시작
@@ -211,7 +292,7 @@ onBeforeUnmount(destroyGame);
 
       <div v-else-if="phase === 'error'" class="overlay">
         <div class="card">
-          <p class="how">게임을 불러오지 못했어요.</p>
+          <p class="how">{{ errorMessage }}</p>
           <button type="button" class="primary-button" @click="start">
             <PhArrowClockwise :size="16" weight="bold" />
             다시 시도
@@ -219,13 +300,28 @@ onBeforeUnmount(destroyGame);
         </div>
       </div>
 
-      <div v-else-if="phase === 'ended' && result" class="overlay is-dim">
+      <div v-else-if="(phase === 'submitting' || phase === 'ended') && result" class="overlay is-dim">
         <div class="card">
           <p class="end-label">{{ timeUp ? '시간 종료' : '게임 끝' }}</p>
           <p class="final num">{{ formatNumber(result.score) }}<small>{{ game.scoreUnit }}</small></p>
-          <p class="mode">연습 모드라 기록은 남지 않아요</p>
+          <p v-if="bestBadge" class="best">{{ bestBadge }}</p>
+
+          <p v-if="!recording" class="mode">연습 모드라 기록은 남지 않아요</p>
+          <p v-else-if="phase === 'submitting'" class="mode">기록을 확인하는 중</p>
+          <p v-else-if="submitFailed" class="mode is-error">기록을 보내지 못했어요.</p>
+          <p v-else class="mode" :class="{ 'is-error': submission && !submission.accepted }">{{ recordNote }}</p>
+
           <div class="actions">
-            <button type="button" class="primary-button" @click="start">
+            <button v-if="submitFailed" type="button" class="primary-button" @click="submit">
+              <PhArrowClockwise :size="16" weight="bold" />
+              다시 보내기
+            </button>
+            <button
+              type="button"
+              :class="submitFailed ? 'secondary-button' : 'primary-button'"
+              :disabled="phase === 'submitting'"
+              @click="start"
+            >
               <PhArrowClockwise :size="16" weight="bold" />
               다시 하기
             </button>
@@ -395,6 +491,19 @@ onBeforeUnmount(destroyGame);
   color: var(--text-2);
 }
 
+.mode.is-error {
+  color: #d9564a;
+}
+
+.best {
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .loading {
   font-size: 14px;
   color: var(--text-2);
@@ -475,6 +584,12 @@ onBeforeUnmount(destroyGame);
 .ghost-button.icon-only {
   width: 34px;
   padding: 0;
+}
+
+.primary-button:disabled {
+  cursor: default;
+  opacity: 0.5;
+  transform: none;
 }
 
 .ghost-button {

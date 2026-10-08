@@ -17,14 +17,14 @@
   - 총합이 같으면, 총합에 들어간 기록 중 가장 늦은 기록을 먼저 달성한 사람이 위.
   - SQL(윈도우 함수)로 계산한다 (`server/src/ranking/queries.ts`). 같은 공식의 TS 버전 `rankToPoints`는 화면 설명과 테스트에 쓴다.
 - **반영 조건**: 판이 검증을 통과하면(`plays.status = 'accepted'`) 더 좋은 기록일 때만 `best_daily`, `best_alltime`을 갱신한다.
-  점수 제출·검증은 아직 없다 (사과게임 설계에서 만든다).
+  동점이면 먼저 달성한 기록을 둔다. 점수 제출·검증은 [plays.md](./plays.md).
 
 ## 표
 
 | 표 | 키 | 열 |
 |---|---|---|
 | `users` | `id` | `google_sub`(유일), `nickname`(유일, NULL 가능, 최대 20자), `created_at` |
-| `plays` | `id` | `user_id`, `game_id`, `seed`, `score`(검증 전 NULL), `status`(`pending`/`accepted`/`rejected`), `started_at`, `ended_at` |
+| `plays` | `id` | `user_id`, `game_id`, `seed`, `score`(통과한 판의 서버 점수, 아니면 NULL), `client_score`, `status`(`pending`/`accepted`/`rejected`), `reject_reason`, `started_at`, `ended_at` |
 | `play_replays` | `play_id` | `data`(압축한 입력 기록) |
 | `best_daily` | (`user_id`, `game_id`, `day`) | `score`, `achieved_at`, `play_id`. `day`는 KST 날짜 |
 | `best_alltime` | (`user_id`, `game_id`) | `score`, `achieved_at`, `play_id` |

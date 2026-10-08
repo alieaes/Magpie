@@ -2,7 +2,16 @@
 
 import { hc } from 'hono/client';
 import type { AppType } from '@magpie/server';
-import type { GameSummary, RankingPeriod, RankingResponse, RankingTarget } from '@magpie/shared';
+import type {
+  FinishPlayRequest,
+  FinishPlayResponse,
+  GameId,
+  GameSummary,
+  RankingPeriod,
+  RankingResponse,
+  RankingTarget,
+  StartPlayResponse,
+} from '@magpie/shared';
 
 const client = hc<AppType>('/');
 
@@ -59,6 +68,20 @@ export async function updateNickname(nickname: string): Promise<string> {
   const res = await client.api.me.nickname.$put({ json: { nickname } });
   if (!res.ok) throw await toApiError(res);
   return (await res.json()).nickname;
+}
+
+/** 기록할 판을 연다. 서버가 시드를 준다. 비로그인·닉네임 전·너무 잦은 시작이면 ApiError(문구 포함) */
+export async function startPlay(gameId: GameId): Promise<StartPlayResponse> {
+  const res = await client.api.plays.$post({ json: { gameId } });
+  if (!res.ok) throw await toApiError(res);
+  return res.json();
+}
+
+/** 끝난 판을 보낸다. 서버가 다시 계산해 통과·거절을 알려준다 */
+export async function finishPlay(playId: number, body: FinishPlayRequest): Promise<FinishPlayResponse> {
+  const res = await client.api.plays[':id'].finish.$post({ param: { id: String(playId) }, json: body });
+  if (!res.ok) throw await toApiError(res);
+  return res.json();
 }
 
 /** 로그아웃한다 */

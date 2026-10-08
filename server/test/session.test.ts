@@ -1,46 +1,18 @@
 // 세션 통합 테스트. 개발 DB(-dev)에 붙어서 트랜잭션 안에서 실행하고 되돌린다. DB 설정이 없으면 건너뛴다.
 
 import { describe, expect, it } from 'vitest';
-import type { Kysely } from 'kysely';
-import { loadConfig, loadEnvFile } from '../src/config';
-import { createDb } from '../src/db';
-import type { Database } from '../src/db/types';
 import { createSession, deleteSession, hashToken, purgeExpiredSessions, resolveSession } from '../src/auth/session';
 import { DuplicateNicknameError, findOrCreateUser, setNickname } from '../src/auth/users';
+import { canRunDb, inRollback } from './helpers';
 
-loadEnvFile();
-const config = (() => {
-  try {
-    return loadConfig();
-  } catch {
-    return null;
-  }
-})();
-const canRun = config !== null && config.DB_NAME.endsWith('-dev');
-const ROLLBACK = new Error('rollback');
 const DAY = 86_400_000;
-
-/** 트랜잭션 안에서 테스트를 돌리고 항상 되돌린다 */
-async function inRollback(fn: (trx: Kysely<Database>) => Promise<void>): Promise<void> {
-  const db = createDb(config!);
-  try {
-    await db.transaction().execute(async (trx) => {
-      await fn(trx);
-      throw ROLLBACK;
-    });
-  } catch (err) {
-    if (err !== ROLLBACK) throw err;
-  } finally {
-    await db.destroy();
-  }
-}
 
 /** 테스트용 Google ID (실제 계정과 겹치지 않게) */
 function fakeSub(): string {
   return `test-sub:${Date.now()}:${Math.random()}`;
 }
 
-describe.skipIf(!canRun)('세션 (개발 DB)', () => {
+describe.skipIf(!canRunDb)('세션 (개발 DB)', () => {
   it('만든 세션으로 유저를 찾고, DB에는 해시만 둔다', async () => {
     await inRollback(async (trx) => {
       const user = await findOrCreateUser(trx, fakeSub());
