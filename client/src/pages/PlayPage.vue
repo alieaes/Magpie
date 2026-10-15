@@ -30,6 +30,33 @@ function readMuted(): boolean {
 }
 const muted = ref(readMuted());
 
+// 음량(0~100). 기본 70
+const VOLUME_KEY = 'magpie.volume';
+function readVolume(): number {
+  try {
+    const saved = Number(localStorage.getItem(VOLUME_KEY));
+    return localStorage.getItem(VOLUME_KEY) !== null && saved >= 0 && saved <= 100 ? saved : 70;
+  } catch {
+    return 70;
+  }
+}
+const volume = ref(readVolume());
+
+/** 음량 슬라이더. 0으로 내리면 음소거, 올리면 음소거를 푼다 */
+function onVolume(): void {
+  instance?.setVolume?.(volume.value / 100);
+  if (muted.value !== (volume.value === 0)) {
+    muted.value = volume.value === 0;
+    instance?.setMuted?.(muted.value);
+  }
+  try {
+    localStorage.setItem(VOLUME_KEY, String(volume.value));
+    localStorage.setItem(MUTE_KEY, muted.value ? '1' : '0');
+  } catch {
+    // 저장 실패는 무시한다
+  }
+}
+
 /** 소리 켜기/끄기 버튼 */
 function toggleMuted(): void {
   muted.value = !muted.value;
@@ -78,6 +105,7 @@ async function start(): Promise<void> {
     instance = await module.mount(host.value, {
       seed: pickSeed(),
       muted: muted.value,
+      volume: volume.value / 100,
       onHud: (state) => (hud.value = state),
       onEnd: (r) => {
         result.value = r;
@@ -144,6 +172,17 @@ onBeforeUnmount(destroyGame);
         <PhSpeakerSlash v-if="muted" :size="18" weight="bold" />
         <PhSpeakerHigh v-else :size="18" weight="bold" />
       </button>
+      <input
+        v-if="phase === 'playing'"
+        v-model.number="volume"
+        type="range"
+        min="0"
+        max="100"
+        step="5"
+        class="volume"
+        aria-label="음량"
+        @input="onVolume"
+      />
 
       <button v-if="phase === 'playing'" type="button" class="ghost-button" @click="finish">
         <PhFlagCheckered :size="16" weight="bold" />
@@ -427,6 +466,12 @@ onBeforeUnmount(destroyGame);
   transform: scale(0.98);
 }
 
+.volume {
+  width: 84px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
 .ghost-button.icon-only {
   width: 34px;
   padding: 0;
@@ -462,8 +507,12 @@ onBeforeUnmount(destroyGame);
     margin-left: auto;
   }
 
-  .ghost-button.icon-only + .ghost-button {
-    margin-left: 0;
+  .ghost-button.icon-only + .volume {
+    margin-right: 0;
+  }
+
+  .volume {
+    width: 64px;
   }
 
   .stage {

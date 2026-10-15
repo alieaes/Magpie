@@ -53,6 +53,20 @@ export function midiToFreq(midi: number): number {
   return 440 * 2 ** ((midi - 69) / 12);
 }
 
+/** 판이 끝났을 때 올라가는 4음 (도·미·솔·높은 도). delay는 시작 지연(초) */
+export const END_NOTES = [
+  { midi: 72, delay: 0 },
+  { midi: 76, delay: 0.12 },
+  { midi: 79, delay: 0.24 },
+  { midi: 84, delay: 0.36 },
+];
+
+/** 슬라이더 값(0~1)을 실제 음량 배율로. 사람 귀는 로그에 가까워 제곱 곡선을 쓴다 */
+export function volumeGain(volume: number): number {
+  const v = Math.min(1, Math.max(0, volume));
+  return v * v;
+}
+
 // 터짐 소리에 쓰는 음계 (도 장조 5음). 한 번에 많이 지울수록 높은 음에서 시작한다
 const POP_SCALE = [72, 74, 76, 79, 81, 84];
 

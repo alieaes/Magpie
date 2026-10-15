@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LOOP_STEPS, midiToFreq, notesAt, popNotes, stepSeconds } from '../src/audio/music';
+import { END_NOTES, LOOP_STEPS, midiToFreq, notesAt, popNotes, stepSeconds, volumeGain } from '../src/audio/music';
 
 describe('사과게임 소리 악보', () => {
   it('가온 라는 440Hz, 한 옥타브 위는 두 배', () => {
@@ -32,5 +32,18 @@ describe('사과게임 소리 악보', () => {
     const big = popNotes(10);
     expect(big[0]!.midi).toBeGreaterThan(small[0]!.midi);
     expect(big.length).toBeGreaterThan(small.length);
+  });
+
+  it('음량 곡선은 0~1로 제한되고 단조 증가한다', () => {
+    expect(volumeGain(0)).toBe(0);
+    expect(volumeGain(1)).toBe(1);
+    expect(volumeGain(2)).toBe(1);
+    expect(volumeGain(-1)).toBe(0);
+    expect(volumeGain(0.5)).toBeLessThan(volumeGain(0.8));
+  });
+
+  it('종료음은 올라가는 음이다', () => {
+    const midis = END_NOTES.map((n) => n.midi);
+    expect([...midis].sort((a, b) => a - b)).toEqual(midis);
   });
 });

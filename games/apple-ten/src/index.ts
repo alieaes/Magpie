@@ -41,7 +41,7 @@ const appleTen: GameModule = {
     await document.fonts.load('700 42px "Pretendard Variable"', '0123456789').catch(() => undefined);
 
     const orientation = pickOrientation(parent);
-    const audio = new AppleAudio(options.muted ?? false);
+    const audio = new AppleAudio(options.muted ?? false, options.volume ?? 1);
     const scene = new AppleScene({ seed: options.seed, orientation, palette: readPalette(), audio, onHud: options.onHud, onEnd: options.onEnd });
     const { width, height } = canvasSize(orientation);
     const game = new Phaser.Game({
@@ -69,6 +69,7 @@ const appleTen: GameModule = {
     return {
       finish: () => scene.finish(),
       setMuted: (muted) => audio.setMuted(muted),
+      setVolume: (volume) => audio.setVolume(volume),
       destroy: () => {
         audio.destroy();
         observer.disconnect();

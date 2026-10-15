@@ -1,7 +1,7 @@
 // 사과게임 소리. Web Audio로 음을 직접 합성한다(음원 파일 없음). 악보는 music.ts에 있다.
 // 근거: docs/design/261016-01-apple-sound.md
 
-import { midiToFreq, notesAt, popNotes, stepSeconds } from './music';
+import { END_NOTES, midiToFreq, notesAt, popNotes, stepSeconds, volumeGain } from './music';
 
 // 전체 음량. 귀가 아프지 않게 작게 잡는다
 const MASTER_GAIN = 0.5;
@@ -14,19 +14,21 @@ export class AppleAudio {
   private readonly ctx: AudioContext | null;
   private readonly master: GainNode | null;
   private muted: boolean;
+  private volume: number;
   private urgent = false;
   private step = 0;
   private nextTime = 0;
   private timer: number | null = null;
 
-  constructor(muted: boolean) {
+  constructor(muted: boolean, volume: number) {
     this.muted = muted;
+    this.volume = volume;
     const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     // 소리를 못 쓰는 환경이면 조용히 넘어간다. 게임은 소리 없이도 돌아야 한다
     this.ctx = Ctor ? new Ctor() : null;
     this.master = this.ctx ? this.ctx.createGain() : null;
     if (this.ctx && this.master) {
-      this.master.gain.value = muted ? 0 : MASTER_GAIN;
+      this.master.gain.value = this.level();
       this.master.connect(this.ctx.destination);
     }
   }
@@ -39,7 +41,23 @@ export class AppleAudio {
   /** 음소거를 켜거나 끈다 */
   setMuted(muted: boolean): void {
     this.muted = muted;
-    if (this.ctx && this.master) this.master.gain.setTargetAtTime(muted ? 0 : MASTER_GAIN, this.ctx.currentTime, 0.02);
+    this.applyLevel();
+  }
+
+  /** 음량을 바꾼다 (0~1) */
+  setVolume(volume: number): void {
+    this.volume = volume;
+    this.applyLevel();
+  }
+
+  /** 지금 마스터 음량 */
+  private level(): number {
+    return this.muted ? 0 : MASTER_GAIN * volumeGain(this.volume);
+  }
+
+  /** 마스터 음량을 부드럽게 맞춘다 (뚝 끊기는 잡음 방지) */
+  private applyLevel(): void {
+    if (this.ctx && this.master) this.master.gain.setTargetAtTime(this.level(), this.ctx.currentTime, 0.02);
   }
 
   /** 사과를 count개 지웠을 때: 경쾌한 퐁 */
@@ -53,7 +71,15 @@ export class AppleAudio {
   miss(): void {
     if (!this.ctx || this.muted) return;
     const now = this.ctx.currentTime;
-    this.tone(170, now, 0.14, 'triangle', 0.22, 110);
+    this.tone(330, now, 0.2, 'triangle', 0.4, 220);
+    this.tone(311, now + 0.07, 0.2, 'triangle', 0.3, 207);
+  }
+
+  /** 판이 끝났을 때: 올라가는 4음 */
+  end(): void {
+    if (!this.ctx || this.muted) return;
+    const now = this.ctx.currentTime;
+    for (const n of END_NOTES) this.tone(midiToFreq(n.midi), now + n.delay, 0.5, 'triangle', 0.3);
   }
 
   /** 배경음을 처음부터 튼다 */

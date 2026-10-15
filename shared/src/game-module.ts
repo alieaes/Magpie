@@ -24,6 +24,8 @@ export interface GameMountOptions {
   seed: string;
   /** 처음부터 소리를 끌지. 소리가 없는 게임은 무시한다 */
   muted?: boolean;
+  /** 처음 음량 (0~1). 소리가 없는 게임은 무시한다 */
+  volume?: number;
   onHud(state: HudState): void;
   onEnd(result: PlayResult): void;
 }
@@ -34,6 +36,8 @@ export interface GameInstance {
   finish(): void;
   /** 소리를 켜거나 끈다. 소리가 없는 게임은 구현하지 않는다 */
   setMuted?(muted: boolean): void;
+  /** 음량을 바꾼다 (0~1). 소리가 없는 게임은 구현하지 않는다 */
+  setVolume?(volume: number): void;
   /** 화면과 이벤트를 모두 정리한다 */
   destroy(): void;
 }

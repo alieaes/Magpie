@@ -149,6 +149,8 @@ export class AppleScene extends Phaser.Scene {
     if (this.ended || !this.board) return;
     this.ended = true;
     this.opts.audio.stopBgm();
+    // 탭이 가려져서 끝난 판에서는 종료음을 내지 않는다
+    if (document.visibilityState === 'visible') this.opts.audio.end();
     this.clearSelection();
     this.emitHud();
     this.opts.onEnd({ seed: this.opts.seed, inputs: [...this.inputs], ticks: this.tick, score: this.score });

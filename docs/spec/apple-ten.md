@@ -50,14 +50,16 @@
 | 소리 | 언제 |
 |---|---|
 | 터짐 | 합이 10이라 지워질 때. 많이 지울수록 높은 음에서 시작하고 4개 이상이면 3음 화음 |
-| 실패 | 사과가 하나라도 잡혔는데 합이 10이 아닐 때. 빈 칸만 잡으면 안 난다 |
+| 실패 | 사과가 하나라도 잡혔는데 합이 10이 아닐 때(330→220Hz 두 음). 빈 칸만 잡으면 안 난다 |
 | 기본 배경음 | 플레이 중 반복 (112bpm, 4마디 32스텝) |
 | 긴박 배경음 | 남은 시간 20초 이하. 같은 자리에서 이어서 156bpm, 온음 높게 |
+| 종료음 | 판이 끝날 때 올라가는 4음. 화면이 가려져 끝났으면 내지 않는다 |
 
 - 악보(`music.ts`)는 순수 계산이고 소리 내기(`index.ts`의 `AppleAudio`)와 나눠 두었다. 테스트: `test/audio.test.ts`.
 - 판이 끝나거나 화면이 가려지면 배경음이 멈추고, 게임을 내리면 오디오를 닫는다. 로직(`logic/`)은 소리와 무관하다.
 - 브라우저 자동재생 제한 때문에 첫 포인터 입력에서 `resume()`한다.
-- 음소거: 플레이 중 막대의 스피커 버튼. `localStorage`(`magpie.muted`)에 저장. 셸의 `GameInstance.setMuted?`와 `GameMountOptions.muted?`로 전달한다.
+- 음소거·음량: 플레이 중 막대의 스피커 버튼과 슬라이더(0~100, 기본 70, 제곱 곡선). 슬라이더를 0으로 내리면 음소거, 올리면 해제된다.
+  `localStorage`(`magpie.muted`, `magpie.volume`)에 저장. 셸의 `GameInstance.setMuted?`·`setVolume?`와 `GameMountOptions.muted?`·`volume?`로 전달한다.
 
 ### 플레이 페이지 (`/play/:gameId`, `client/src/pages/PlayPage.vue`)
 
