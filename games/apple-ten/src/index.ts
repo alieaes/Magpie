@@ -2,6 +2,7 @@
 
 import Phaser from 'phaser';
 import type { GameModule } from '@magpie/shared/game-module';
+import { AppleAudio } from './audio';
 import { AppleScene, canvasSize, type Orientation, type ScenePalette } from './scene/AppleScene';
 
 /** 게임 영역이 세로로 길면 판도 세로로 돌린다 */
@@ -40,7 +41,8 @@ const appleTen: GameModule = {
     await document.fonts.load('700 42px "Pretendard Variable"', '0123456789').catch(() => undefined);
 
     const orientation = pickOrientation(parent);
-    const scene = new AppleScene({ seed: options.seed, orientation, palette: readPalette(), onHud: options.onHud, onEnd: options.onEnd });
+    const audio = new AppleAudio(options.muted ?? false);
+    const scene = new AppleScene({ seed: options.seed, orientation, palette: readPalette(), audio, onHud: options.onHud, onEnd: options.onEnd });
     const { width, height } = canvasSize(orientation);
     const game = new Phaser.Game({
       type: Phaser.AUTO,
@@ -66,7 +68,9 @@ const appleTen: GameModule = {
 
     return {
       finish: () => scene.finish(),
+      setMuted: (muted) => audio.setMuted(muted),
       destroy: () => {
+        audio.destroy();
         observer.disconnect();
         document.removeEventListener('visibilitychange', onVisibility);
         game.destroy(true);

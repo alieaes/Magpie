@@ -3,7 +3,7 @@
 // 점수 제출(docs/design/261006-08-play-submission.md)이 아직 없어서 지금은 연습 모드만 있다.
 import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue';
 import { useRoute } from 'vue-router';
-import { PhArrowClockwise, PhFlagCheckered, PhPlay, PhTrophy } from '@phosphor-icons/vue';
+import { PhArrowClockwise, PhFlagCheckered, PhPlay, PhSpeakerHigh, PhSpeakerSlash, PhTrophy } from '@phosphor-icons/vue';
 import { findGame, isGameId, randomSeed, type Game } from '@magpie/shared';
 import type { GameInstance, HudState, PlayResult } from '@magpie/shared/game-module';
 import { formatNumber } from '../format';
@@ -18,6 +18,28 @@ const phase = ref<Phase>('ready');
 const hud = ref<HudState>({ score: 0 });
 const result = shallowRef<PlayResult | null>(null);
 let instance: GameInstance | null = null;
+
+// 소리 끄기. 다음 판에도 유지하려고 브라우저에 저장한다 (저장소를 못 쓰면 기본값)
+const MUTE_KEY = 'magpie.muted';
+function readMuted(): boolean {
+  try {
+    return localStorage.getItem(MUTE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+const muted = ref(readMuted());
+
+/** 소리 켜기/끄기 버튼 */
+function toggleMuted(): void {
+  muted.value = !muted.value;
+  instance?.setMuted?.(muted.value);
+  try {
+    localStorage.setItem(MUTE_KEY, muted.value ? '1' : '0');
+  } catch {
+    // 저장 실패는 무시한다
+  }
+}
 
 /** 주소의 게임. 플레이할 수 있고 코드가 등록된 게임만 */
 const game = computed<Game | null>(() => {
@@ -55,6 +77,7 @@ async function start(): Promise<void> {
     const module = await loadGameModule(current.id);
     instance = await module.mount(host.value, {
       seed: pickSeed(),
+      muted: muted.value,
       onHud: (state) => (hud.value = state),
       onEnd: (r) => {
         result.value = r;
@@ -109,6 +132,18 @@ onBeforeUnmount(destroyGame);
           <strong class="num">{{ formatNumber(hud.score) }}</strong><small>{{ game.scoreUnit }}</small>
         </div>
       </div>
+
+      <button
+        v-if="phase === 'playing'"
+        type="button"
+        class="ghost-button icon-only"
+        :aria-label="muted ? '소리 켜기' : '소리 끄기'"
+        :aria-pressed="muted"
+        @click="toggleMuted"
+      >
+        <PhSpeakerSlash v-if="muted" :size="18" weight="bold" />
+        <PhSpeakerHigh v-else :size="18" weight="bold" />
+      </button>
 
       <button v-if="phase === 'playing'" type="button" class="ghost-button" @click="finish">
         <PhFlagCheckered :size="16" weight="bold" />
@@ -392,6 +427,11 @@ onBeforeUnmount(destroyGame);
   transform: scale(0.98);
 }
 
+.ghost-button.icon-only {
+  width: 34px;
+  padding: 0;
+}
+
 .ghost-button {
   height: 34px;
   padding: 0 12px;
@@ -418,8 +458,12 @@ onBeforeUnmount(destroyGame);
     flex-basis: 100%;
   }
 
-  .ghost-button {
+  .ghost-button.icon-only {
     margin-left: auto;
+  }
+
+  .ghost-button.icon-only + .ghost-button {
+    margin-left: 0;
   }
 
   .stage {

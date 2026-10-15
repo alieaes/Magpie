@@ -22,6 +22,8 @@ export interface PlayResult<Input = unknown> {
 
 export interface GameMountOptions {
   seed: string;
+  /** 처음부터 소리를 끌지. 소리가 없는 게임은 무시한다 */
+  muted?: boolean;
   onHud(state: HudState): void;
   onEnd(result: PlayResult): void;
 }
@@ -30,6 +32,8 @@ export interface GameMountOptions {
 export interface GameInstance {
   /** 지금 판을 끝낸다 ("끝내기" 버튼). onEnd가 불린다 */
   finish(): void;
+  /** 소리를 켜거나 끈다. 소리가 없는 게임은 구현하지 않는다 */
+  setMuted?(muted: boolean): void;
   /** 화면과 이벤트를 모두 정리한다 */
   destroy(): void;
 }

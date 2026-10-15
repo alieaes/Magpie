@@ -15,6 +15,7 @@ import {
   type Board,
   type CellRect,
 } from '../logic';
+import type { AppleAudio } from '../audio';
 
 /** 판 방향. 세로 화면에서는 판을 전치해서(가로·세로를 맞바꿔) 10 × 17로 그린다 */
 export type Orientation = 'landscape' | 'portrait';
@@ -30,6 +31,7 @@ export interface AppleSceneOptions {
   seed: string;
   orientation: Orientation;
   palette: ScenePalette;
+  audio: AppleAudio;
   onHud(state: HudState): void;
   onEnd(result: PlayResult<AppleInput>): void;
 }
@@ -49,6 +51,8 @@ const NUMBER_STYLE: Phaser.Types.GameObjects.Text.TextStyle = {
 };
 // 상단 막대 갱신 간격 (6틱 = 0.1초)
 const HUD_EVERY_TICKS = 6;
+// 남은 시간이 이만큼 이하가 되면 긴박한 배경음으로 바꾼다 (20초)
+const URGENT_TICKS = 20 * TICKS_PER_SECOND;
 
 /** 판 방향에 맞는 캔버스 크기 */
 export function canvasSize(orientation: Orientation): { width: number; height: number } {
@@ -90,6 +94,7 @@ export class AppleScene extends Phaser.Scene {
   private tick = 0;
   private startedAt = 0;
   private ended = false;
+  private urgent = false;
 
   constructor(opts: AppleSceneOptions) {
     super('apple-ten');
@@ -121,6 +126,7 @@ export class AppleScene extends Phaser.Scene {
 
     this.startedAt = performance.now();
     this.emitHud();
+    this.opts.audio.startBgm();
   }
 
   /** 실제로 흐른 시간으로 틱을 센다. 제한 시간이 되면 판을 끝낸다 */
@@ -130,6 +136,10 @@ export class AppleScene extends Phaser.Scene {
     const tick = Math.min(TIME_LIMIT_TICKS, Math.floor((elapsed * TICKS_PER_SECOND) / 1000));
     if (tick === this.tick) return;
     this.tick = tick;
+    if (!this.urgent && TIME_LIMIT_TICKS - tick <= URGENT_TICKS) {
+      this.urgent = true;
+      this.opts.audio.setUrgent(true);
+    }
     if (tick >= TIME_LIMIT_TICKS) this.finish();
     else if (tick % HUD_EVERY_TICKS === 0) this.emitHud();
   }
@@ -138,6 +148,7 @@ export class AppleScene extends Phaser.Scene {
   finish(): void {
     if (this.ended || !this.board) return;
     this.ended = true;
+    this.opts.audio.stopBgm();
     this.clearSelection();
     this.emitHud();
     this.opts.onEnd({ seed: this.opts.seed, inputs: [...this.inputs], ticks: this.tick, score: this.score });
@@ -199,6 +210,7 @@ export class AppleScene extends Phaser.Scene {
   /** 드래그 시작 */
   private onDown(p: Phaser.Input.Pointer): void {
     if (this.ended) return;
+    this.opts.audio.resume();
     this.dragStart = { x: p.x, y: p.y };
   }
 
@@ -222,7 +234,12 @@ export class AppleScene extends Phaser.Scene {
     if (!rect) return;
     const targets = this.indicesIn(rect).filter((i) => this.board![i] !== 0);
     const removed = trySelect(this.board, rect);
-    if (removed === 0) return;
+    if (removed === 0) {
+      // 사과를 잡았는데 합이 10이 아닌 경우만 실패음을 낸다
+      if (targets.length > 0) this.opts.audio.miss();
+      return;
+    }
+    this.opts.audio.pop(removed);
     this.inputs.push({ t: this.tick, ...rect });
     this.score += removed;
     for (const i of targets) this.popApple(i);
