@@ -16,9 +16,9 @@ import {
   type CellRect,
 } from '../logic/rules';
 import type { AppleAudio } from '../audio';
+import { APPLE_RADIUS, CELL, PAD, canvasSize, pickRect, type Orientation, type Point } from './pick';
 
-/** 판 방향. 세로 화면에서는 판을 전치해서(가로·세로를 맞바꿔) 10 × 17로 그린다 */
-export type Orientation = 'landscape' | 'portrait';
+export { canvasSize, type Orientation } from './pick';
 
 /** 셸의 CSS 변수에서 읽어 오는 색 (라이트·다크에 따라 다르다) */
 export interface ScenePalette {
@@ -36,10 +36,6 @@ export interface AppleSceneOptions {
   onEnd(result: PlayResult<AppleInput>): void;
 }
 
-// 캔버스를 크게 잡고 화면에 맞춰 줄인다. 고해상도 화면에서도 흐려지지 않게 하기 위해서다
-const CELL = 96;
-const PAD = 28;
-const APPLE_RADIUS = 38;
 const APPLE_COLOR = 0xd9564a;
 const LEAF_COLOR = 0x5e9b4f;
 const APPLE_TEXTURE = 'apple';
@@ -53,13 +49,6 @@ const NUMBER_STYLE: Phaser.Types.GameObjects.Text.TextStyle = {
 const HUD_EVERY_TICKS = 6;
 // 남은 시간이 이만큼 이하가 되면 긴박한 배경음으로 바꾼다 (20초)
 const URGENT_TICKS = 20 * TICKS_PER_SECOND;
-
-/** 판 방향에 맞는 캔버스 크기 */
-export function canvasSize(orientation: Orientation): { width: number; height: number } {
-  const cols = orientation === 'landscape' ? COLS : ROWS;
-  const rows = orientation === 'landscape' ? ROWS : COLS;
-  return { width: cols * CELL + PAD * 2, height: rows * CELL + PAD * 2 };
-}
 
 /** 사각형 테두리를 점선으로 그린다 */
 function strokeDashedRect(g: Phaser.GameObjects.Graphics, x: number, y: number, w: number, h: number): void {
@@ -85,9 +74,12 @@ export class AppleScene extends Phaser.Scene {
   /** 로직 칸 인덱스마다 사과 그림. 지워지면 null */
   private apples: (Phaser.GameObjects.Container | null)[] = [];
   private rings: Phaser.GameObjects.Graphics[] = [];
+  private labels: Phaser.GameObjects.Text[] = [];
+  /** 사라지는 연출 중인 사과 그림 */
+  private popping: Phaser.GameObjects.Container[] = [];
   private tray!: Phaser.GameObjects.Graphics;
   private selection!: Phaser.GameObjects.Graphics;
-  private dragStart: { x: number; y: number } | null = null;
+  private dragStart: Point | null = null;
   private highlighted: number[] = [];
   private readonly inputs: AppleInput[] = [];
   private score = 0;
@@ -114,6 +106,7 @@ export class AppleScene extends Phaser.Scene {
       const body = this.add.image(0, 0, APPLE_TEXTURE);
       const label = this.add.text(0, 6, String(this.board[i]), NUMBER_STYLE).setOrigin(0.5);
       this.rings.push(ring);
+      this.labels.push(label);
       this.apples.push(this.add.container(0, 0, [ring, body, label]));
     }
     this.selection = this.add.graphics().setDepth(10);
@@ -164,6 +157,12 @@ export class AppleScene extends Phaser.Scene {
     const { width, height } = canvasSize(orientation);
     this.scale.setGameSize(width, height);
     this.clearSelection();
+    // 사라지는 중인 사과는 layout()이 옮기지 않으므로 옛 자리에 남지 않게 바로 치운다
+    for (const apple of this.popping) {
+      this.tweens.killTweensOf(apple);
+      apple.destroy();
+    }
+    this.popping = [];
     this.layout();
   }
 
@@ -194,29 +193,18 @@ export class AppleScene extends Phaser.Scene {
     }
   }
 
-  /** 화면 사각형 안에 중심이 들어오는 칸들을 로직 칸 좌표 사각형으로 바꾼다. 하나도 없으면 null */
-  private cellsIn(a: { x: number; y: number }, b: { x: number; y: number }): CellRect | null {
-    const displayCols = this.orientation === 'landscape' ? COLS : ROWS;
-    const displayRows = this.orientation === 'landscape' ? ROWS : COLS;
-    const toIndex = (v: number) => (v - PAD - CELL / 2) / CELL;
-    const dc1 = Math.max(0, Math.ceil(toIndex(Math.min(a.x, b.x))));
-    const dc2 = Math.min(displayCols - 1, Math.floor(toIndex(Math.max(a.x, b.x))));
-    const dr1 = Math.max(0, Math.ceil(toIndex(Math.min(a.y, b.y))));
-    const dr2 = Math.min(displayRows - 1, Math.floor(toIndex(Math.max(a.y, b.y))));
-    if (dc1 > dc2 || dr1 > dr2) return null;
-    return this.orientation === 'landscape'
-      ? { c1: dc1, r1: dr1, c2: dc2, r2: dr2 }
-      : { c1: dr1, r1: dc1, c2: dr2, r2: dc2 };
-  }
-
-  /** 드래그 시작 */
+  /** 드래그 시작: 누르는 순간 누른 사과에 테두리를 켠다 */
   private onDown(p: Phaser.Input.Pointer): void {
     if (this.ended) return;
     this.opts.audio.resume();
     this.dragStart = { x: p.x, y: p.y };
+    this.setHighlight(pickRect(this.dragStart, this.dragStart, this.orientation));
   }
 
-  /** 드래그 중: 사각형과 그 안의 사과 테두리를 그린다. 합계는 보여주지 않는다(원작과 같음) */
+  /**
+   * 드래그 중: 누른 점~포인터 사각형을 그리고, 사각형에 조금이라도 걸친 사과에 테두리를 켠다.
+   * 합계는 보여주지 않는다(원작과 같음)
+   */
   private onMove(p: Phaser.Input.Pointer): void {
     if (this.ended || !this.dragStart || !p.isDown) return;
     const { x, y } = this.dragStart;
@@ -224,7 +212,7 @@ export class AppleScene extends Phaser.Scene {
     this.selection.fillStyle(this.opts.palette.accent, 0.1).fillRect(Math.min(x, p.x), Math.min(y, p.y), Math.abs(p.x - x), Math.abs(p.y - y));
     this.selection.lineStyle(4, this.opts.palette.accent, 1);
     strokeDashedRect(this.selection, Math.min(x, p.x), Math.min(y, p.y), Math.abs(p.x - x), Math.abs(p.y - y));
-    this.setHighlight(this.cellsIn(this.dragStart, p));
+    this.setHighlight(pickRect(this.dragStart, p, this.orientation));
   }
 
   /** 드래그 끝: 합이 10이면 사과를 지우고 입력을 기록한다 */
@@ -232,13 +220,14 @@ export class AppleScene extends Phaser.Scene {
     const start = this.dragStart;
     this.clearSelection();
     if (this.ended || !start || !this.board) return;
-    const rect = this.cellsIn(start, p);
+    const rect = pickRect(start, p, this.orientation);
     if (!rect) return;
     const targets = this.indicesIn(rect).filter((i) => this.board![i] !== 0);
     const removed = trySelect(this.board, rect);
     if (removed === 0) {
-      // 사과를 잡았는데 합이 10이 아닌 경우만 실패음을 낸다
-      if (targets.length > 0) this.opts.audio.miss();
+      // 사과를 2개 이상 잡았는데 합이 10이 아닌 경우만 실패음을 낸다.
+      // 사과 하나로는 10이 될 수 없고, 사과를 누르기만 해도 그 사과가 잡히므로 탭에는 소리를 내지 않는다
+      if (targets.length >= 2) this.opts.audio.miss();
       return;
     }
     this.opts.audio.pop(removed);
@@ -269,19 +258,26 @@ export class AppleScene extends Phaser.Scene {
     this.setHighlight(null);
   }
 
-  /** 지워진 사과가 살짝 튀어 오르며 사라진다 */
+  /**
+   * 지워진 사과: 숫자는 바로 숨기고 몸통만 제자리에서 짧게 작아지며 사라진다.
+   * 커지거나 오래 남으면 옆 사과를 덮고 다음 선택과 겹쳐 보이므로 짧게 줄인다 (설계 261017-01 §3)
+   */
   private popApple(i: number): void {
     const apple = this.apples[i];
     if (!apple) return;
     this.apples[i] = null;
+    this.labels[i]?.setVisible(false);
+    this.popping.push(apple);
     this.tweens.add({
       targets: apple,
-      y: apple.y - 18,
-      scale: 1.2,
+      scale: 0.6,
       alpha: 0,
-      duration: 260,
+      duration: 120,
       ease: 'Quad.easeOut',
-      onComplete: () => apple.destroy(),
+      onComplete: () => {
+        this.popping = this.popping.filter((a) => a !== apple);
+        apple.destroy();
+      },
     });
   }
 

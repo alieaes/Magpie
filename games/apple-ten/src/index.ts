@@ -47,8 +47,11 @@ const appleTen: GameModule = {
     const game = new Phaser.Game({
       type: Phaser.AUTO,
       parent,
-      transparent: true,
+      // 캔버스를 불투명하게 띄우고 바탕을 페이지 바탕(--bg)으로 칠한다. 저지연 캔버스는 불투명할 때 효과가 확실하다
+      backgroundColor: cssColor('--bg', 0xf7f6f3),
       banner: false,
+      // 저지연 캔버스: 그리기가 브라우저 합성 단계를 덜 거쳐 선택 사각형이 포인터를 더 바짝 따라온다 (설계 261017-01 §1)
+      render: { desynchronized: true },
       scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH, width, height },
       scene,
     });
