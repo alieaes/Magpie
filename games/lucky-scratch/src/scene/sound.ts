@@ -1,25 +1,9 @@
 // 효과음. 녹음 파일 없이 Web Audio로 그 자리에서 합성한다(내려받을 파일이 없고, 상용 효과음을 가져오지 않는다).
+// 음소거·음량은 셸의 플레이 막대가 정하고 저장한다(GameMountOptions.muted·volume, GameInstance.setMuted·setVolume).
 // 근거: docs/design/261016-02-lucky-scratch.md §3-5, §3-7
 
-const MUTE_KEY = 'magpie.lucky-scratch.muted';
-
-/** 저장해 둔 소리 끔 여부. 저장소를 못 쓰면 켜짐 */
-function loadMuted(): boolean {
-  try {
-    return globalThis.localStorage?.getItem(MUTE_KEY) === '1';
-  } catch {
-    return false;
-  }
-}
-
-/** 소리 끔 여부를 저장한다. 실패해도 무시 */
-function saveMuted(muted: boolean): void {
-  try {
-    globalThis.localStorage?.setItem(MUTE_KEY, muted ? '1' : '0');
-  } catch {
-    // 사생활 보호 모드 등에서는 저장하지 않는다
-  }
-}
+/** 음량 1일 때의 주 음량. 합성음이 겹쳐도 찢어지지 않을 만큼 둔다 */
+const MASTER_GAIN = 0.8;
 
 /** 음 이름 대신 쓰는 주파수(Hz) */
 const NOTE = {
@@ -46,7 +30,18 @@ export class Sfx {
   private scratchFilter: BiquadFilterNode | null = null;
   private scratchSource: AudioBufferSourceNode | null = null;
   private scratchStopTimer: ReturnType<typeof setTimeout> | null = null;
-  muted = loadMuted();
+  private muted: boolean;
+  private volume: number;
+
+  constructor(muted: boolean, volume: number) {
+    this.muted = muted;
+    this.volume = Math.min(1, Math.max(0, volume));
+  }
+
+  /** 지금 주 음량 */
+  private level(): number {
+    return this.muted ? 0 : MASTER_GAIN * this.volume;
+  }
 
   /** 오디오를 연다. 사용자가 누른 직후에 불러야 브라우저가 허락한다. 여러 번 불러도 된다 */
   unlock(): void {
@@ -59,7 +54,7 @@ export class Sfx {
       compressor.ratio.value = 4;
       compressor.connect(this.ctx.destination);
       this.master = this.ctx.createGain();
-      this.master.gain.value = this.muted ? 0 : 0.8;
+      this.master.gain.value = this.level();
       this.master.connect(compressor);
       this.noise = this.makeNoise(2);
       this.setupScratch();
@@ -67,12 +62,21 @@ export class Sfx {
     if (this.ctx.state === 'suspended') void this.ctx.resume();
   }
 
-  /** 소리 켜기·끄기를 바꾸고 저장한다 */
-  toggleMute(): boolean {
-    this.muted = !this.muted;
-    saveMuted(this.muted);
-    if (this.ctx && this.master) this.master.gain.setTargetAtTime(this.muted ? 0 : 0.8, this.ctx.currentTime, 0.02);
-    return this.muted;
+  /** 소리를 켜거나 끈다 (셸의 음소거 버튼) */
+  setMuted(muted: boolean): void {
+    this.muted = muted;
+    this.applyLevel();
+  }
+
+  /** 음량을 바꾼다 (0~1, 셸의 음량 바) */
+  setVolume(volume: number): void {
+    this.volume = Math.min(1, Math.max(0, volume));
+    this.applyLevel();
+  }
+
+  /** 주 음량을 지금 설정으로 부드럽게 맞춘다 */
+  private applyLevel(): void {
+    if (this.ctx && this.master) this.master.gain.setTargetAtTime(this.level(), this.ctx.currentTime, 0.02);
   }
 
   /** 오디오를 닫는다 */
@@ -180,7 +184,7 @@ export class Sfx {
 
   /** 지금 소리를 낼 수 있으면 오디오 시각, 아니면 null */
   private now(): number | null {
-    if (!this.ctx || !this.master || this.muted) return null;
+    if (!this.ctx || !this.master || this.level() === 0) return null;
     return this.ctx.currentTime;
   }
 

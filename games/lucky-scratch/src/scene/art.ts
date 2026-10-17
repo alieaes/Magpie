@@ -41,8 +41,6 @@ export const TEX = {
   sparkle: 'ls-sparkle',
   glow: 'ls-glow',
   stamp: 'ls-stamp',
-  soundOn: 'ls-sound-on',
-  soundOff: 'ls-sound-off',
 } as const;
 
 /** 구운 텍스처: 이름 → 캔버스 */
@@ -375,14 +373,6 @@ function drawStamp(): HTMLCanvasElement {
   return c;
 }
 
-/** 소리 켜짐·꺼짐 아이콘 (스피커 + 물결 / ×) */
-function soundIcon(on: boolean): string {
-  const body = '<path d="M20 48 H40 L66 26 V102 L40 80 H20 Z" fill="#ffffff" stroke="#ffffff" stroke-width="6" stroke-linejoin="round"/>';
-  const waves = '<path d="M80 48 Q90 64 80 80 M92 36 Q110 64 92 92" fill="none" stroke="#ffffff" stroke-width="8" stroke-linecap="round"/>';
-  const cross = '<path d="M82 50 L108 76 M108 50 L82 76" fill="none" stroke="#ffffff" stroke-width="8" stroke-linecap="round"/>';
-  return body + (on ? waves : cross);
-}
-
 /** 화면에 쓰는 텍스처를 모두 굽는다 */
 export async function buildTextures(): Promise<TextureSet> {
   const set: TextureSet = new Map();
@@ -396,16 +386,9 @@ export async function buildTextures(): Promise<TextureSet> {
     set.set(TEX.symbol(s), large[s]!);
     set.set(TEX.symbolSmall(s), small[s]!);
   });
-  const [coin, emblem, soundOn, soundOff] = await Promise.all([
-    rasterize(COIN_SVG, COIN_SIZE),
-    rasterize(EMBLEM_SVG, 256),
-    rasterize(soundIcon(true), 96),
-    rasterize(soundIcon(false), 96),
-  ]);
+  const [coin, emblem] = await Promise.all([rasterize(COIN_SVG, COIN_SIZE), rasterize(EMBLEM_SVG, 256)]);
   set.set(TEX.coin, coin);
   set.set(TEX.emblem, emblem);
-  set.set(TEX.soundOn, soundOn);
-  set.set(TEX.soundOff, soundOff);
   set.set(TEX.cardBg, drawCardBg(emblem, small));
   set.set(TEX.cardBack, drawCardBack(emblem));
   set.set(TEX.cell, drawCell());

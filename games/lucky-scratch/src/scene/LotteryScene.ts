@@ -107,7 +107,6 @@ interface PanelView {
   settle: Button;
   stats: Phaser.GameObjects.Text | null;
   chips: Phaser.GameObjects.Container;
-  sound: Phaser.GameObjects.Image;
 }
 
 type Phase = 'scratching' | 'resolved' | 'empty' | 'ending';
@@ -845,41 +844,20 @@ export class LotteryScene extends Phaser.Scene {
     const right = area.x + area.w - (wide ? 48 : 30);
     let money: Phaser.GameObjects.Text;
     let tickets: Phaser.GameObjects.Text;
-    let soundX: number;
-    let soundY: number;
     if (wide) {
       root.add(label(left, area.y + 52, '소지금', 28));
       money = this.add.text(left, area.y + 92, '', { fontFamily: FONT, fontSize: '84px', fontStyle: '800', color: hex(gold) });
       root.add(label(left, area.y + 222, '남은 복권', 28));
       tickets = this.add.text(left + 140, area.y + 210, '', { fontFamily: FONT, fontSize: '44px', fontStyle: '800', color: hex(palette.textStrong) });
-      soundX = right - 20;
-      soundY = area.y + 70;
     } else {
       root.add(label(left, area.y + 22, '소지금', 22));
       money = this.add.text(left, area.y + 50, '', { fontFamily: FONT, fontSize: '56px', fontStyle: '800', color: hex(gold) });
-      root.add(label(right - 70, area.y + 22, '남은 복권', 22).setOrigin(1, 0));
+      root.add(label(right, area.y + 22, '남은 복권', 22).setOrigin(1, 0));
       tickets = this.add
-        .text(right - 70, area.y + 54, '', { fontFamily: FONT, fontSize: '44px', fontStyle: '800', color: hex(palette.textStrong) })
+        .text(right, area.y + 54, '', { fontFamily: FONT, fontSize: '44px', fontStyle: '800', color: hex(palette.textStrong) })
         .setOrigin(1, 0);
-      soundX = right - 20;
-      soundY = area.y + 56;
     }
     root.add([money, tickets]);
-
-    // 소리 켜기·끄기
-    const soundBg = this.add.circle(soundX, soundY, 34, palette.surfaceHover);
-    const sound = this.add
-      .image(soundX, soundY, sfx.muted ? TEX.soundOff : TEX.soundOn)
-      .setScale(0.52)
-      .setTint(palette.text2)
-      .setInteractive({ useHandCursor: true });
-    sound.on(Phaser.Input.Events.POINTER_DOWN, () => {
-      sfx.unlock();
-      const muted = sfx.toggleMute();
-      sound.setTexture(muted ? TEX.soundOff : TEX.soundOn);
-      sfx.click();
-    });
-    root.add([soundBg, sound]);
 
     // 구매 버튼
     const buyTop = wide ? area.y + 360 : area.y + 136;
@@ -980,7 +958,7 @@ export class LotteryScene extends Phaser.Scene {
     const chips = this.add.container(left, wide ? area.y + 832 : actTop + actH + 18);
     root.add(chips);
 
-    this.panel = { root, money, tickets, buy, sweep, settle, stats, chips, sound };
+    this.panel = { root, money, tickets, buy, sweep, settle, stats, chips };
     this.setDisplayMoney(this.displayMoney);
     this.refreshPanel();
   }

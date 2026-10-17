@@ -50,7 +50,7 @@ const luckyScratch: GameModule = {
   /** 판을 띄우고 바로 시작한다 */
   async mount(parent, options) {
     // 소리는 "시작"을 누른 직후(사용자 동작 안)에 열어야 브라우저가 막지 않는다
-    const sfx = new Sfx();
+    const sfx = new Sfx(options.muted ?? false, options.volume ?? 1);
     sfx.unlock();
     // 카드 글자를 캔버스에 그리기 전에 글꼴을 받아 둔다
     await Promise.all(
@@ -88,6 +88,8 @@ const luckyScratch: GameModule = {
 
     return {
       finish: () => scene.finish(),
+      setMuted: (muted) => sfx.setMuted(muted),
+      setVolume: (volume) => sfx.setVolume(volume),
       destroy: () => {
         observer.disconnect();
         document.removeEventListener('visibilitychange', onVisibility);
