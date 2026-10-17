@@ -73,6 +73,8 @@ const STACK_MAX = 4;
 // 칸 하나를 몇 × 몇 점으로 나눠 긁힌 정도를 세는지, 몇 %가 긁히면 칸이 벗겨지는지
 const COVER_GRID = 10;
 const COVER_REVEAL = 0.5;
+// 모든 칸이 이만큼 긁혔으면 덜 벗겨진 칸이 있어도 결과를 낸다(꽝 포함). 붓으로 칸을 한 번 가로지르면 약 38%가 긁힌다
+const COVER_DECIDE = 0.3;
 // 붓 판정 반지름: 보이는 붓보다 조금 작게 세서, 칸이 덜 긁혔는데 벗겨지는 일이 없게 한다
 const COVER_RADIUS = BRUSH_RADIUS - 2;
 // "한 번에 긁기"가 은박을 다 쓸어 내는 시간(ms)
@@ -403,6 +405,8 @@ export class LotteryScene extends Phaser.Scene {
       card.foil.stamp(TEX.brush, undefined, x, y, { blendMode: Phaser.BlendModes.ERASE });
       this.markCoverage(card, x, y);
       touched = true;
+      // 결과가 나왔으면 남은 붓질은 하지 않는다
+      if (this.phase !== 'scratching') break;
     }
     if (!touched) return;
     card.foil.render();
@@ -437,10 +441,11 @@ export class LotteryScene extends Phaser.Scene {
       }
       if (card.covered[i]! >= COVER_GRID * COVER_GRID * COVER_REVEAL) this.revealCell(card, i);
     }
+    if (this.phase === 'scratching' && !this.pendingResolve && this.isDecided(card)) this.tryResolve();
   }
 
-  /** 칸 은박을 마저 벗긴다: 빛이 번쩍, 부스러기, 그림이 톡 튀어나온다 */
-  private revealCell(card: CardView, i: number): void {
+  /** 칸 은박을 마저 벗긴다: 빛이 번쩍, 부스러기, 그림이 톡 튀어나온다. quiet면 "샥" 소리를 내지 않는다(여러 칸을 한꺼번에 벗길 때) */
+  private revealCell(card: CardView, i: number, quiet = false): void {
     card.revealed[i] = true;
     card.revealedCount += 1;
     const x0 = (i % 3) * (CELL + CELL_GAP);
@@ -456,9 +461,32 @@ export class LotteryScene extends Phaser.Scene {
     const symbol = card.symbols[i]!;
     symbol.setScale(0.82);
     this.tweens.add({ targets: symbol, scale: 1, duration: 240, ease: 'Back.easeOut' });
-    this.opts.sfx.peel();
+    if (!quiet) this.opts.sfx.peel();
 
-    if (card.revealedCount === CELL_COUNT) this.tryResolve();
+    if (this.isDecided(card)) this.tryResolve();
+  }
+
+  /**
+   * 결과를 내도 되는지 (설계 261017-02):
+   * 9칸이 다 드러났거나, 당첨 그림 3칸이 다 드러났거나, 모든 칸이 30% 넘게 긁혔다(그림을 알아볼 만큼. 꽝도 이걸로 끝난다).
+   */
+  private isDecided(card: CardView): boolean {
+    if (card.revealedCount === CELL_COUNT) return true;
+    const { winCells } = card.ticket;
+    if (winCells.length > 0 && winCells.every((c) => card.revealed[c])) return true;
+    const enough = COVER_GRID * COVER_GRID * COVER_DECIDE;
+    return card.covered.every((n, i) => card.revealed[i] || n >= enough);
+  }
+
+  /** 결과를 낼 때 아직 덮인 칸을 한꺼번에 벗긴다. 소리는 한 번만 */
+  private revealRest(card: CardView): void {
+    let any = false;
+    for (let i = 0; i < CELL_COUNT; i += 1) {
+      if (card.revealed[i]) continue;
+      this.revealCell(card, i, true);
+      any = true;
+    }
+    if (any) this.opts.sfx.peel();
   }
 
   /** "한 번에 긁기" 또는 (결과를 보는 중이면) 다음 장 */
@@ -497,7 +525,8 @@ export class LotteryScene extends Phaser.Scene {
         const w = this.cardToWorld(card, pt.x + GRID_X, pt.y + GRID_Y);
         this.flakes.emitParticleAt(w.x, w.y, 2);
       }
-      if (this.card !== card) return;
+      // 카드가 바뀌었거나, 당첨 3칸이 드러나 결과가 나왔으면 그 자리에서 멈춘다
+      if (this.card !== card || this.sweep !== sweep) return;
     }
     card.foil.render();
     this.opts.sfx.scratch(40);
@@ -510,7 +539,7 @@ export class LotteryScene extends Phaser.Scene {
 
   // ---------------------------------------------------------------- 결과
 
-  /** 9칸이 다 드러났다. 직전 긁기와 0.25초가 안 지났으면 기다렸다 낸다(로직의 긁기 간격 규칙) */
+  /** 결과가 정해졌다. 직전 긁기와 0.25초가 안 지났으면 기다렸다 낸다(로직의 긁기 간격 규칙) */
   private tryResolve(): void {
     if (this.phase !== 'scratching') return;
     if (this.tick - this.lastScratchTick < MIN_SCRATCH_TICKS) {
@@ -520,7 +549,7 @@ export class LotteryScene extends Phaser.Scene {
     this.resolve();
   }
 
-  /** 복권 한 장을 다 긁었다: 로직에 반영하고 기록을 남긴 뒤 결과를 보여 준다 */
+  /** 복권 한 장의 결과가 정해졌다: 로직에 반영하고 기록을 남긴 뒤, 남은 칸을 벗기고 결과를 보여 준다 */
   private resolve(): void {
     const card = this.card;
     this.pendingResolve = false;
@@ -540,6 +569,7 @@ export class LotteryScene extends Phaser.Scene {
     this.recent.unshift(ticket.rank);
     if (this.recent.length > 10) this.recent.pop();
     this.emitHud();
+    this.revealRest(card);
     const duration = this.playResult(card, ticket);
     this.refreshPanel();
     this.advanceTimer = this.time.delayedCall(duration, () => this.advance());
