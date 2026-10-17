@@ -39,7 +39,7 @@ pnpm 워크스페이스. TypeScript 6.0.3 고정 (vue-tsc가 TypeScript 7을 아
 
 | 파일 | 하는 일 |
 |---|---|
-| `run_dev.cmd` | `pnpm dev`. `server` / `client` 인자로 하나만 띄울 수 있다. pnpm이나 `server/.env`가 없으면 알려주고 멈춘다. `node_modules`가 없으면 설치부터 한다 |
+| `run_dev.cmd` | `pnpm dev`. `server` / `client` 인자로 하나만 띄울 수 있다. pnpm이나 `server/.env`가 없으면 알려주고 멈춘다. 켤 때마다 `pnpm install`부터 한다(새 게임 패키지가 생겨도 연결되게, 이미 설치돼 있으면 금방 끝난다) |
 | `run_build.cmd` | `pnpm install --frozen-lockfile` → `pnpm build` → `pnpm test`. `notest`로 테스트 생략, `nopause`로 끝에 멈추지 않음. 결과물 경로를 찍는다 |
 
 배포 패키지(`release/`)는 아직 만들지 않는다. 배포 설계에서 정한다.

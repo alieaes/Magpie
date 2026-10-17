@@ -20,10 +20,10 @@ if not exist "server\.env" (
   goto :fail
 )
 
-if not exist "node_modules" (
-  echo [1/2] Installing packages...
-  call pnpm install || goto :fail
-)
+REM Always install: a pull can add a new workspace package (e.g. a new game),
+REM and an old node_modules would not link it. Takes a second when up to date.
+echo Installing packages...
+call pnpm install || goto :fail
 
 set "MODE=%~1"
 if "%MODE%"=="" set "MODE=all"
