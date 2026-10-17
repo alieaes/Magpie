@@ -238,7 +238,7 @@ onBeforeUnmount(destroyGame);
           <span class="seconds num">{{ secondsLeft }}초</span>
         </div>
         <div class="score">
-          <span class="score-label">점수</span>
+          <span class="score-label">{{ game.scoreLabel ?? '점수' }}</span>
           <strong class="num">{{ formatNumber(hud.score) }}</strong><small>{{ game.scoreUnit }}</small>
         </div>
       </div>

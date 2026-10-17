@@ -7,6 +7,13 @@ defineProps<{ gameId: GameId }>();
 
 // 칼날 모으기: 중심(120, 92) 반지름 44 원 위 칼날 4개의 각도
 const bladeAngles = [20, 110, 200, 290];
+
+// 복권 긁기: 3 × 3칸 중 드러난 칸(윗줄 까치 3개 + 한 칸)과 은박이 남은 칸
+const scratchCells = Array.from({ length: 9 }, (_, i) => ({
+  x: 79 + (i % 3) * 30,
+  y: 66 + Math.floor(i / 3) * 30,
+  open: i < 3 || i === 4,
+}));
 </script>
 
 <template>
@@ -27,6 +34,32 @@ const bladeAngles = [20, 110, 200, 290];
         <circle class="apple" :cx="apple.x" :cy="apple.y" r="21" />
         <text class="apple-num" :x="apple.x" :y="apple.y + 7">{{ apple.n }}</text>
       </g>
+    </template>
+
+    <!-- 복권 긁기: 반쯤 긁힌 복권에 까치 3개가 드러나고, 옆에 동전이 있다 -->
+    <template v-else-if="gameId === 'lucky-scratch'">
+      <rect class="bg-purple" width="240" height="180" />
+      <g transform="rotate(-6 120 92)">
+        <rect class="ticket" x="66" y="20" width="108" height="150" rx="10" />
+        <rect class="ticket-band" x="76" y="30" width="88" height="22" rx="5" />
+        <circle class="ticket-emblem" cx="88" cy="41" r="7" />
+        <rect class="ticket-title" x="100" y="37" width="54" height="8" rx="4" />
+        <g v-for="(cell, i) in scratchCells" :key="i">
+          <rect :class="cell.open ? 'cell-open' : 'cell-foil'" :x="cell.x - 13" :y="cell.y - 13" width="26" height="26" rx="5" />
+          <template v-if="cell.open && i < 3">
+            <path class="mag-tail" :d="`M${cell.x - 2} ${cell.y + 3} l-9 8`" />
+            <ellipse class="mag-body" :cx="cell.x" :cy="cell.y + 1" rx="6" ry="5" />
+            <ellipse class="mag-belly" :cx="cell.x + 1.5" :cy="cell.y + 3" rx="3.5" ry="2.6" />
+            <circle class="mag-body" :cx="cell.x + 4" :cy="cell.y - 5" r="3.6" />
+            <path class="mag-beak" :d="`M${cell.x + 7} ${cell.y - 6} l4 1.2 l-4 1.2z`" />
+          </template>
+          <circle v-else-if="cell.open" class="clover" :cx="cell.x" :cy="cell.y" r="6" />
+        </g>
+        <path class="win-line" d="M68 66 H172" />
+      </g>
+      <circle class="coin" cx="190" cy="138" r="18" />
+      <circle class="coin-ring" cx="190" cy="138" r="12" />
+      <path class="flake" d="M182 58 l5 -3 l3 4 l-5 3z M196 74 l4 -2 l2 3 l-4 2z M44 128 l5 -2 l2 4 l-5 2z" />
     </template>
 
     <!-- 과일 합치기: 상자 안에 크기가 다른 과일이 쌓이고, 위에서 하나가 떨어진다 -->
@@ -110,6 +143,7 @@ text {
 .bg-blue { fill: var(--tint-blue); }
 .bg-yellow { fill: var(--tint-yellow); }
 .bg-teal { fill: var(--tint-teal); }
+.bg-purple { fill: var(--tint-purple); }
 
 /* 사과게임 */
 .select {
@@ -121,6 +155,23 @@ text {
 .apple { fill: #d9564a; }
 .leaf { fill: #5e9b4f; }
 .apple-num { fill: #ffffff; font-size: 20px; }
+
+/* 복권 긁기 */
+.ticket { fill: #1b2c5c; stroke: #e2ac3a; stroke-width: 3; }
+.ticket-band { fill: rgba(5, 10, 28, 0.45); }
+.ticket-emblem { fill: #e2ac3a; }
+.ticket-title { fill: #e2ac3a; opacity: 0.85; }
+.cell-open { fill: #fbf3df; }
+.cell-foil { fill: #c3c9d2; stroke: #eef1f4; stroke-width: 1.2; }
+.mag-body { fill: #151a22; }
+.mag-belly { fill: #ffffff; }
+.mag-tail { stroke: #1f6f7a; stroke-width: 3; stroke-linecap: round; }
+.mag-beak { fill: #151a22; }
+.clover { fill: #4cb85a; }
+.win-line { stroke: #f2b632; stroke-width: 3; stroke-linecap: round; opacity: 0.9; }
+.coin { fill: #f2c14e; stroke: #b47a14; stroke-width: 2.5; }
+.coin-ring { fill: none; stroke: #c98a1a; stroke-width: 2; }
+.flake { fill: #b8c0cb; }
 
 /* 과일 합치기 */
 .box { fill: none; stroke: var(--thumb-ink); stroke-width: 4; stroke-linejoin: round; stroke-linecap: round; }

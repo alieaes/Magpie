@@ -1,0 +1,19 @@
+{
+  "name": "@magpie/game-lucky-scratch",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./logic": "./src/logic/index.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@magpie/shared": "workspace:*",
+    "phaser": "^4.2.1",
+    "zod": "^4.6.5"
+  }
+}

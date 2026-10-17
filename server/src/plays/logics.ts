@@ -3,9 +3,11 @@
 
 import { findGame, type GameId, type GameLogic } from '@magpie/shared';
 import { appleTenLogic } from '@magpie/game-apple-ten/logic';
+import { luckyScratchLogic } from '@magpie/game-lucky-scratch/logic';
 
 const LOGICS: Partial<Record<GameId, GameLogic>> = {
   'apple-ten': appleTenLogic,
+  'lucky-scratch': luckyScratchLogic,
 };
 
 /** 게임 id로 로직을 찾는다. 없으면 undefined */

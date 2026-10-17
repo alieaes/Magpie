@@ -18,6 +18,8 @@ export interface GameMeta {
   status: GameStatus;
   /** 시작 화면에 보여줄 규칙 설명 한두 문장 */
   howTo?: string;
+  /** 플레이 중 상단에 보여줄 점수 이름. 없으면 "점수" */
+  scoreLabel?: string;
 }
 
 /**
@@ -34,6 +36,18 @@ const GAME_DEFS = [
     sort: 'desc',
     status: 'playable',
     howTo: '드래그해서 사각형 안 숫자의 합을 10으로 만들면 사과가 사라져요. 120초 동안 최대한 많이 지워 보세요.',
+  },
+  {
+    id: 'lucky-scratch',
+    name: '복권 긁기',
+    tagline: '긁어서 1등을 노려라',
+    orientation: 'portrait',
+    scoreUnit: '원',
+    sort: 'desc',
+    status: 'playable',
+    howTo:
+      '복권 10장으로 시작해요. 같은 그림 3개가 나오면 당첨! 당첨금으로 복권을 더 사거나, 원할 때 정산하면 소지금이 기록돼요. 제한 시간은 5분이고, 정산할 때 긁지 않은 복권은 무효예요.',
+    scoreLabel: '소지금',
   },
   {
     id: 'fruit-merge',

@@ -11,3 +11,4 @@
 | [admin.md](./admin.md) | 관리자: 지정 명령, 기록 삭제, 닉네임 초기화, 작업 기록 |
 | [main-page.md](./main-page.md) | 페이지 주소, 상단 바, 메인·랭킹 화면, 디자인 토큰 |
 | [apple-ten.md](./apple-ten.md) | 사과게임 규칙·로직, 시드 난수, 게임·플레이 화면, 셸과 게임의 약속 |
+| [lucky-scratch.md](./lucky-scratch.md) | 복권 긁기 규칙·당첨표·로직, 긁기·결과 연출·패널·소리 |

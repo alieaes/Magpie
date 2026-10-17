@@ -1,9 +1,11 @@
-// 판 검사 테스트. DB 없이 사과게임 로직으로 형식·시간·재계산·점수 검사를 확인한다.
+// 판 검사 테스트. DB 없이 사과게임·복권 긁기 로직으로 형식·시간·재계산·점수 검사를 확인한다.
 
 import { describe, expect, it } from 'vitest';
 import { appleTenLogic } from '@magpie/game-apple-ten/logic';
+import { drawTicket, luckyScratchLogic, type LotteryInput } from '@magpie/game-lucky-scratch/logic';
 import type { FinishPlayRequest } from '@magpie/shared';
 import { isTimePlausible, judgePlay } from '../src/plays/judge';
+import { isRecordable } from '../src/plays/logics';
 import { inlineReplayRunner } from '../src/plays/replay-runner';
 import { playAppleGreedy } from './helpers';
 
@@ -78,5 +80,44 @@ describe('isTimePlausible', () => {
     // 0초 판(바로 끝내기): 허용 폭 5초
     expect(isTimePlausible(0, 7200, START, after(5))).toBe(true);
     expect(isTimePlausible(0, 7200, START, after(5.1))).toBe(false);
+  });
+});
+
+describe('judgePlay: 복권 긁기', () => {
+  const seed = 'lucky-judge';
+  /** 받은 10장을 1초 간격으로 긁은 기록 */
+  const inputs: LotteryInput[] = Array.from({ length: 10 }, (_, i) => ({ t: (i + 1) * 60, op: 'scratch' }));
+  const score = inputs.reduce((sum, _, i) => sum + drawTicket(seed, i).prize, 0);
+
+  /** 복권 긁기 판 하나를 검사한다 */
+  function judgeLucky(submission: FinishPlayRequest) {
+    return judgePlay({
+      gameId: 'lucky-scratch',
+      logic: luckyScratchLogic,
+      seed,
+      startedAt: START,
+      finishedAt: after(submission.ticks / 60 + 1),
+      submission,
+      runner: inlineReplayRunner,
+    });
+  }
+
+  it('기록할 수 있는 게임이다', () => {
+    expect(isRecordable('lucky-scratch')).toBe(true);
+  });
+
+  it('정상 기록은 통과하고 소지금이 점수가 된다', async () => {
+    expect(await judgeLucky({ inputs, ticks: 700, score })).toEqual({ accepted: true, score });
+  });
+
+  it('돈 없이 산 기록은 bad_input', async () => {
+    expect(await judgeLucky({ inputs: [{ t: 0, op: 'buy', count: 1 }], ticks: 60, score: 0 })).toEqual({ accepted: false, reason: 'bad_input' });
+  });
+
+  it('긁은 복권만 점수에 들어간다. 더 큰 점수를 보내면 mismatch', async () => {
+    const half = inputs.slice(0, 5);
+    const halfScore = half.reduce((sum, _, i) => sum + drawTicket(seed, i).prize, 0);
+    expect(await judgeLucky({ inputs: half, ticks: 400, score: halfScore })).toEqual({ accepted: true, score: halfScore });
+    expect(await judgeLucky({ inputs: half, ticks: 400, score: halfScore + 1000 })).toEqual({ accepted: false, reason: 'mismatch' });
   });
 });
