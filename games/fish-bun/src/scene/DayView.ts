@@ -25,6 +25,7 @@ import { dayGeometry, inRect, moldCells, type DayGeometry, type Layout, type Rec
 import { pickLine, saleLineKey, type LineKey } from './lines';
 import type { Face } from './people';
 import type { Sfx } from './sound';
+import { DOT, PIXEL_ART, disc, framedBox, meter, roundBox, vGradient } from './style';
 import { Button, clockText, hex, mix, num, textStyle, won, type ScenePalette } from './ui';
 
 /** 장사 화면이 장면에 알리는 누름 */
@@ -227,8 +228,9 @@ export class DayView {
     const awning = this.scene.add.graphics();
     const stripe = 48;
     for (let i = 0; i * stripe < counter.w; i += 1) {
-      awning.fillStyle(i % 2 === 0 ? 0xd9363e : 0xfff1dc, 1).fillRect(counter.x + i * stripe, counter.y, stripe, 40);
-      awning.fillCircle(counter.x + i * stripe + stripe / 2, counter.y + 40, stripe / 2);
+      const color = i % 2 === 0 ? 0xd9363e : 0xfff1dc;
+      awning.fillStyle(color, 1).fillRect(counter.x + i * stripe, counter.y, stripe, 40);
+      disc(awning, counter.x + i * stripe + stripe / 2, counter.y + 40, stripe / 2, color);
     }
     awning.fillStyle(0x000000, 0.12).fillRect(counter.x, counter.y, counter.w, 6);
     this.backLayer.add([this.sky, city, awning]);
@@ -252,9 +254,8 @@ export class DayView {
   private buildShelf(): void {
     const { shelf, trash } = this.g;
     const tray = this.scene.add.graphics();
-    tray.fillStyle(0x6f7680, 1).fillRoundedRect(shelf.x, shelf.y, shelf.w, shelf.h, 18);
-    tray.fillStyle(0xc9ced6, 1).fillRoundedRect(shelf.x + 6, shelf.y + 6, shelf.w - 12, shelf.h - 12, 14);
-    tray.fillStyle(0xffffff, 0.35).fillRoundedRect(shelf.x + 12, shelf.y + 10, shelf.w - 24, 8, 4);
+    framedBox(tray, shelf.x, shelf.y, shelf.w, shelf.h, 18, 0xc9ced6, 0x6f7680, 6);
+    roundBox(tray, shelf.x + 12, shelf.y + 10, shelf.w - 24, 8, 4, 0xffffff, 0.35);
     this.shelfSlots = this.scene.add.graphics();
     this.root.add([tray, this.shelfSlots]);
     this.trashButton = new Button(this.scene, {
@@ -276,8 +277,8 @@ export class DayView {
   private buildGrill(sim: DaySim): void {
     const { grill } = this.g;
     const plate = this.scene.add.graphics();
-    plate.fillStyle(0x2a2420, 1).fillRoundedRect(grill.x - 8, grill.y - 8, grill.w + 16, grill.h + 16, 26);
-    plate.fillStyle(0x3a322c, 1).fillRoundedRect(grill.x, grill.y, grill.w, grill.h, 20);
+    roundBox(plate, grill.x - 8, grill.y - 8, grill.w + 16, grill.h + 16, 26, 0x2a2420);
+    roundBox(plate, grill.x, grill.y, grill.w, grill.h, 20, 0x3a322c);
     this.burner = this.scene.add
       .image(grill.x + grill.w / 2, grill.y + grill.h * 0.7, TEX.glow)
       .setDisplaySize(grill.w * 1.1, grill.h * 0.9)
@@ -306,17 +307,18 @@ export class DayView {
     const { pump, gauge, combo, info } = this.g;
     const p = this.palette;
     const panel = this.scene.add.graphics();
-    for (const r of [pump, gauge, combo, ...(info ? [info] : [])]) {
-      panel.fillStyle(p.surface, 1).fillRoundedRect(r.x, r.y, r.w, r.h, 20);
-      panel.lineStyle(2, p.border, 1).strokeRoundedRect(r.x, r.y, r.w, r.h, 20);
-    }
+    for (const r of [pump, gauge, combo, ...(info ? [info] : [])]) framedBox(panel, r.x, r.y, r.w, r.h, 20, p.surface, p.border, 2);
     const scale = Math.min(1, (pump.h - 40) / 200) * 0.95;
     const px = pump.x + 54;
     const py = pump.y + pump.h / 2 + 6;
     const body = this.scene.add.image(px, py + 16 * scale, TEX.pumpBody).setScale(scale);
     this.pumpHandle = this.scene.add.image(px, py - 92 * scale, TEX.pumpHandle).setScale(scale);
-    const label = this.scene.add.text(pump.x + 140, pump.y + pump.h / 2 - 16, '펌프', textStyle(28, p.textStrong, '800')).setOrigin(0.5);
-    const hint = this.scene.add.text(pump.x + 140, pump.y + pump.h / 2 + 20, '누르고\n있기', textStyle(18, p.text2, '600')).setOrigin(0.5).setAlign('center');
+    const label = this.scene.add.text(pump.x + 140, pump.y + pump.h / 2 - 28, '펌프', textStyle(28, p.textStrong, '800')).setOrigin(0.5);
+    const hint = this.scene.add
+      .text(pump.x + 140, pump.y + pump.h / 2 + 22, '누르고\n있기', textStyle(18, p.text2, '600'))
+      .setOrigin(0.5)
+      .setAlign('center')
+      .setLineSpacing(2);
     this.gauge = this.scene.add.graphics();
     const flame = this.scene.add.image(gauge.x + 36, gauge.y + 40, TEX.icon('flame')).setScale(0.6);
     this.heatText = this.scene.add.text(gauge.x + 64, gauge.y + 40, '', textStyle(22, p.textStrong, '800')).setOrigin(0, 0.5);
@@ -336,7 +338,8 @@ export class DayView {
         lifespan: { min: 700, max: 1200 },
         speedY: { min: -70, max: -40 },
         speedX: { min: -12, max: 12 },
-        scale: { start: 0.35, end: 0.9 },
+        // 도트 조각은 처음부터 제 크기라 덜 키운다
+        scale: PIXEL_ART ? { start: 0.75, end: 1.25 } : { start: 0.35, end: 0.9 },
         alpha: { start: 0.5, end: 0 },
         emitting: false,
       })
@@ -346,7 +349,7 @@ export class DayView {
         lifespan: { min: 900, max: 1500 },
         speedY: { min: -80, max: -50 },
         speedX: { min: -16, max: 16 },
-        scale: { start: 0.4, end: 1.1 },
+        scale: PIXEL_ART ? { start: 0.75, end: 1.5 } : { start: 0.4, end: 1.1 },
         alpha: { start: 0.7, end: 0 },
         emitting: false,
       })
@@ -355,7 +358,7 @@ export class DayView {
       .particles(0, 0, TEX.sparkle, {
         lifespan: { min: 400, max: 800 },
         speed: { min: 60, max: 220 },
-        scale: { start: 1, end: 0 },
+        scale: PIXEL_ART ? { start: 1, end: 0.5 } : { start: 1, end: 0 },
         alpha: { start: 1, end: 0 },
         blendMode: Phaser.BlendModes.ADD,
         emitting: false,
@@ -374,9 +377,18 @@ export class DayView {
     const bubbleY = this.g.counter.y + 120;
     const bubble = this.scene.add.container(0, bubbleY);
     const bubbleBg = this.scene.add.graphics();
-    bubbleBg.fillStyle(0xffffff, 1).fillRoundedRect(-104, -50, 208, 100, 22);
-    bubbleBg.fillTriangle(-12, 48, 12, 48, 0, 64);
-    bubbleBg.lineStyle(3, 0x3a2a1a, 0.18).strokeRoundedRect(-104, -50, 208, 100, 22);
+    if (PIXEL_ART) {
+      // 도트 말풍선: 어두운 테두리 상자 + 계단 꼬리
+      framedBox(bubbleBg, -104, -52, 208, 104, 22, 0xffffff, 0x3a2a1a);
+      for (let i = 0; i < 4; i += 1) {
+        bubbleBg.fillStyle(0x3a2a1a, 1).fillRect(-16 + i * DOT, 48 + i * DOT, 32 - i * 2 * DOT, DOT);
+        if (i < 3) bubbleBg.fillStyle(0xffffff, 1).fillRect(-12 + i * DOT, 48 + i * DOT, 24 - i * 2 * DOT, DOT);
+      }
+    } else {
+      bubbleBg.fillStyle(0xffffff, 1).fillRoundedRect(-104, -50, 208, 100, 22);
+      bubbleBg.fillTriangle(-12, 48, 12, 48, 0, 64);
+      bubbleBg.lineStyle(3, 0x3a2a1a, 0.18).strokeRoundedRect(-104, -50, 208, 100, 22);
+    }
     const trait = TRAIT_ICON[customer.kind];
     const count = this.scene.add.text(trait ? 14 : 0, -18, `${customer.order}개`, textStyle(40, 0x3a2410, '900')).setOrigin(0.5);
     const line = this.scene.add
@@ -608,11 +620,7 @@ export class DayView {
     const closing = sim.tick >= LAST_ARRIVAL_TICK;
     const clock = clockText(minute);
     if (this.clock.text !== clock) this.clock.setText(clock).setColor(hex(closing ? 0xe0731f : this.palette.text));
-    const g = this.progress.clear();
-    const x = 24;
-    const w = hud.w - 48;
-    g.fillStyle(this.palette.surfaceHover, 1).fillRoundedRect(x, hud.y + 70, w, 12, 6);
-    g.fillStyle(closing ? 0xe0731f : this.palette.accent, 1).fillRoundedRect(x, hud.y + 70, Math.max(12, (w * sim.tick) / DAY_TICKS), 12, 6);
+    meter(this.progress.clear(), 24, hud.y + 68, hud.w - 48, 12, sim.tick / DAY_TICKS, this.palette.surfaceHover, closing ? 0xe0731f : this.palette.accent);
     if (sim.money !== this.shownMoney) {
       this.shownMoney = sim.money;
       this.money.setText(won(sim.money));
@@ -648,7 +656,7 @@ export class DayView {
       }
     }
     const { counter } = this.g;
-    this.sky.clear().fillGradientStyle(top, top, bottom, bottom, 1).fillRect(counter.x, counter.y, counter.w, this.boardTop - counter.y + 20);
+    vGradient(this.sky.clear(), counter.x, counter.y, counter.w, this.boardTop - counter.y + 20, top, bottom, 8);
   }
 
   /** 빵틀: 익힘에 따라 두 그림을 섞어 색이 서서히 바뀐다 */
@@ -785,7 +793,10 @@ export class DayView {
     const g = this.shelfSlots.clear();
     for (let i = 0; i < cap; i += 1) {
       const s = this.shelfSlot(i, cap);
-      g.fillStyle(0x9aa1ab, 0.35).fillEllipse(s.x, s.y + 4, SHELF_W * s.scale * 0.8, SHELF_H * s.scale * 0.5);
+      const sw = SHELF_W * s.scale * 0.8;
+      const sh = SHELF_H * s.scale * 0.5;
+      if (PIXEL_ART) roundBox(g, s.x - sw / 2, s.y + 4 - sh / 2, sw, sh, 6, 0x9aa1ab, 0.35);
+      else g.fillStyle(0x9aa1ab, 0.35).fillEllipse(s.x, s.y + 4, sw, sh);
     }
     sim.shelf.forEach((q, i) => {
       const s = this.shelfSlot(i, cap);
@@ -805,12 +816,7 @@ export class DayView {
       const x = this.seatX[seat]!;
       const w = 172;
       const color = left > 0.5 ? 0x3fbf6f : left > 0.25 ? 0xf2b632 : 0xe5414a;
-      view.patience
-        .clear()
-        .fillStyle(0x3a2410, 0.45)
-        .fillRoundedRect(x - w / 2, this.boardTop + 34, w, 14, 7)
-        .fillStyle(color, 1)
-        .fillRoundedRect(x - w / 2, this.boardTop + 34, Math.max(10, w * left), 14, 7);
+      meter(view.patience.clear(), x - w / 2, this.boardTop + 32, w, 16, left, 0x5a3a1c, color);
       if (!view.waitShown && left < 0.3) {
         view.waitShown = true;
         this.say(view, pickLine(customer.kind, 'wait'));
@@ -847,12 +853,7 @@ export class DayView {
     const w = gauge.w - 48;
     const y = gauge.y + gauge.h - 52;
     const color = heat < 0.3 ? 0x5aa5e8 : heat < 0.7 ? 0xf2a03d : 0xe5414a;
-    this.gauge
-      .clear()
-      .fillStyle(this.palette.surfaceHover, 1)
-      .fillRoundedRect(x, y, w, 26, 13)
-      .fillStyle(color, 1)
-      .fillRoundedRect(x, y, Math.max(26, w * heat), 26, 13);
+    meter(this.gauge.clear(), x, y, w, 28, heat, this.palette.surfaceHover, color);
     const speed = cookSpeed(sim.heat) / 100;
     const label = `화력 ${Math.round(heat * 100)}% · 굽는 속도 ×${speed.toFixed(1)}`;
     if (this.heatText.text !== label) this.heatText.setText(label);

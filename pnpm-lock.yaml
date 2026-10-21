@@ -84,6 +84,9 @@ importers:
       '@magpie/shared':
         specifier: workspace:*
         version: link:../../shared
+      galmuri:
+        specifier: 2.40.3
+        version: 2.40.3
       phaser:
         specifier: ^4.2.1
         version: 4.2.1
@@ -650,6 +653,9 @@ packages:
     resolution: {integrity: sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==}
     engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
     os: [darwin]
+
+  galmuri@2.40.3:
+    resolution: {integrity: sha512-eXflXih1AWy2J+jWeT5sGVj4PUCb1bMK7lnwKDKMzEd3lx+F6myuxqp6c0eZlD7EMXOicUYaM+FH7DAoQ7mWbw==}
 
   generate-function@2.3.1:
     resolution: {integrity: sha512-eeB5GfMNeevm/GRYq20ShmsaGcmI81kIX2K9XQx5miC8KdHaC6Jm0qQ8ZNeGOi7wYB8OsdxKs+Y2oVuTFuVwKQ==}
@@ -1466,6 +1472,8 @@ snapshots:
 
   fsevents@2.3.3:
     optional: true
+
+  galmuri@2.40.3: {}
 
   generate-function@2.3.1:
     dependencies:

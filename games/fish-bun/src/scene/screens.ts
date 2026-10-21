@@ -24,6 +24,7 @@ import {
 } from '../logic/rules';
 import { BUN_W, MOLD_W, SHELF_W, TEX } from './art';
 import type { Layout, Rect } from './layout';
+import { disc, framedBox, meter, roundBox, vGradient } from './style';
 import { Button, num, textStyle, won, type ScenePalette } from './ui';
 
 /** 정산 화면의 저장 상태 */
@@ -44,7 +45,7 @@ const UPGRADE_INFO: Record<UpgradeKey, { name: string; label: string; value(leve
     tex: TEX.fish('good'),
     texScale: 70 / BUN_W,
   },
-  burner: { name: '화구', label: '떼면 화력', value: (l) => (heatFall(l) === 0 ? '유지' : `초당 −${heatFall(l)}%`), tex: TEX.icon('flame'), texScale: 0.9 },
+  burner: { name: '화구', label: '초당 화력 감소', value: (l) => (heatFall(l) === 0 ? '없음' : `${heatFall(l)}%`), tex: TEX.icon('flame'), texScale: 0.9 },
   recipe: { name: '반죽 레시피', label: '빵 값', value: (l) => won(breadPrice(l)), tex: TEX.batter('good'), texScale: 70 / BUN_W },
   golden: { name: '황금 비법', label: '황금 확률', value: (l) => `${goldenChance(l) / 10}%`, tex: TEX.fish('golden'), texScale: 70 / BUN_W },
   shelf: { name: '진열대', label: '진열대', value: (l) => `${shelfCapacity(l)}개`, tex: TEX.shelf('good'), texScale: 64 / SHELF_W },
@@ -65,18 +66,15 @@ export const REJECT_TEXT: Record<string, string> = {
 
 /** 패널 바탕 */
 function panel(scene: Phaser.Scene, r: Rect, palette: ScenePalette): Phaser.GameObjects.Graphics {
-  const g = scene.add.graphics();
-  g.fillStyle(palette.surface, 1).fillRoundedRect(r.x, r.y, r.w, r.h, 24);
-  g.lineStyle(2, palette.border, 1).strokeRoundedRect(r.x, r.y, r.w, r.h, 24);
-  return g;
+  return framedBox(scene.add.graphics(), r.x, r.y, r.w, r.h, 24, palette.surface, palette.border, 2);
 }
 
 /** 가게 앞모습: 하늘, 골목, 포장마차(차양·간판·진열창) */
 function storefront(scene: Phaser.Scene, r: Rect): Phaser.GameObjects.Container {
   const root = scene.add.container(0, 0);
   const g = scene.add.graphics();
-  g.fillGradientStyle(0x8fd0ff, 0x8fd0ff, 0xe8f7ff, 0xe8f7ff, 1).fillRect(r.x, r.y, r.w, r.h);
-  g.fillStyle(0xfff3b0, 1).fillCircle(r.x + r.w * 0.82, r.y + r.h * 0.12, r.w * 0.06);
+  vGradient(g, r.x, r.y, r.w, r.h * 0.8, 0x8fd0ff, 0xe8f7ff, 8);
+  disc(g, r.x + r.w * 0.82, r.y + r.h * 0.12, r.w * 0.06, 0xfff3b0);
   g.fillStyle(0x9fb7d6, 0.6);
   for (let i = 0, x = r.x; x < r.x + r.w; i += 1) {
     const w = 80 + ((i * 37) % 70);
@@ -92,13 +90,13 @@ function storefront(scene: Phaser.Scene, r: Rect): Phaser.GameObjects.Container 
   const top = r.y + r.h * 0.3;
   const bottom = r.y + r.h * 0.86;
   // 가게 몸통(나무)
-  g.fillStyle(0x8a5a2b, 1).fillRoundedRect(sx, top, sw, bottom - top, 12);
+  roundBox(g, sx, top, sw, bottom - top, 12, 0x8a5a2b);
   g.fillStyle(0x6b4220, 1);
   for (let x = sx + 40; x < sx + sw; x += 60) g.fillRect(x, top + (bottom - top) * 0.55, 4, (bottom - top) * 0.45);
   // 진열창
   const wy = top + (bottom - top) * 0.12;
   const wh = (bottom - top) * 0.4;
-  g.fillStyle(0x3a2a1c, 1).fillRoundedRect(sx + 24, wy, sw - 48, wh, 10);
+  roundBox(g, sx + 24, wy, sw - 48, wh, 10, 0x3a2a1c);
   g.fillStyle(0x2a2420, 1).fillRect(sx + 40, wy + wh * 0.62, sw - 80, wh * 0.3);
   g.fillStyle(0xff7a2f, 0.35).fillRect(sx + 40, wy + wh * 0.86, sw - 80, wh * 0.06);
   // 카운터 판
@@ -116,8 +114,9 @@ function storefront(scene: Phaser.Scene, r: Rect): Phaser.GameObjects.Container 
   const ay = top - r.h * 0.07;
   for (let i = 0; i * stripe < sw + 20; i += 1) {
     const x = sx - 10 + i * stripe;
-    awning.fillStyle(i % 2 === 0 ? 0xd9363e : 0xfff1dc, 1).fillRect(x, ay, stripe, r.h * 0.07);
-    awning.fillCircle(x + stripe / 2, ay + r.h * 0.07, stripe / 2);
+    const color = i % 2 === 0 ? 0xd9363e : 0xfff1dc;
+    awning.fillStyle(color, 1).fillRect(x, ay, stripe, r.h * 0.07);
+    disc(awning, x + stripe / 2, ay + r.h * 0.07, stripe / 2, color);
   }
   root.add(awning);
   // 간판
@@ -125,19 +124,20 @@ function storefront(scene: Phaser.Scene, r: Rect): Phaser.GameObjects.Container 
   const signH = r.h * 0.11;
   const signY = ay - signH - 10;
   const sign = scene.add.graphics();
-  sign.fillStyle(0xfff6e0, 1).fillRoundedRect(r.x + (r.w - signW) / 2, signY, signW, signH, 18);
-  sign.lineStyle(6, 0x8a5a2b, 1).strokeRoundedRect(r.x + (r.w - signW) / 2, signY, signW, signH, 18);
+  framedBox(sign, r.x + (r.w - signW) / 2, signY, signW, signH, 18, 0xfff6e0, 0x8a5a2b, 6);
   root.add(sign);
-  const magpie = scene.add.image(r.x + (r.w - signW) / 2 + signH * 0.75, signY + signH / 2, TEX.magpie).setScale((signH * 0.9) / 96);
-  const name = scene.add
-    .text(r.x + r.w / 2 + signH * 0.3, signY + signH / 2, '까치 붕어빵', textStyle(Math.round(signH * 0.46), 0x5a3410, '900'))
-    .setOrigin(0.5);
+  // 까치와 가게 이름을 한 덩어리로 간판 가운데에 놓는다
+  const magpie = scene.add.image(0, signY + signH / 2, TEX.magpie).setScale((signH * 0.8) / 96);
+  const name = scene.add.text(0, signY + signH / 2, '까치 붕어빵', textStyle(Math.round(signH * 0.42), 0x5a3410, '900')).setOrigin(0, 0.5);
+  const gap = 12;
+  const groupW = magpie.displayWidth + gap + name.width;
+  const left = r.x + r.w / 2 - groupW / 2;
+  magpie.setX(left + magpie.displayWidth / 2);
+  name.setX(left + magpie.displayWidth + gap);
   root.add([magpie, name]);
   // 전구
   const bulbs = scene.add.graphics();
-  for (let x = sx; x <= sx + sw; x += 44) {
-    bulbs.fillStyle(0xffe27a, 1).fillCircle(x, ay + r.h * 0.07 + stripe / 2 + 8, 6);
-  }
+  for (let x = sx; x <= sx + sw; x += 44) disc(bulbs, x, ay + r.h * 0.07 + stripe / 2 + 8, 6, 0xffe27a);
   root.add(bulbs);
   return root;
 }
@@ -186,12 +186,9 @@ export function buildShopScreen(o: ShopScreenOptions): Phaser.GameObjects.Contai
       .setOrigin(1, 0.5),
   );
   y += 36;
-  const bar = scene.add.graphics();
   const floor = levelFloor(level);
   const ratio = next === null ? 1 : (state.reputation - floor) / (next - floor);
-  bar.fillStyle(p.surfaceHover, 1).fillRoundedRect(cx, y, card.w - 64, 16, 8);
-  bar.fillStyle(p.accent, 1).fillRoundedRect(cx, y, Math.max(16, (card.w - 64) * ratio), 16, 8);
-  root.add(bar);
+  root.add(meter(scene.add.graphics(), cx, y, card.w - 64, 16, ratio, p.surfaceHover, p.accent));
   y += 62;
   root.add(scene.add.text(cx, y, '최고 하루 수익', textStyle(24, p.text2, '700')).setOrigin(0, 0.5));
   root.add(scene.add.text(card.x + card.w - 32, y, won(state.stats.bestProfit), textStyle(26, p.text, '700')).setOrigin(1, 0.5));
@@ -273,9 +270,7 @@ export function buildUpgradeScreen(o: UpgradeScreenOptions): Phaser.GameObjects.
     const tx = r.x + 124;
     root.add(scene.add.text(tx, r.y + 36, info.name, textStyle(30, p.textStrong, '800')).setOrigin(0, 0.5));
     const dots = scene.add.graphics();
-    for (let d = 0; d < def.max; d += 1) {
-      dots.fillStyle(d < level ? p.accent : p.border, 1).fillCircle(tx + 12 + d * 26, r.y + 72, 9);
-    }
+    for (let d = 0; d < def.max; d += 1) disc(dots, tx + 12 + d * 26, r.y + 72, 9, d < level ? p.accent : p.border);
     root.add(dots);
     const cost = upgradeCost(key, level);
     const effect = cost === null ? `${info.label} ${info.value(level)}` : `${info.label} ${info.value(level)} → ${info.value(level + 1)}`;
@@ -354,7 +349,7 @@ export function buildSettleScreen(o: SettleScreenOptions): Phaser.GameObjects.Co
     y += size + 30;
   };
   row('매출 (팁·콤보 포함)', won(stats.revenue));
-  row(`재료비 (반죽 ${num(stats.pours)}번)`, stats.doughCost > 0 ? `−${won(stats.doughCost)}` : won(0), stats.doughCost > 0 ? 0xc0392b : p.textStrong);
+  row(`재료비 (반죽 ${num(stats.pours)}번)`, stats.doughCost > 0 ? `-${won(stats.doughCost)}` : won(0), stats.doughCost > 0 ? 0xc0392b : p.textStrong);
   const line = scene.add.graphics();
   line.lineStyle(2, p.border, 1).lineBetween(left, y - 12, right, y - 12);
   root.add(line);

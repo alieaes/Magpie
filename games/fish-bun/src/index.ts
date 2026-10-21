@@ -2,13 +2,31 @@
 // 서버와는 셸이 넘긴 창구(GrowthSession)로만 이야기한다. 근거: docs/design/261021-04-game-save.md §6-2
 
 import Phaser from 'phaser';
+import galmuriBoldUrl from 'galmuri/dist/Galmuri11-Bold.woff2?url';
 import type { GrowthGameModule } from '@magpie/shared/game-module';
 import { initialShopState } from './logic/rules';
 import { buildTextures } from './scene/art';
 import { FishBunScene } from './scene/FishBunScene';
 import { canvasSize, type Layout } from './scene/layout';
 import { Sfx } from './scene/sound';
+import { PIXEL_ART } from './scene/style';
 import { FONT, hex, type ScenePalette } from './scene/ui';
+
+let pixelFont: Promise<void> | null = null;
+
+/**
+ * 도트 글꼴(갈무리11, OFL-1.1)을 한 번만 불러온다. 굵은 꼴 한 파일(약 170KB)만 쓰고, 모든 굵기에 그 꼴을 쓴다.
+ * 실패하면 대체 글꼴로 그린다
+ */
+function loadPixelFont(): Promise<void> {
+  pixelFont ??= new FontFace('Galmuri11', `url(${galmuriBoldUrl})`, { weight: '100 900' })
+    .load()
+    .then((face) => {
+      document.fonts.add(face);
+    })
+    .catch((err: unknown) => console.warn('[fish-bun] 도트 글꼴을 불러오지 못했다', err));
+  return pixelFont;
+}
 
 /** 게임 영역이 세로로 길면 세로 배치(휴대폰) */
 function pickLayout(el: HTMLElement): Layout {
@@ -57,9 +75,12 @@ const fishBun: GrowthGameModule = {
   async mount(parent, options) {
     const sfx = new Sfx(options.muted ?? false, options.volume ?? 1);
     // 화면 글자를 캔버스에 그리기 전에 글꼴을 받아 둔다
-    await Promise.all(
-      ['900 44px', '800 30px', '700 24px', '600 20px'].map((f) => document.fonts.load(`${f} ${FONT}`, '까치붕어빵장사시작0123456789원').catch(() => undefined)),
-    );
+    if (PIXEL_ART) await loadPixelFont();
+    else {
+      await Promise.all(
+        ['900 44px', '800 30px', '700 24px', '600 20px'].map((f) => document.fonts.load(`${f} ${FONT}`, '까치붕어빵장사시작0123456789원').catch(() => undefined)),
+      );
+    }
     const palette = readPalette();
     const textures = await buildTextures(hex(palette.textStrong));
     const layout = pickLayout(parent);
@@ -78,8 +99,9 @@ const fishBun: GrowthGameModule = {
       parent,
       backgroundColor: palette.bg,
       banner: false,
-      // 저지연 캔버스: 그리기가 브라우저 합성 단계를 덜 거쳐 누름에 더 빨리 반응한다
-      render: { desynchronized: true, antialias: true },
+      // 저지연 캔버스: 그리기가 브라우저 합성 단계를 덜 거쳐 누름에 더 빨리 반응한다.
+      // 도트 그림체면 확대해도 칸이 뭉개지지 않게 하되(smoothPixelArt), 칸 사이 경계는 부드럽게 해서 소수 배율에서도 칸 굵기가 들쭉날쭉하지 않게 한다
+      render: { desynchronized: true, antialias: true, smoothPixelArt: PIXEL_ART },
       input: { activePointers: 3 },
       scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH, width, height },
       scene,

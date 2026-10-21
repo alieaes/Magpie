@@ -1,9 +1,17 @@
 // 게임 안 공통 UI: 셸 색(팔레트), 버튼, 글자 모양, 숫자 형식.
 // 버튼은 누르는 순간(pointerdown) 바로 동작하고 눌린 모양이 된다(반응이 느리지 않게, 복권 긁기 §3-7과 같은 원칙).
+// 도트 그림체면 글꼴은 갈무리11(도트 글꼴, 11px 격자의 배수 크기), 버튼 모서리는 계단형이다.
 
 import Phaser from 'phaser';
+import { PIXEL_ART, framedBox, mix, roundBox } from './style';
 
-export const FONT = '"Pretendard Variable", Pretendard, sans-serif';
+export { mix } from './style';
+
+/** 게임 안 글꼴. 도트 그림체면 갈무리11(index.ts에서 불러온다) */
+export const FONT = PIXEL_ART ? '"Galmuri11", "Pretendard Variable", Pretendard, sans-serif' : '"Pretendard Variable", Pretendard, sans-serif';
+
+/** 도트 글꼴의 격자. 글자 크기를 이 배수로 맞춰야 획이 또렷하다 */
+const FONT_GRID = 11;
 
 /** 셸의 CSS 변수에서 읽어 오는 색 (라이트·다크에 따라 다르다) */
 export interface ScenePalette {
@@ -24,12 +32,6 @@ export interface ScenePalette {
 /** 색 숫자를 CSS 색 문자열로 */
 export function hex(color: number): string {
   return `#${color.toString(16).padStart(6, '0')}`;
-}
-
-/** 두 색을 섞는다. t = 0이면 a, 1이면 b */
-export function mix(a: number, b: number, t: number): number {
-  const ch = (shift: number) => Math.round(((a >> shift) & 0xff) * (1 - t) + ((b >> shift) & 0xff) * t);
-  return (ch(16) << 16) | (ch(8) << 8) | ch(0);
 }
 
 const numberFormat = new Intl.NumberFormat('ko-KR');
@@ -53,9 +55,14 @@ export function clockText(minute: number): string {
   return `${half} ${h12}:${String(m).padStart(2, '0')}`;
 }
 
-/** 글자 모양 */
+/** 글자 크기. 도트 글꼴이면 격자 배수(최소 22px: 휴대폰에서 캔버스가 절반쯤으로 줄어도 읽히게) */
+export function fontSize(size: number): number {
+  return PIXEL_ART ? Math.max(FONT_GRID * 2, Math.round(size / FONT_GRID) * FONT_GRID) : size;
+}
+
+/** 글자 모양. 도트 글꼴은 굵은 꼴 하나만 쓴다 */
 export function textStyle(size: number, color: number, weight = '700'): Phaser.Types.GameObjects.Text.TextStyle {
-  return { fontFamily: FONT, fontSize: `${size}px`, fontStyle: weight, color: hex(color) };
+  return { fontFamily: FONT, fontSize: `${fontSize(size)}px`, fontStyle: PIXEL_ART ? 'bold' : weight, color: hex(color) };
 }
 
 export type ButtonStyle = 'primary' | 'secondary' | 'warm' | 'ghost';
@@ -151,9 +158,11 @@ export class Button extends Phaser.GameObjects.Container {
       fill = this.hovered ? palette.surfaceHover : palette.surface;
       stroke = palette.border;
     }
-    if (style === 'warm') g.fillStyle(0x7a4a18, 0.35).fillRoundedRect(-width / 2, -height / 2 + 5, width, height, r);
-    g.fillStyle(fill, 1).fillRoundedRect(-width / 2, -height / 2, width, height, r);
-    if (stroke !== null) g.lineStyle(3, stroke, 1).strokeRoundedRect(-width / 2, -height / 2, width, height, r);
+    if (style === 'warm') roundBox(g, -width / 2, -height / 2 + (PIXEL_ART ? 8 : 5), width, height, r, 0x7a4a18, 0.35);
+    if (stroke !== null) framedBox(g, -width / 2, -height / 2, width, height, r, fill, stroke, 3);
+    else roundBox(g, -width / 2, -height / 2, width, height, r, fill);
+    // 도트면 위쪽에 밝은 줄 하나 (눌리는 버튼 느낌)
+    if (PIXEL_ART) g.fillStyle(0xffffff, style === 'primary' ? 0.14 : 0.35).fillRect(-width / 2 + 12, -height / 2 + 8, width - 24, 4);
     this.setAlpha(this.enabled ? 1 : 0.4);
   }
 

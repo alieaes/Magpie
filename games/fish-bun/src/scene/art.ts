@@ -1,8 +1,11 @@
 // 그림: 붕어빵(익힘 단계별), 무쇠 빵틀, 진열대 아이콘, 펌프, 아이콘, 효과 조각을 SVG로 그려 Phaser 텍스처로 굽는다.
-// 원작 그림은 쓰지 않는다(CLAUDE.md §4-3). 이모지 대신 직접 그린 그림만 쓴다. 근거: docs/design/261021-01-fish-bun.md §5-3
+// 도트 그림체(style.ts의 ART_STYLE)면 구운 그림을 도트로 바꾼다(SVG 그림 자체는 그대로 둔다).
+// 원작 그림은 쓰지 않는다(CLAUDE.md §4-3). 이모지 대신 직접 그린 그림만 쓴다.
+// 근거: docs/design/261021-01-fish-bun.md §5-3, docs/design/261022-01-fish-bun-pixel-art.md §1-1
 
 import type { Quality, SideStage } from '../logic/rules';
 import { PEOPLE_FACES, PEOPLE_KINDS, PEOPLE_VARIANTS, personSvg, type Face } from './people';
+import { DOT, PIXEL_ART } from './style';
 
 /** 구운 텍스처: 이름 → 캔버스 */
 export type TextureSet = Map<string, HTMLCanvasElement>;
@@ -62,6 +65,99 @@ async function rasterize(body: string, w: number, h: number, outW = w, outH = h)
   await img.decode();
   const [c, ctx] = canvas(outW, outH);
   ctx.drawImage(img, 0, 0, outW, outH);
+  return c;
+}
+
+// ---------------------------------------------------------------- 도트로 굽기
+
+/** 그림 하나에 쓰는 최대 색 수 */
+const PIXEL_COLORS = 16;
+/** 그림 바깥 테두리 색 (어두운 갈색) */
+const OUTLINE: readonly [number, number, number] = [0x2a, 0x1a, 0x10];
+
+/** 두 색의 거리(제곱) */
+function colorDistance(a: readonly number[], b: readonly number[]): number {
+  return (a[0]! - b[0]!) ** 2 + (a[1]! - b[1]!) ** 2 + (a[2]! - b[2]!) ** 2;
+}
+
+/**
+ * 매끈한 그림을 도트로 바꾼다: 1/px로 줄이고, 투명도를 딱 자르고, 많이 쓰인 색 16개로 줄이고,
+ * 바깥에 어두운 테두리 한 칸을 두르고, 원래 크기로 다시 키운다(뭉개지 않게). 크기는 그대로다
+ */
+function pixelate(src: HTMLCanvasElement, px: number): HTMLCanvasElement {
+  const sw = Math.max(3, Math.round(src.width / px));
+  const sh = Math.max(3, Math.round(src.height / px));
+  const [small, ctx] = canvas(sw, sh);
+  ctx.imageSmoothingQuality = 'high';
+  // 테두리 한 칸이 들어갈 자리를 둔다
+  ctx.drawImage(src, 1, 1, sw - 2, sh - 2);
+  const img = ctx.getImageData(0, 0, sw, sh);
+  const d = img.data;
+  // 투명도 자르기, 색 세기 (채널당 5비트로 묶어서)
+  const counts = new Map<number, number>();
+  for (let i = 0; i < d.length; i += 4) {
+    if (d[i + 3]! < 110) {
+      d[i + 3] = 0;
+      continue;
+    }
+    d[i + 3] = 255;
+    const key = ((d[i]! >> 3) << 10) | ((d[i + 1]! >> 3) << 5) | (d[i + 2]! >> 3);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  // 많이 쓰인 색부터 팔레트에 넣고, 이미 있는 색과 비슷하면 건너뛴다
+  const palette: [number, number, number][] = [];
+  for (const [key] of [...counts.entries()].sort((a, b) => b[1] - a[1])) {
+    if (palette.length >= PIXEL_COLORS) break;
+    const c: [number, number, number] = [((key >> 10) & 31) * 8 + 4, ((key >> 5) & 31) * 8 + 4, (key & 31) * 8 + 4];
+    if (palette.every((p) => colorDistance(p, c) > 900)) palette.push(c);
+  }
+  for (let i = 0; i < d.length; i += 4) {
+    if (!d[i + 3]) continue;
+    const here = [d[i]!, d[i + 1]!, d[i + 2]!];
+    let best = palette[0]!;
+    for (const p of palette) if (colorDistance(p, here) < colorDistance(best, here)) best = p;
+    [d[i], d[i + 1], d[i + 2]] = best;
+  }
+  // 바깥 테두리: 불투명한 칸 옆의 투명한 칸을 칠한다
+  const opaque = (x: number, y: number) => x >= 0 && y >= 0 && x < sw && y < sh && d[(y * sw + x) * 4 + 3]! > 0;
+  const edge: number[] = [];
+  for (let y = 0; y < sh; y += 1) {
+    for (let x = 0; x < sw; x += 1) {
+      if (!opaque(x, y) && (opaque(x - 1, y) || opaque(x + 1, y) || opaque(x, y - 1) || opaque(x, y + 1))) edge.push((y * sw + x) * 4);
+    }
+  }
+  for (const i of edge) [d[i], d[i + 1], d[i + 2], d[i + 3]] = [...OUTLINE, 255];
+  ctx.putImageData(img, 0, 0);
+  const [out, o] = canvas(src.width, src.height);
+  o.imageSmoothingEnabled = false;
+  o.drawImage(small, 0, 0, src.width, src.height);
+  return out;
+}
+
+/** 도트 김·연기 한 덩이: 반지름 r칸 원, 왼쪽 위는 밝은 색 */
+function pixelPuff(r: number, light: string, dark: string): HTMLCanvasElement {
+  const n = r * 2 + 1;
+  const [c, ctx] = canvas(n * DOT, n * DOT);
+  for (let y = 0; y < n; y += 1) {
+    for (let x = 0; x < n; x += 1) {
+      const dx = x - r;
+      const dy = y - r;
+      if (dx * dx + dy * dy > r * r) continue;
+      ctx.fillStyle = dx + dy < 0 ? light : dark;
+      ctx.fillRect(x * DOT, y * DOT, DOT, DOT);
+    }
+  }
+  return c;
+}
+
+/** 도트 반짝이: 가운데가 하얀 십자 */
+function pixelSparkle(): HTMLCanvasElement {
+  const [c, ctx] = canvas(7 * DOT, 7 * DOT);
+  ctx.fillStyle = '#ffe27a';
+  ctx.fillRect(3 * DOT, 0, DOT, 7 * DOT);
+  ctx.fillRect(0, 3 * DOT, 7 * DOT, DOT);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(2 * DOT, 2 * DOT, 3 * DOT, 3 * DOT);
   return c;
 }
 
@@ -284,11 +380,11 @@ function sparkle(size: number): HTMLCanvasElement {
 export async function buildTextures(iconColor: string): Promise<TextureSet> {
   const set: TextureSet = new Map();
   const jobs: Promise<void>[] = [];
-  /** SVG를 구워 넣는다 */
-  const bake = (key: string, body: string, w: number, h: number) =>
+  /** SVG를 구워 넣는다. 도트 그림체면 dot 크기 도트로 바꾼다 (보이는 크기가 작은 그림은 칸을 작게) */
+  const bake = (key: string, body: string, w: number, h: number, dot = DOT) =>
     jobs.push(
       rasterize(body, w, h).then((c) => {
-        set.set(key, c);
+        set.set(key, PIXEL_ART ? pixelate(c, dot) : c);
       }),
     );
 
@@ -296,13 +392,13 @@ export async function buildTextures(iconColor: string): Promise<TextureSet> {
   for (const s of ['raw', 'good', 'burnt'] as const) bake(TEX.batter(s), batterSvg(s), BUN_W, BUN_H);
   for (const s of ['raw', 'good', 'burnt', 'golden'] as const) bake(TEX.fish(s), fishSvg(s, false), BUN_W, BUN_H);
   for (const s of ['raw', 'good', 'burnt'] as const) bake(TEX.candidate(s), fishSvg(s, true), BUN_W, BUN_H);
-  for (const q of ['golden', 'good', 'raw', 'burnt'] as const) bake(TEX.shelf(q), shelfSvg(q), SHELF_W, SHELF_H);
+  for (const q of ['golden', 'good', 'raw', 'burnt'] as const) bake(TEX.shelf(q), shelfSvg(q), SHELF_W, SHELF_H, 3);
   bake(TEX.pumpBody, pumpBodySvg(), 100, 200);
   bake(TEX.pumpHandle, pumpHandleSvg(), 100, 60);
-  bake(TEX.coin, coinSvg(), ICON, ICON);
-  bake(TEX.magpie, magpieSvg(), 128, 96);
+  bake(TEX.coin, coinSvg(), ICON, ICON, 3);
+  bake(TEX.magpie, magpieSvg(), 128, 96, 3);
   for (const name of ['pause', 'trash', 'clock', 'plusOne', 'noBurnt', 'camera', 'star', 'heart', 'flame', 'store', 'back'] as const) {
-    bake(TEX.icon(name), iconSvg(name).replaceAll('currentColor', iconColor), ICON, ICON);
+    bake(TEX.icon(name), iconSvg(name).replaceAll('currentColor', iconColor), ICON, ICON, 3);
   }
   for (const kind of PEOPLE_KINDS) {
     for (let v = 0; v < PEOPLE_VARIANTS; v += 1) {
@@ -311,9 +407,15 @@ export async function buildTextures(iconColor: string): Promise<TextureSet> {
   }
   await Promise.all(jobs);
 
-  set.set(TEX.steam, softDot(64, '255, 255, 255', 0.75));
-  set.set(TEX.smoke, softDot(64, '70, 70, 70', 0.7));
+  if (PIXEL_ART) {
+    set.set(TEX.steam, pixelPuff(4, 'rgba(255, 255, 255, 0.9)', 'rgba(220, 230, 240, 0.85)'));
+    set.set(TEX.smoke, pixelPuff(4, 'rgba(140, 140, 140, 0.9)', 'rgba(80, 80, 80, 0.9)'));
+    set.set(TEX.sparkle, pixelSparkle());
+  } else {
+    set.set(TEX.steam, softDot(64, '255, 255, 255', 0.75));
+    set.set(TEX.smoke, softDot(64, '70, 70, 70', 0.7));
+    set.set(TEX.sparkle, sparkle(32));
+  }
   set.set(TEX.glow, softDot(160, '255, 214, 90', 0.85));
-  set.set(TEX.sparkle, sparkle(32));
   return set;
 }

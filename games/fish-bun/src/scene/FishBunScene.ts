@@ -27,6 +27,7 @@ import { DayView } from './DayView';
 import { canvasSize, type Layout } from './layout';
 import { REJECT_TEXT, buildSettleScreen, buildShopScreen, buildUpgradeScreen, type SettleStatus } from './screens';
 import type { Sfx } from './sound';
+import { framedBox, roundBox } from './style';
 import { Button, textStyle, type ScenePalette } from './ui';
 
 export interface FishBunSceneOptions {
@@ -260,9 +261,8 @@ export class FishBunScene extends Phaser.Scene {
     this.toastText?.destroy();
     const { width } = this.scale;
     const text = this.add.text(0, 0, message, textStyle(26, 0xffffff, '700')).setOrigin(0.5);
-    const bg = this.add.graphics();
     const w = text.width + 56;
-    bg.fillStyle(0x1f1d1c, 0.92).fillRoundedRect(-w / 2, -32, w, 64, 32);
+    const bg = roundBox(this.add.graphics(), -w / 2, -32, w, 64, 32, 0x1f1d1c, 0.92);
     const box = this.add.container(width / 2, 150, [bg, text]).setDepth(200).setAlpha(0);
     this.toastText = box;
     this.tweens.add({ targets: box, alpha: 1, y: 130, duration: 200 });
@@ -339,8 +339,7 @@ export class FishBunScene extends Phaser.Scene {
     const p = this.opts.palette;
     const dim = this.add.rectangle(0, 0, width, height, 0x000000, 0.55).setOrigin(0).setInteractive();
     const cw = Math.min(560, width - 80);
-    const card = this.add.graphics();
-    card.fillStyle(p.surface, 1).fillRoundedRect(width / 2 - cw / 2, height / 2 - 230, cw, 460, 28);
+    const card = framedBox(this.add.graphics(), width / 2 - cw / 2, height / 2 - 230, cw, 460, 28, p.surface, p.border);
     const title = this.add.text(width / 2, height / 2 - 160, '잠깐 쉬는 중', textStyle(40, p.textStrong, '900')).setOrigin(0.5);
     const note = this.add
       .text(width / 2, height / 2 - 92, '멈춘 동안은 시간이 흐르지 않아요.\n그만두면 오늘 장사는 저장되지 않아요.', {
