@@ -37,8 +37,8 @@ export const SUBSIDY_FLOOR = 500;
 export const COUNTER_SEATS = 3;
 /** 하루 입력 최대 개수 */
 export const MAX_INPUTS = 6000;
-/** 같은 빵틀을 다시 누를 수 있는 최소 간격 (0.1초) */
-export const MIN_TAP_GAP = 6;
+/** 같은 빵틀을 다시 누를 수 있는 최소 간격 (0.35초, 뒤집자마자 꺼내지는 오조작 방지) */
+export const MIN_TAP_GAP = 21;
 /** 손님이 떠난 뒤 다음 손님이 들어오기까지 최소 틱 */
 export const WALK_IN_TICKS = 60;
 /** 깨진 빵틀을 고치는 누름 횟수 */

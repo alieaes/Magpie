@@ -23,7 +23,7 @@ import {
   type ShopState,
   type UpgradeKey,
 } from '../logic/rules';
-import { BUN_W, MOLD_W, SHELF_W, TEX } from './art';
+import { BUN_H, BUN_W, MOLD_W, SHELF_W, TEX } from './art';
 import type { Layout, Rect } from './layout';
 import { PIXEL_ART, disc, framedBox, meter, roundBox, vGradient } from './style';
 import { Button, num, textStyle, titleStyle, won, type ScenePalette } from './ui';
@@ -121,10 +121,13 @@ function storefront(scene: Phaser.Scene, r: Rect): Phaser.GameObjects.Container 
   g.fillStyle(0xb57a3c, 1).fillRect(sx - 10, wy + wh, sw + 20, 22);
   root.add(g);
   // 진열창 안의 붕어빵
-  const bunScale = Math.min(0.5, (sw - 120) / 4 / BUN_W);
+  // 창 안쪽 여백을 두고 칸을 4등분해, 붕어빵이 창 밖으로 나가지 않게 한다
+  const innerX = sx + 24 + 24;
+  const slotW = (sw - 96) / 4;
+  const bunScale = Math.min(0.5, (slotW - 16) / BUN_H, BUN_W, (wh * 0.5) / BUN_H);
   for (let i = 0; i < 4; i += 1) {
-    const bx = sx + 70 + ((sw - 140) / 3) * i;
-    root.add(scene.add.image(bx, wy + wh * 0.55, TEX.fish(i === 2 ? 'golden' : 'good')).setScale(bunScale));
+    const bx = innerX + slotW * (i + 0.5);
+    root.add(scene.add.image(bx, wy + wh * 0.6 - (BUN_H * bunScale) / 2, TEX.fish(i === 2 ? 'golden' : 'good')).setScale(bunScale));
   }
   // 차양
   const awning = scene.add.graphics();
@@ -375,7 +378,7 @@ export function buildSettleScreen(o: SettleScreenOptions): Phaser.GameObjects.Co
   const left = card.x + 40;
   const right = card.x + card.w - 40;
   let y = card.y + 64;
-  root.add(scene.add.text(card.x + card.w / 2, y, `${num(o.day)}일째 장사 끝`, titleStyle(44, p.textStrong)).setOrigin(0.5));
+  root.add(scene.add.text(card.x + card.w / 2, y, `${num(o.day)}일차 장사 끝`, titleStyle(44, p.textStrong)).setOrigin(0.5));
   y += 84;
 
   /** 이름 · 값 한 줄 */
@@ -389,27 +392,36 @@ export function buildSettleScreen(o: SettleScreenOptions): Phaser.GameObjects.Co
   const line = scene.add.graphics();
   line.lineStyle(2, p.border, 1).lineBetween(left, y - 12, right, y - 12);
   root.add(line);
-  y += 8;
-  row('하루 수익', won(outcome.profit), outcome.profit >= 0 ? p.accent : 0xc0392b, 44);
+  y += 40;
+  row('순 수익', won(outcome.profit), outcome.profit >= 0 ? p.accent : 0xc0392b, 44);
   if (stats.subsidy > 0) row('운영 지원금', `+${won(stats.subsidy)}`, p.text, 24);
   const served = stats.served.best + stats.served.good + stats.served.meh + stats.served.bad;
-  const wasteParts = [
-    stats.wasted > 0 ? `남은 빵 폐기 ${stats.wasted}개` : '',
-    stats.trashed > 0 ? `버린 탄 빵 ${stats.trashed}개` : '',
-    stats.broken > 0 ? `깨진 빵틀 ${stats.broken}번` : '',
-  ].filter(Boolean);
-  const lines = [
-    `손님 ${num(served + stats.left)}명 · 최고 ${stats.served.best} · 만족 ${stats.served.good} · 아쉬움 ${stats.served.meh} · 불만 ${stats.served.bad} · 떠남 ${stats.left}`,
-    `최대 콤보 ${stats.maxCombo} · 황금붕어빵 ${stats.golden}개${wasteParts.length ? ` · ${wasteParts.join(' · ')}` : ''}`,
-  ];
+  y += 6;
+  row('손님', `${num(served + stats.left)}명`, p.textStrong, 26);
+  /** 안쪽으로 들여 쓴 작은 줄: 이름은 왼쪽, 값은 오른쪽 정렬 */
+  const sub = (name: string, value: string) => {
+    root.add(scene.add.text(left + 24, y, name, textStyle(22, p.text2, '600')).setOrigin(0, 0.5));
+    root.add(scene.add.text(right, y, value, textStyle(22, p.text, '700')).setOrigin(1, 0.5));
+    y += 38;
+  };
+  sub('최고', `${num(stats.served.best)}명`);
+  sub('만족', `${num(stats.served.good)}명`);
+  sub('아쉬움', `${num(stats.served.meh)}명`);
+  sub('불만', `${num(stats.served.bad)}명`);
+  sub('떠남', `${num(stats.left)}명`);
+  y += 14;
+  row('최대 콤보', `${num(stats.maxCombo)}`, p.textStrong, 26);
+  sub('황금붕어빵', `${num(stats.golden)}개`);
+  if (stats.wasted > 0) sub('남은 빵 폐기', `${num(stats.wasted)}개`);
+  if (stats.trashed > 0) sub('버린 탄 빵', `${num(stats.trashed)}개`);
+  if (stats.broken > 0) sub('깨진 빵틀', `${num(stats.broken)}번`);
   // 팥 말고 다른 메뉴도 팔았으면 메뉴별 판 개수
   if (stats.soldBy.some((n, m) => m > 0 && n > 0)) {
-    lines.push(`판 빵 ${MENUS.map((m, i) => `${m.name} ${stats.soldBy[i] ?? 0}개`).join(' · ')}`);
+    y += 14;
+    row('판 빵', '', p.textStrong, 26);
+    MENUS.forEach((m, i) => sub(m.name, `${num(stats.soldBy[i] ?? 0)}개`));
   }
-  for (const text of lines) {
-    root.add(scene.add.text(left, y, text, { ...textStyle(22, p.text, '600'), wordWrap: { width: right - left } }).setOrigin(0, 0.5));
-    y += portrait ? 64 : 44;
-  }
+  y += 14;
   const levelBefore = levelOf(o.before.reputation);
   const levelAfter = levelOf(outcome.nextState.reputation);
   const repDelta = outcome.nextState.reputation - o.before.reputation;

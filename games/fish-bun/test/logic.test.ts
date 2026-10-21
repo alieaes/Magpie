@@ -131,9 +131,9 @@ describe('굽기', () => {
     const sim = createDay(steadyShop(), plainSeed());
     sim.shelves[0] = Array.from({ length: 12 }, () => 'good' as const);
     must(sim, OP.tap, 0);
-    run(sim, 10);
+    run(sim, MIN_TAP_GAP);
     must(sim, OP.tap, 0);
-    run(sim, 10);
+    run(sim, MIN_TAP_GAP);
     expect(applyInput(sim, OP.tap, 0)).toEqual({ ok: false, reason: 'shelf_full' });
   });
 
