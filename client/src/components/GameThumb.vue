@@ -8,6 +8,10 @@ defineProps<{ gameId: GameId }>();
 // 칼날 모으기: 중심(120, 92) 반지름 44 원 위 칼날 4개의 각도
 const bladeAngles = [20, 110, 200, 290];
 
+// 붕어빵 가게: 붕어빵 몸통 (200 × 120, 머리가 왼쪽). 게임 그림(games/fish-bun/src/scene/art.ts)과 같은 모양
+const fishPath =
+  'M16 62 C18 36 52 16 100 16 C128 16 148 26 160 42 L182 22 C190 16 199 21 197 31 L189 60 L197 89 C199 99 190 104 182 98 L160 78 C148 94 128 104 100 104 C52 104 18 88 16 62 Z';
+
 // 복권 긁기: 3 × 3칸 중 드러난 칸(윗줄 까치 3개 + 한 칸)과 은박이 남은 칸
 const scratchCells = Array.from({ length: 9 }, (_, i) => ({
   x: 79 + (i % 3) * 30,
@@ -34,6 +38,27 @@ const scratchCells = Array.from({ length: 9 }, (_, i) => ({
         <circle class="apple" :cx="apple.x" :cy="apple.y" r="21" />
         <text class="apple-num" :x="apple.x" :y="apple.y + 7">{{ apple.n }}</text>
       </g>
+    </template>
+
+    <!-- 붕어빵 가게: 무쇠 빵틀에서 황금붕어빵을 꺼내는 장면. 옆 칸에는 팥을 얹은 반죽이 익는 중 -->
+    <template v-else-if="gameId === 'fish-bun'">
+      <rect class="bg-orange" width="240" height="180" />
+      <rect class="iron-shadow" x="20" y="72" width="200" height="92" rx="20" />
+      <rect class="iron" x="20" y="66" width="200" height="92" rx="20" />
+      <rect class="iron-shine" x="30" y="72" width="180" height="6" rx="3" />
+      <path class="hollow" transform="translate(28 84) scale(0.45)" :d="fishPath" />
+      <path class="hollow" transform="translate(124 84) scale(0.45)" :d="fishPath" />
+      <path class="batter" transform="translate(30 86) scale(0.43)" :d="fishPath" />
+      <ellipse class="bean" cx="74" cy="112" rx="11" ry="6" />
+      <path class="steam" d="M64 70 q-8 -10 0 -20 q8 -10 0 -20 M84 66 q-7 -9 0 -18 q7 -9 0 -18" />
+      <g transform="translate(108 28) rotate(-10) scale(0.56)">
+        <path class="bun-gold" :d="fishPath" />
+        <path class="bun-line" d="M64 30 C78 46 78 78 64 92 M80 46 a8 8 0 0 0 16 0 M96 46 a8 8 0 0 0 16 0 M112 46 a8 8 0 0 0 16 0" />
+        <path class="bun-shine" d="M40 34 C70 22 110 20 138 28" />
+        <circle class="bun-eye" cx="44" cy="50" r="8" />
+      </g>
+      <path class="spark" d="M212 34 l4 -10 l4 10 l10 4 l-10 4 l-4 10 l-4 -10 l-10 -4 Z" />
+      <path class="spark" d="M112 22 l3 -7 l3 7 l7 3 l-7 3 l-3 7 l-3 -7 l-7 -3 Z" />
     </template>
 
     <!-- 복권 긁기: 반쯤 긁힌 복권에 까치 3개가 드러나고, 옆에 동전이 있다 -->
@@ -144,6 +169,21 @@ text {
 .bg-yellow { fill: var(--tint-yellow); }
 .bg-teal { fill: var(--tint-teal); }
 .bg-purple { fill: var(--tint-purple); }
+.bg-orange { fill: var(--tint-orange); }
+
+/* 붕어빵 가게 */
+.iron-shadow { fill: #1b1d20; opacity: 0.25; }
+.iron { fill: #3c4046; }
+.iron-shine { fill: #ffffff; opacity: 0.1; }
+.hollow { fill: #1e2024; stroke: #6b7179; stroke-width: 6; }
+.batter { fill: #f3dc9d; stroke: #d68f38; stroke-width: 6; }
+.bean { fill: #6e2a26; }
+.steam { fill: none; stroke: #ffffff; stroke-width: 4; stroke-linecap: round; opacity: 0.75; }
+.bun-gold { fill: #f5b52e; stroke: #a8650c; stroke-width: 6; stroke-linejoin: round; }
+.bun-line { fill: none; stroke: #c9850f; stroke-width: 5; stroke-linecap: round; }
+.bun-shine { fill: none; stroke: #fffbe0; stroke-width: 9; stroke-linecap: round; }
+.bun-eye { fill: #3a2410; }
+.spark { fill: #f5b52e; }
 
 /* 사과게임 */
 .select {

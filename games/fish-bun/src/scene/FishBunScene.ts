@@ -1,0 +1,459 @@
+// 붕어빵 가게 장면. 화면(가게 → 장사 → 정산 → 가게 꾸리기)을 바꾸고, 장사 중에는 실제 흐른 시간만큼 하루를 틱 단위로 진행한다.
+// 저장은 셸이 넘긴 창구(GrowthSession)로만 한다. 규칙 판정은 logic이 한다.
+// 근거: docs/design/261021-01-fish-bun.md §2, §5, docs/design/261021-04-game-save.md §6-2
+
+import Phaser from 'phaser';
+import { TICKS_PER_SECOND, type SaveSnapshot } from '@magpie/shared';
+import type { GrowthSession, PlayResult } from '@magpie/shared/game-module';
+import {
+  DAY_TICKS,
+  MAX_INPUTS,
+  OP,
+  advance,
+  applyInput,
+  createDay,
+  initialShopState,
+  settleDay,
+  type DayOutcome,
+  type DaySim,
+  type DayStats,
+  type FishInput,
+  type InputResult,
+  type ShopState,
+  type UpgradeKey,
+} from '../logic/rules';
+import type { TextureSet } from './art';
+import { DayView } from './DayView';
+import { canvasSize, type Layout } from './layout';
+import { REJECT_TEXT, buildSettleScreen, buildShopScreen, buildUpgradeScreen, type SettleStatus } from './screens';
+import type { Sfx } from './sound';
+import { Button, textStyle, type ScenePalette } from './ui';
+
+export interface FishBunSceneOptions {
+  layout: Layout;
+  palette: ScenePalette;
+  textures: TextureSet;
+  sfx: Sfx;
+  session: GrowthSession;
+  save: SaveSnapshot;
+  onDayActive?(active: boolean): void;
+}
+
+type Screen = 'shop' | 'upgrades' | 'day' | 'settle';
+
+/** 진행 중인 하루 */
+interface DayRun {
+  seed: string;
+  sim: DaySim;
+  inputs: FishInput[];
+  /** 멈춘 시간을 뺀 경과 시간(ms) */
+  elapsed: number;
+  paused: boolean;
+  ended: boolean;
+  view: DayView | null;
+}
+
+/** 정산 중인 하루 */
+interface Settlement {
+  day: number;
+  before: ShopState;
+  stats: DayStats;
+  outcome: DayOutcome;
+  status: SettleStatus;
+  result: PlayResult<FishInput>;
+}
+
+/** 가게 행동 실패 사유의 안내 */
+const ACT_TEXT: Record<string, string> = {
+  no_money: '돈이 모자라요',
+  locked: '평판이 더 필요해요',
+  max_level: '이미 최대예요',
+  trial: '로그인하면 강화할 수 있어요',
+};
+
+export class FishBunScene extends Phaser.Scene {
+  private readonly opts: FishBunSceneOptions;
+  private layout: Layout;
+  private save: SaveSnapshot<ShopState>;
+  private screen: Screen = 'shop';
+  private screenRoot: Phaser.GameObjects.Container | null = null;
+  private run: DayRun | null = null;
+  private settlement: Settlement | null = null;
+  private starting = false;
+  private buying: UpgradeKey | null = null;
+  private trialUsed = false;
+  private pauseLayer: Phaser.GameObjects.Container | null = null;
+  private toastText: Phaser.GameObjects.Container | null = null;
+
+  constructor(opts: FishBunSceneOptions) {
+    super('fish-bun');
+    this.opts = opts;
+    this.layout = opts.layout;
+    this.save = opts.save as SaveSnapshot<ShopState>;
+  }
+
+  /** 텍스처를 올리고 가게 화면을 띄운다 */
+  create(): void {
+    for (const [key, source] of this.opts.textures) {
+      if (!this.textures.exists(key)) this.textures.addCanvas(key, source);
+    }
+    // 펌프를 누른 채 빵틀을 누를 수 있게 손가락을 셋까지 받는다
+    this.input.addPointer(2);
+    this.input.on(Phaser.Input.Events.POINTER_DOWN, (p: Phaser.Input.Pointer, over: Phaser.GameObjects.GameObject[]) => {
+      const run = this.activeRun();
+      if (run) run.view!.pointerDown(p, over, run.sim);
+    });
+    this.input.on(Phaser.Input.Events.POINTER_MOVE, (p: Phaser.Input.Pointer) => {
+      const run = this.activeRun();
+      if (run) run.view!.pointerMove(p, run.sim);
+    });
+    const up = (p: Phaser.Input.Pointer) => this.run?.view?.pointerUp(p);
+    this.input.on(Phaser.Input.Events.POINTER_UP, up);
+    this.input.on(Phaser.Input.Events.POINTER_UP_OUTSIDE, up);
+    this.show('shop');
+  }
+
+  /** 입력을 받을 수 있는 하루 */
+  private activeRun(): DayRun | null {
+    const run = this.run;
+    return run && run.view && !run.paused && !run.ended ? run : null;
+  }
+
+  /** 실제로 흐른 시간만큼 하루를 진행한다 (멈춘 동안은 흐르지 않는다) */
+  override update(_time: number, delta: number): void {
+    const run = this.run;
+    if (!run || !run.view || run.ended) return;
+    if (!run.paused) {
+      // 한 프레임이 크게 늦어도(탭 전환 직후 등) 한꺼번에 많이 진행하지 않는다. 게임 시간이 실제보다 느린 것은 서버가 허용한다
+      run.elapsed += Math.min(delta, 250);
+      const target = Math.min(DAY_TICKS, Math.floor((run.elapsed * TICKS_PER_SECOND) / 1000));
+      while (run.sim.tick < target && !run.sim.closed) advance(run.sim);
+    }
+    this.flushEvents(run);
+    run.view.render(run.sim);
+    if (run.sim.closed) this.closeDay(run);
+  }
+
+  /** 로직이 남긴 사건을 화면에 넘긴다 */
+  private flushEvents(run: DayRun): void {
+    const events = run.sim.events;
+    if (events && events.length > 0) run.view?.handleEvents(events.splice(0));
+  }
+
+  /** 배치를 바꾼다(영역이 가로·세로로 바뀌었을 때). 장사 중이면 같은 하루를 새 배치로 다시 그린다 */
+  setLayout(layout: Layout): void {
+    if (layout === this.layout) return;
+    this.layout = layout;
+    const { width, height } = canvasSize(layout);
+    this.scale.setGameSize(width, height);
+    this.show(this.screen);
+    if (this.run?.paused) this.showPause();
+  }
+
+  /** 화면이 가려지면(탭·앱 전환) 장사를 멈춘다 */
+  onHidden(): void {
+    if (this.run && !this.run.ended && !this.run.paused) this.pauseDay();
+  }
+
+  // ---------------------------------------------------------------- 화면
+
+  /** 화면을 바꾼다 */
+  private show(screen: Screen): void {
+    this.screen = screen;
+    this.screenRoot?.destroy();
+    this.screenRoot = null;
+    this.run?.view?.destroy();
+    if (this.run) this.run.view = null;
+    this.pauseLayer?.destroy();
+    this.pauseLayer = null;
+    const { palette } = this.opts;
+    const trial = this.opts.session.mode === 'trial';
+    switch (screen) {
+      case 'shop':
+        this.screenRoot = buildShopScreen({
+          scene: this,
+          layout: this.layout,
+          palette,
+          state: this.save.state,
+          trial,
+          trialUsed: this.trialUsed,
+          starting: this.starting,
+          onStart: () => void this.startDay(),
+          onUpgrades: () => this.click(() => this.show('upgrades')),
+          onLogin: () => this.opts.session.requestLogin(),
+          onRetryTrial: () => this.click(() => this.retryTrial()),
+        });
+        break;
+      case 'upgrades':
+        this.screenRoot = buildUpgradeScreen({
+          scene: this,
+          layout: this.layout,
+          palette,
+          state: this.save.state,
+          trial,
+          buying: this.buying,
+          onBuy: (key) => void this.buy(key),
+          onBack: () => this.click(() => this.backToShop()),
+        });
+        break;
+      case 'settle': {
+        const s = this.settlement;
+        if (!s) return this.show('shop');
+        this.screenRoot = buildSettleScreen({
+          scene: this,
+          layout: this.layout,
+          palette,
+          day: s.day,
+          before: s.before,
+          stats: s.stats,
+          outcome: s.outcome,
+          status: s.status,
+          onRetry: () => void this.submitDay(),
+          onUpgrades: () => this.click(() => this.show('upgrades')),
+          onNextDay: () => {
+            this.settlement = null;
+            void this.startDay();
+          },
+          onLogin: () => this.opts.session.requestLogin(),
+          onRetryTrial: () => this.click(() => this.retryTrial()),
+        });
+        break;
+      }
+      case 'day': {
+        const run = this.run;
+        if (!run) return this.show('shop');
+        run.view = new DayView(this, this.layout, palette, this.opts.sfx, run.sim, {
+          tap: (i) => this.tapMold(i),
+          pump: (on) => this.setPump(on),
+          sell: (seat, extra) => this.sell(seat, extra),
+          trash: () => void this.act(OP.trash, 0),
+          pause: () => this.pauseDay(),
+        });
+        break;
+      }
+    }
+  }
+
+  /** 버튼 소리를 내고 동작한다 */
+  private click(fn: () => void): void {
+    this.opts.sfx.unlock();
+    this.opts.sfx.click();
+    fn();
+  }
+
+  /** 정산을 마치고 가게로 */
+  private backToShop(): void {
+    this.settlement = null;
+    this.show('shop');
+  }
+
+  /** 체험을 처음부터 다시 */
+  private retryTrial(): void {
+    this.save = { version: 0, state: initialShopState() };
+    this.trialUsed = false;
+    this.settlement = null;
+    this.show('shop');
+  }
+
+  /** 화면 위쪽에 잠깐 뜨는 안내 */
+  private toast(message: string): void {
+    this.toastText?.destroy();
+    const { width } = this.scale;
+    const text = this.add.text(0, 0, message, textStyle(26, 0xffffff, '700')).setOrigin(0.5);
+    const bg = this.add.graphics();
+    const w = text.width + 56;
+    bg.fillStyle(0x1f1d1c, 0.92).fillRoundedRect(-w / 2, -32, w, 64, 32);
+    const box = this.add.container(width / 2, 150, [bg, text]).setDepth(200).setAlpha(0);
+    this.toastText = box;
+    this.tweens.add({ targets: box, alpha: 1, y: 130, duration: 200 });
+    this.tweens.add({ targets: box, alpha: 0, delay: 2200, duration: 300, onComplete: () => box.destroy() });
+  }
+
+  // ---------------------------------------------------------------- 하루
+
+  /** 장사 시작: 서버에서 하루를 열어 시드를 받는다 */
+  private async startDay(): Promise<void> {
+    if (this.starting) return;
+    this.click(() => undefined);
+    this.starting = true;
+    this.show('shop');
+    try {
+      const { seed } = await this.opts.session.startDay();
+      const sim = createDay(this.save.state, seed, true);
+      this.run = { seed, sim, inputs: [], elapsed: 0, paused: false, ended: false, view: null };
+      this.starting = false;
+      this.opts.onDayActive?.(true);
+      this.show('day');
+    } catch (err) {
+      console.warn('[fish-bun] 장사를 시작하지 못했다', err);
+      this.starting = false;
+      this.show('shop');
+      this.toast('장사를 시작하지 못했어요. 잠시 뒤 다시 해 주세요');
+    }
+  }
+
+  /** 입력을 지금 틱에 적용하고, 받아들여지면 기록한다 */
+  private act(op: number, arg: number): InputResult | null {
+    const run = this.activeRun();
+    if (!run || run.sim.closed || run.inputs.length >= MAX_INPUTS) return null;
+    const result = applyInput(run.sim, op, arg);
+    if (result.ok) run.inputs.push([run.sim.tick, op, arg]);
+    return result;
+  }
+
+  /** 빵틀 누름 */
+  private tapMold(index: number): boolean {
+    const result = this.act(OP.tap, index);
+    if (result && !result.ok && result.reason !== 'too_fast') this.run?.view?.deniedMold(index, result.reason);
+    return result?.ok ?? false;
+  }
+
+  /** 펌프 누름·뗌 */
+  private setPump(on: boolean): void {
+    const run = this.run;
+    if (!run || run.ended || run.sim.pumping === on) return;
+    this.act(OP.pump, on ? 1 : 0);
+  }
+
+  /** 판매 */
+  private sell(seat: number, extra: boolean): void {
+    const result = this.act(OP.sell, seat * 2 + (extra ? 1 : 0));
+    if (result && !result.ok) this.opts.sfx.deny();
+  }
+
+  /** 멈춤: 펌프를 놓고 시간을 멈춘다 */
+  private pauseDay(): void {
+    const run = this.run;
+    if (!run || run.ended || run.paused) return;
+    run.view?.releaseAll();
+    run.paused = true;
+    this.opts.sfx.setPumping(false);
+    this.opts.sfx.setSizzle(0);
+    this.showPause();
+  }
+
+  /** 멈춤 창 */
+  private showPause(): void {
+    this.pauseLayer?.destroy();
+    const { width, height } = this.scale;
+    const p = this.opts.palette;
+    const dim = this.add.rectangle(0, 0, width, height, 0x000000, 0.55).setOrigin(0).setInteractive();
+    const cw = Math.min(560, width - 80);
+    const card = this.add.graphics();
+    card.fillStyle(p.surface, 1).fillRoundedRect(width / 2 - cw / 2, height / 2 - 230, cw, 460, 28);
+    const title = this.add.text(width / 2, height / 2 - 160, '잠깐 쉬는 중', textStyle(40, p.textStrong, '900')).setOrigin(0.5);
+    const note = this.add
+      .text(width / 2, height / 2 - 92, '멈춘 동안은 시간이 흐르지 않아요.\n그만두면 오늘 장사는 저장되지 않아요.', {
+        ...textStyle(22, p.text2, '600'),
+        align: 'center',
+      })
+      .setOrigin(0.5);
+    const resume = new Button(this, { x: width / 2, y: height / 2 + 20, width: cw - 80, height: 96, label: '계속하기', style: 'primary', palette: p, fontSize: 32, onPress: () => this.resumeDay() });
+    const quit = new Button(this, { x: width / 2, y: height / 2 + 140, width: cw - 80, height: 84, label: '오늘 장사 그만두기', style: 'secondary', palette: p, fontSize: 26, onPress: () => this.quitDay() });
+    this.pauseLayer = this.add.container(0, 0, [dim, card, title, note, resume, quit]).setDepth(150);
+  }
+
+  /** 계속하기 */
+  private resumeDay(): void {
+    const run = this.run;
+    if (!run) return;
+    this.opts.sfx.unlock();
+    this.pauseLayer?.destroy();
+    this.pauseLayer = null;
+    run.paused = false;
+  }
+
+  /** 오늘 장사 그만두기: 그날은 저장하지 않고 가게로 (서버의 열린 판은 다음 시작이나 하루 뒤 정리된다) */
+  private quitDay(): void {
+    this.opts.sfx.click();
+    this.run?.view?.destroy();
+    this.run = null;
+    this.opts.onDayActive?.(false);
+    this.show('shop');
+  }
+
+  /** 마감: 정산을 계산하고 잠깐 "마감!"을 보여 준 뒤 정산 화면으로 넘어가 저장한다 */
+  private closeDay(run: DayRun): void {
+    run.ended = true;
+    run.view?.releaseAll();
+    this.opts.sfx.setPumping(false);
+    this.opts.sfx.setSizzle(0);
+    const outcome = settleDay(run.sim);
+    const trial = this.opts.session.mode === 'trial';
+    this.settlement = {
+      day: run.sim.base.day,
+      before: run.sim.base,
+      stats: run.sim.stats,
+      outcome,
+      status: trial ? { kind: 'trial' } : { kind: 'saving' },
+      result: { seed: run.seed, inputs: run.inputs, ticks: DAY_TICKS, score: outcome.score },
+    };
+    this.time.delayedCall(1300, () => {
+      if (this.run !== run) return;
+      run.view?.destroy();
+      run.view = null;
+      this.run = null;
+      this.show('settle');
+      void this.submitDay();
+    });
+  }
+
+  /** 끝낸 하루를 보낸다. 통과하면 서버가 준 새 저장으로 바꾼다 */
+  private async submitDay(): Promise<void> {
+    const s = this.settlement;
+    if (!s) return;
+    const trial = this.opts.session.mode === 'trial';
+    if (!trial) {
+      s.status = { kind: 'saving' };
+      if (this.screen === 'settle') this.show('settle');
+    }
+    try {
+      const response = await this.opts.session.finishDay(s.result);
+      if (response.accepted) {
+        if (response.save) this.save = response.save as SaveSnapshot<ShopState>;
+        else if (trial) this.save = { version: this.save.version, state: s.outcome.nextState };
+        s.status = trial ? { kind: 'trial' } : { kind: 'saved', rank: response.rank.today, best: response.best };
+      } else {
+        s.status = { kind: 'rejected', message: REJECT_TEXT[response.reason] ?? '이 날은 저장되지 않았어요.' };
+        try {
+          this.save = (await this.opts.session.load()) as SaveSnapshot<ShopState>;
+        } catch (err) {
+          console.warn('[fish-bun] 최신 저장을 받지 못했다', err);
+        }
+      }
+      if (trial) this.trialUsed = true;
+      if (s.status.kind === 'saved' && (s.status.best.allTime || s.status.best.today)) this.opts.sfx.fanfare();
+      this.opts.onDayActive?.(false);
+    } catch (err) {
+      console.warn('[fish-bun] 하루를 보내지 못했다', err);
+      s.status = { kind: 'failed' };
+    }
+    if (this.settlement === s && this.screen === 'settle') this.show('settle');
+  }
+
+  // ---------------------------------------------------------------- 가게 꾸리기
+
+  /** 강화를 산다. 서버가 규칙을 확인하고 새 저장을 준다 */
+  private async buy(key: UpgradeKey): Promise<void> {
+    if (this.buying) return;
+    this.opts.sfx.unlock();
+    this.buying = key;
+    this.show('upgrades');
+    try {
+      const result = await this.opts.session.act({ op: 'upgrade', key });
+      if (result.ok) {
+        this.save = result.save as SaveSnapshot<ShopState>;
+        this.opts.sfx.upgrade();
+      } else {
+        if (result.save) this.save = result.save as SaveSnapshot<ShopState>;
+        this.opts.sfx.deny();
+        this.toast(result.reason === 'conflict' ? '다른 곳에서 가게가 바뀌었어요' : (ACT_TEXT[result.reason] ?? '지금은 살 수 없어요'));
+      }
+    } catch (err) {
+      console.warn('[fish-bun] 강화를 사지 못했다', err);
+      this.toast('연결이 불안해요. 잠시 뒤 다시 해 주세요');
+    }
+    this.buying = null;
+    if (this.screen === 'upgrades') this.show('upgrades');
+  }
+}

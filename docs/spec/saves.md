@@ -1,7 +1,7 @@
 # 스펙: 성장형 게임 저장
 
 설계: [261021-04-game-save.md](../design/261021-04-game-save.md), 랭킹은 [261021-05-growth-ranking.md](../design/261021-05-growth-ranking.md).
-하루 단위로 저장하며 키우는 게임(`GameMeta.kind = 'growth'`)이 쓰는 저장·검증·셸 흐름. 지금 등록된 성장형 게임은 `fish-bun`(붕어빵 가게, 준비 중)이다.
+하루 단위로 저장하며 키우는 게임(`GameMeta.kind = 'growth'`)이 쓰는 저장·검증·셸 흐름. 지금 등록된 성장형 게임은 `fish-bun`(붕어빵 가게, [fish-bun.md](./fish-bun.md))이다.
 
 ## 원칙
 
@@ -28,7 +28,7 @@
 | `actionSchema`, `applyAction(state, action)` | 가게 행동 형식과 적용. 규칙에 안 맞으면 `{ ok: false, reason }` |
 | `dayOf(state)` | 몇 일째인지 (로비 카드) |
 
-- 서버의 로직 등록부는 `LogicRegistry`(`server/src/plays/logics.ts`). `createApp`·서비스에 바꿔 끼울 수 있고, 테스트는 성장형 자리에 시험용 가게 로직(`server/test/growth-fixture.ts`)을 끼운다.
+- 서버의 로직 등록부는 `LogicRegistry`(`server/src/plays/logics.ts`). `createApp`·서비스에 바꿔 끼울 수 있고, 서버 테스트는 `fish-bun` 자리에 단순한 시험용 가게 로직(`server/test/growth-fixture.ts`)을 끼워 저장 흐름만 확인한다(붕어빵 가게 규칙은 게임 패키지 테스트가 본다).
 - 재계산 자리 `ReplayRunner`에 `replayDay`가 있다(`server/src/plays/replay-runner.ts`).
 
 ## 표 (`db/007_game_saves.sql`)

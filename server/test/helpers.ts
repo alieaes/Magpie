@@ -11,7 +11,7 @@ import { findOrCreateUser, setNickname } from '../src/auth/users';
 import { loadConfig, loadEnvFile, type Config } from '../src/config';
 import { createDb } from '../src/db';
 import type { Database } from '../src/db/types';
-import { createLogicRegistry } from '../src/plays/logics';
+import { createLogicRegistry, type LogicRegistry } from '../src/plays/logics';
 import { createPlayService } from '../src/plays/service';
 import { createRankingService } from '../src/ranking/service';
 import { createSaveService } from '../src/saves/service';
@@ -78,8 +78,11 @@ export interface TestApp {
   del(path: string, body?: unknown, cookie?: string): Promise<Response>;
 }
 
-/** 되돌림 트랜잭션 안에서 시계를 TEST_T0로 고정한 앱을 만들어 테스트를 돌린다 */
-export function withTestApp(fn: (app: TestApp) => Promise<void>): Promise<void> {
+/**
+ * 되돌림 트랜잭션 안에서 시계를 TEST_T0로 고정한 앱을 만들어 테스트를 돌린다.
+ * logics를 주면 그 로직 등록부를 쓴다(기본은 성장형 자리에 시험용 가게 로직을 끼운 testLogics)
+ */
+export function withTestApp(fn: (app: TestApp) => Promise<void>, { logics = testLogics }: { logics?: LogicRegistry } = {}): Promise<void> {
   const config = devConfig!;
   const cookieName = cookieSettings(config.SITE_URL).session;
   const origin = new URL(config.SITE_URL).origin;
@@ -87,9 +90,9 @@ export function withTestApp(fn: (app: TestApp) => Promise<void>): Promise<void> 
     let clock = TEST_T0.getTime();
     const now = () => new Date(clock);
     const ranking = createRankingService(trx, now);
-    const plays = createPlayService(trx, { ranking, now, logics: testLogics });
-    const saves = createSaveService(trx, { logics: testLogics, now });
-    const app = createApp({ db: trx, config, ranking, logics: testLogics, plays, saves, oidc: null });
+    const plays = createPlayService(trx, { ranking, now, logics });
+    const saves = createSaveService(trx, { logics, now });
+    const app = createApp({ db: trx, config, ranking, logics, plays, saves, oidc: null });
     let seq = 0;
     /** 우리 사이트에서 온 것처럼(Origin) JSON 본문 요청을 보낸다 */
     const send = (method: string, path: string, body: unknown, cookie: string | undefined) =>

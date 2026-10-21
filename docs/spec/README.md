@@ -13,3 +13,4 @@
 | [main-page.md](./main-page.md) | 페이지 주소, 상단 바, 메인·랭킹 화면, 디자인 토큰 |
 | [apple-ten.md](./apple-ten.md) | 사과게임 규칙·로직, 시드 난수, 게임·플레이 화면, 셸과 게임의 약속 |
 | [lucky-scratch.md](./lucky-scratch.md) | 복권 긁기 규칙·당첨표·로직, 긁기·결과 연출·패널·소리 |
+| [fish-bun.md](./fish-bun.md) | 붕어빵 가게(성장형): 하루 장사 규칙·손님·판매·강화·입력 기록, 장사·정산·가게 꾸리기 화면 |

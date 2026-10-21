@@ -1,0 +1,919 @@
+// 장사 화면: 시계(HUD), 손님 카운터, 진열대, 빵틀, 펌프·화력, 콤보를 그리고 누름을 받는다.
+// 규칙 판정은 logic이 하고, 여기는 지금 상태(DaySim)를 그리고 사건(DayEvent)을 연출한다.
+// 근거: docs/design/261021-01-fish-bun.md §3~§5, docs/design/261021-02-fish-bun-customers.md §3-3
+
+import Phaser from 'phaser';
+import {
+  DAY_TICKS,
+  DONE_AT,
+  GOLD_WINDOW,
+  HEAT_MAX,
+  LAST_ARRIVAL_TICK,
+  cookSpeed,
+  gameMinute,
+  levelOf,
+  quoteSale,
+  type Customer,
+  type CustomerKind,
+  type DayEvent,
+  type DaySim,
+  type MoldPhase,
+  type Quality,
+} from '../logic/rules';
+import { BUN_SCALE, BUN_W, MOLD_H, MOLD_W, PERSON_H, SHELF_H, SHELF_W, TEX, type IconName } from './art';
+import { dayGeometry, inRect, moldCells, type DayGeometry, type Layout, type Rect } from './layout';
+import { pickLine, saleLineKey, type LineKey } from './lines';
+import type { Face } from './people';
+import type { Sfx } from './sound';
+import { Button, clockText, hex, mix, num, textStyle, won, type ScenePalette } from './ui';
+
+/** 장사 화면이 장면에 알리는 누름 */
+export interface DayHandlers {
+  /** 빵틀을 눌렀다. 입력이 받아들여졌으면 true */
+  tap(index: number): boolean;
+  pump(on: boolean): void;
+  sell(seat: number, extra: boolean): void;
+  trash(): void;
+  pause(): void;
+}
+
+/** 손님 성격 표시 아이콘 */
+const TRAIT_ICON: Partial<Record<CustomerKind, IconName>> = {
+  kid: 'plusOne',
+  office: 'clock',
+  elder: 'noBurnt',
+  creator: 'camera',
+  reviewer: 'star',
+};
+
+/** 거절 사유의 짧은 안내 */
+const DENY_TEXT: Record<string, string> = {
+  no_money: '반죽 살 돈이 모자라요',
+  shelf_full: '진열대가 가득 찼어요',
+  no_stock: '빵이 모자라요',
+};
+
+/** 손님 한 명의 모습 */
+interface CustomerView {
+  customer: Customer;
+  root: Phaser.GameObjects.Container;
+  person: Phaser.GameObjects.Image;
+  bubble: Phaser.GameObjects.Container;
+  count: Phaser.GameObjects.Text;
+  line: Phaser.GameObjects.Text;
+  patience: Phaser.GameObjects.Graphics;
+  give: Button;
+  extra: Button;
+  waitShown: boolean;
+  lineTimer: Phaser.Time.TimerEvent | null;
+}
+
+/** 빵틀 한 칸의 모습 */
+interface MoldView {
+  cell: Rect;
+  cx: number;
+  cy: number;
+  a: Phaser.GameObjects.Image;
+  b: Phaser.GameObjects.Image;
+  glow: Phaser.GameObjects.Image;
+  phase: MoldPhase;
+  puffAt: number;
+}
+
+/** 0~1로 자른다 */
+function clamp01(t: number): number {
+  return Math.min(1, Math.max(0, t));
+}
+
+export class DayView {
+  private readonly scene: Phaser.Scene;
+  private readonly palette: ScenePalette;
+  private readonly sfx: Sfx;
+  private readonly handlers: DayHandlers;
+  private readonly g: DayGeometry;
+  readonly root: Phaser.GameObjects.Container;
+  /** 카운터 층: 하늘·차양 → 손님 → 카운터 판 → 버튼·기다림 막대 */
+  private readonly backLayer: Phaser.GameObjects.Container;
+  private readonly peopleLayer: Phaser.GameObjects.Container;
+  private readonly boardLayer: Phaser.GameObjects.Container;
+  private readonly uiLayer: Phaser.GameObjects.Container;
+  private readonly fx: Phaser.GameObjects.Container;
+  private readonly seatX: number[];
+  private readonly boardTop: number;
+  private readonly personScale: number;
+  private readonly seats: (CustomerView | null)[] = [];
+  private readonly molds: MoldView[] = [];
+  private moldScale = 1;
+  private sky!: Phaser.GameObjects.Graphics;
+  private skyMinute = -1;
+  private clock!: Phaser.GameObjects.Text;
+  private dayLabel!: Phaser.GameObjects.Text;
+  private progress!: Phaser.GameObjects.Graphics;
+  private money!: Phaser.GameObjects.Text;
+  private shownMoney = -1;
+  private shelfIcons: Phaser.GameObjects.Image[] = [];
+  private shelfSlots!: Phaser.GameObjects.Graphics;
+  private shelfKey = '';
+  private trashButton!: Button;
+  private burner!: Phaser.GameObjects.Image;
+  private pumpHandle!: Phaser.GameObjects.Image;
+  private pumpTween: Phaser.Tweens.Tween | null = null;
+  private gauge!: Phaser.GameObjects.Graphics;
+  private heatText!: Phaser.GameObjects.Text;
+  private comboText!: Phaser.GameObjects.Text;
+  private shownCombo = 0;
+  private info: Phaser.GameObjects.Text | null = null;
+  private steam!: Phaser.GameObjects.Particles.ParticleEmitter;
+  private smoke!: Phaser.GameObjects.Particles.ParticleEmitter;
+  private sparkles!: Phaser.GameObjects.Particles.ParticleEmitter;
+  private frame = 0;
+  /** 쓸어 넘기기 중인 손가락과 그 동작 */
+  private swipe: { pointerId: number; phase: MoldPhase; visited: Set<number> } | null = null;
+  /** 펌프를 누르고 있는 손가락 */
+  private pumpPointer: number | null = null;
+  private wasPumping = false;
+  private closingShown = false;
+
+  constructor(scene: Phaser.Scene, layout: Layout, palette: ScenePalette, sfx: Sfx, sim: DaySim, handlers: DayHandlers) {
+    this.scene = scene;
+    this.palette = palette;
+    this.sfx = sfx;
+    this.handlers = handlers;
+    this.g = dayGeometry(layout);
+    this.root = scene.add.container(0, 0);
+    this.backLayer = scene.add.container(0, 0);
+    this.peopleLayer = scene.add.container(0, 0);
+    this.boardLayer = scene.add.container(0, 0);
+    this.uiLayer = scene.add.container(0, 0);
+    this.root.add([this.backLayer, this.peopleLayer, this.boardLayer, this.uiLayer]);
+    this.fx = scene.add.container(0, 0).setDepth(50);
+    const { counter } = this.g;
+    const seatW = counter.w / 3;
+    this.seatX = [0, 1, 2].map((i) => counter.x + seatW * (i + 0.5));
+    this.boardTop = counter.y + counter.h - 150;
+    this.personScale = layout === 'portrait' ? 0.95 : 1.1;
+
+    this.buildCounter(sim);
+    this.buildBoard();
+    this.buildHud(sim);
+    this.buildShelf();
+    this.buildGrill(sim);
+    this.buildPump();
+    this.buildParticles();
+    sim.seats.forEach((customer, seat) => {
+      this.seats[seat] = customer ? this.createCustomer(seat, customer, false) : null;
+    });
+    this.render(sim);
+  }
+
+  /** 화면을 정리한다 */
+  destroy(): void {
+    this.pumpTween?.stop();
+    for (const v of this.seats) v?.lineTimer?.remove();
+    this.root.destroy();
+    this.fx.destroy();
+    this.steam.destroy();
+    this.smoke.destroy();
+    this.sparkles.destroy();
+  }
+
+  // ---------------------------------------------------------------- 만들기
+
+  /** 시계·날짜·돈·멈춤 */
+  private buildHud(sim: DaySim): void {
+    const { hud } = this.g;
+    const p = this.palette;
+    const bg = this.scene.add.graphics();
+    bg.fillStyle(p.surface, 1).fillRect(hud.x, hud.y, hud.w, hud.h);
+    bg.lineStyle(2, p.border, 1).lineBetween(hud.x, hud.y + hud.h, hud.x + hud.w, hud.y + hud.h);
+    this.dayLabel = this.scene.add.text(24, hud.y + 34, `${num(sim.base.day)}일째`, textStyle(30, p.textStrong, '800')).setOrigin(0, 0.5);
+    this.clock = this.scene.add
+      .text(24 + this.dayLabel.width + 14, hud.y + 34, '', textStyle(26, p.text, '700'))
+      .setOrigin(0, 0.5);
+    const rep = this.scene.add
+      .text(0, hud.y + 34, `평판 Lv${levelOf(sim.base.reputation)}`, textStyle(22, p.text2, '700'))
+      .setOrigin(0, 0.5);
+    rep.setX(this.clock.x + 170);
+    this.progress = this.scene.add.graphics();
+    const coin = this.scene.add.image(hud.w - 250, hud.y + 34, TEX.coin).setScale(0.5);
+    this.money = this.scene.add.text(hud.w - 226, hud.y + 34, '', textStyle(30, p.textStrong, '800')).setOrigin(0, 0.5);
+    const pause = this.scene.add.image(hud.w - 46, hud.y + 36, TEX.icon('pause')).setScale(0.8).setInteractive({ useHandCursor: true });
+    pause.on(Phaser.Input.Events.POINTER_DOWN, () => this.handlers.pause());
+    this.root.add([bg, this.dayLabel, this.clock, rep, this.progress, coin, this.money, pause]);
+  }
+
+  /** 하늘·차양·카운터 판 */
+  private buildCounter(sim: DaySim): void {
+    const { counter } = this.g;
+    this.sky = this.scene.add.graphics();
+    const city = this.scene.add.graphics();
+    // 멀리 보이는 골목 건물
+    city.fillStyle(0x2c3550, 0.22);
+    const widths = [90, 70, 110, 80, 100, 60, 120, 90];
+    let x = counter.x - 10;
+    const right = counter.x + counter.w;
+    for (let i = 0; x < right; i += 1) {
+      const w = widths[i % widths.length]!;
+      const h = 120 + ((i * 53) % 110);
+      const left = Math.max(x, counter.x);
+      city.fillRect(left, this.boardTop - h, Math.min(x + w - 8, right) - left, h);
+      x += w;
+    }
+    city.fillStyle(0xffe9a8, 0.25);
+    for (let wx = counter.x + 20; wx < right - 14; wx += 46) {
+      for (let wy = this.boardTop - 100; wy < this.boardTop - 20; wy += 34) city.fillRect(wx, wy, 14, 16);
+    }
+    // 차양: 빨강·크림 줄무늬와 물결 끝
+    const awning = this.scene.add.graphics();
+    const stripe = 48;
+    for (let i = 0; i * stripe < counter.w; i += 1) {
+      awning.fillStyle(i % 2 === 0 ? 0xd9363e : 0xfff1dc, 1).fillRect(counter.x + i * stripe, counter.y, stripe, 40);
+      awning.fillCircle(counter.x + i * stripe + stripe / 2, counter.y + 40, stripe / 2);
+    }
+    awning.fillStyle(0x000000, 0.12).fillRect(counter.x, counter.y, counter.w, 6);
+    this.backLayer.add([this.sky, city, awning]);
+    this.renderSky(sim);
+  }
+
+  /** 카운터 판(손님 앞). 손님 그림보다 앞에 그린다 */
+  private buildBoard(): void {
+    const { counter } = this.g;
+    const board = this.scene.add.graphics();
+    const top = this.boardTop;
+    board.fillStyle(0x8a5a2b, 1).fillRect(counter.x, top, counter.w, counter.y + counter.h - top);
+    board.fillStyle(0xb57a3c, 1).fillRect(counter.x, top, counter.w, 18);
+    board.fillStyle(0x6b4220, 1).fillRect(counter.x, top + 18, counter.w, 6);
+    board.lineStyle(2, 0x6b4220, 0.5);
+    for (let y = top + 44; y < counter.y + counter.h; y += 30) board.lineBetween(counter.x, y, counter.x + counter.w, y);
+    this.boardLayer.add(board);
+  }
+
+  /** 진열대와 탄 빵 버리기 */
+  private buildShelf(): void {
+    const { shelf, trash } = this.g;
+    const tray = this.scene.add.graphics();
+    tray.fillStyle(0x6f7680, 1).fillRoundedRect(shelf.x, shelf.y, shelf.w, shelf.h, 18);
+    tray.fillStyle(0xc9ced6, 1).fillRoundedRect(shelf.x + 6, shelf.y + 6, shelf.w - 12, shelf.h - 12, 14);
+    tray.fillStyle(0xffffff, 0.35).fillRoundedRect(shelf.x + 12, shelf.y + 10, shelf.w - 24, 8, 4);
+    this.shelfSlots = this.scene.add.graphics();
+    this.root.add([tray, this.shelfSlots]);
+    this.trashButton = new Button(this.scene, {
+      x: trash.x + trash.w / 2,
+      y: trash.y + trash.h / 2,
+      width: trash.w,
+      height: trash.h,
+      label: '탄 빵',
+      sub: '버리기',
+      style: 'warm',
+      palette: this.palette,
+      fontSize: 24,
+      onPress: () => this.handlers.trash(),
+    });
+    this.root.add(this.trashButton);
+  }
+
+  /** 화구와 빵틀 */
+  private buildGrill(sim: DaySim): void {
+    const { grill } = this.g;
+    const plate = this.scene.add.graphics();
+    plate.fillStyle(0x2a2420, 1).fillRoundedRect(grill.x - 8, grill.y - 8, grill.w + 16, grill.h + 16, 26);
+    plate.fillStyle(0x3a322c, 1).fillRoundedRect(grill.x, grill.y, grill.w, grill.h, 20);
+    this.burner = this.scene.add
+      .image(grill.x + grill.w / 2, grill.y + grill.h * 0.7, TEX.glow)
+      .setDisplaySize(grill.w * 1.1, grill.h * 0.9)
+      .setTint(0xff6a1f)
+      .setBlendMode(Phaser.BlendModes.ADD);
+    this.root.add([plate, this.burner]);
+    const { cells, scale } = moldCells(grill, sim.molds.length, MOLD_W, MOLD_H);
+    this.moldScale = scale;
+    cells.forEach((cell) => {
+      const cx = cell.x + cell.w / 2;
+      const cy = cell.y + cell.h / 2;
+      const base = this.scene.add.image(cx, cy, TEX.mold).setScale(scale);
+      const glow = this.scene.add.image(cx, cy, TEX.glow).setScale((scale * MOLD_W) / 120).setVisible(false).setBlendMode(Phaser.BlendModes.ADD);
+      const bunScale = scale * BUN_SCALE;
+      const a = this.scene.add.image(cx, cy - 2 * scale, TEX.batter('raw')).setScale(bunScale).setVisible(false);
+      const b = this.scene.add.image(cx, cy - 2 * scale, TEX.batter('good')).setScale(bunScale).setVisible(false);
+      this.root.add([base, glow, a, b]);
+      this.molds.push({ cell, cx, cy, a, b, glow, phase: 'empty', puffAt: 0 });
+    });
+    // 지금 상태를 바로 맞춘다(배치를 바꿔 다시 그릴 때 등장 연출 없이)
+    sim.molds.forEach((m, i) => (this.molds[i]!.phase = m.phase));
+  }
+
+  /** 펌프·화력 계기·콤보·(가로) 오늘 기록 */
+  private buildPump(): void {
+    const { pump, gauge, combo, info } = this.g;
+    const p = this.palette;
+    const panel = this.scene.add.graphics();
+    for (const r of [pump, gauge, combo, ...(info ? [info] : [])]) {
+      panel.fillStyle(p.surface, 1).fillRoundedRect(r.x, r.y, r.w, r.h, 20);
+      panel.lineStyle(2, p.border, 1).strokeRoundedRect(r.x, r.y, r.w, r.h, 20);
+    }
+    const scale = Math.min(1, (pump.h - 40) / 200) * 0.95;
+    const px = pump.x + 54;
+    const py = pump.y + pump.h / 2 + 6;
+    const body = this.scene.add.image(px, py + 16 * scale, TEX.pumpBody).setScale(scale);
+    this.pumpHandle = this.scene.add.image(px, py - 92 * scale, TEX.pumpHandle).setScale(scale);
+    const label = this.scene.add.text(pump.x + 140, pump.y + pump.h / 2 - 16, '펌프', textStyle(28, p.textStrong, '800')).setOrigin(0.5);
+    const hint = this.scene.add.text(pump.x + 140, pump.y + pump.h / 2 + 20, '누르고\n있기', textStyle(18, p.text2, '600')).setOrigin(0.5).setAlign('center');
+    this.gauge = this.scene.add.graphics();
+    const flame = this.scene.add.image(gauge.x + 36, gauge.y + 40, TEX.icon('flame')).setScale(0.6);
+    this.heatText = this.scene.add.text(gauge.x + 64, gauge.y + 40, '', textStyle(22, p.textStrong, '800')).setOrigin(0, 0.5);
+    const comboLabel = this.scene.add.text(combo.x + combo.w / 2, combo.y + 30, '콤보', textStyle(20, p.text2, '700')).setOrigin(0.5);
+    this.comboText = this.scene.add.text(combo.x + combo.w / 2, combo.y + combo.h / 2 + 14, '0', textStyle(52, p.textStrong, '900')).setOrigin(0.5);
+    this.root.add([panel, body, this.pumpHandle, label, hint, this.gauge, flame, this.heatText, comboLabel, this.comboText]);
+    if (info) {
+      this.info = this.scene.add.text(info.x + 24, info.y + info.h / 2, '', textStyle(22, p.text, '600')).setOrigin(0, 0.5).setLineSpacing(8);
+      this.root.add(this.info);
+    }
+  }
+
+  /** 김·연기·반짝이 */
+  private buildParticles(): void {
+    this.steam = this.scene.add
+      .particles(0, 0, TEX.steam, {
+        lifespan: { min: 700, max: 1200 },
+        speedY: { min: -70, max: -40 },
+        speedX: { min: -12, max: 12 },
+        scale: { start: 0.35, end: 0.9 },
+        alpha: { start: 0.5, end: 0 },
+        emitting: false,
+      })
+      .setDepth(30);
+    this.smoke = this.scene.add
+      .particles(0, 0, TEX.smoke, {
+        lifespan: { min: 900, max: 1500 },
+        speedY: { min: -80, max: -50 },
+        speedX: { min: -16, max: 16 },
+        scale: { start: 0.4, end: 1.1 },
+        alpha: { start: 0.7, end: 0 },
+        emitting: false,
+      })
+      .setDepth(30);
+    this.sparkles = this.scene.add
+      .particles(0, 0, TEX.sparkle, {
+        lifespan: { min: 400, max: 800 },
+        speed: { min: 60, max: 220 },
+        scale: { start: 1, end: 0 },
+        alpha: { start: 1, end: 0 },
+        blendMode: Phaser.BlendModes.ADD,
+        emitting: false,
+      })
+      .setDepth(55);
+  }
+
+  // ---------------------------------------------------------------- 손님
+
+  /** 자리에 손님을 세운다. animate면 걸어 들어온다 */
+  private createCustomer(seat: number, customer: Customer, animate: boolean): CustomerView {
+    const x = this.seatX[seat]!;
+    const s = this.personScale;
+    const personY = this.boardTop + 40 - (PERSON_H * s) / 2;
+    const person = this.scene.add.image(0, personY, TEX.person(customer.kind, customer.id % 2, 'normal')).setScale(s);
+    const bubbleY = this.g.counter.y + 120;
+    const bubble = this.scene.add.container(0, bubbleY);
+    const bubbleBg = this.scene.add.graphics();
+    bubbleBg.fillStyle(0xffffff, 1).fillRoundedRect(-104, -50, 208, 100, 22);
+    bubbleBg.fillTriangle(-12, 48, 12, 48, 0, 64);
+    bubbleBg.lineStyle(3, 0x3a2a1a, 0.18).strokeRoundedRect(-104, -50, 208, 100, 22);
+    const trait = TRAIT_ICON[customer.kind];
+    const count = this.scene.add.text(trait ? 14 : 0, -18, `${customer.order}개`, textStyle(40, 0x3a2410, '900')).setOrigin(0.5);
+    const line = this.scene.add
+      .text(0, 26, pickLine(customer.kind, 'order', customer.order), { ...textStyle(19, 0x5a4636, '700'), align: 'center', wordWrap: { width: 196 } })
+      .setOrigin(0.5);
+    bubble.add([bubbleBg, count, line]);
+    if (trait) bubble.add(this.scene.add.image(-60, -18, TEX.icon(trait)).setScale(0.55));
+    const root = this.scene.add.container(x, 0, [person, bubble]);
+    this.peopleLayer.add(root);
+
+    const patience = this.scene.add.graphics();
+    const give = new Button(this.scene, {
+      x: x - 34,
+      y: this.boardTop + 96,
+      width: 140,
+      height: 72,
+      label: `${customer.order}개 주기`,
+      sub: '',
+      style: 'warm',
+      palette: this.palette,
+      fontSize: 24,
+      onPress: () => this.handlers.sell(seat, false),
+      onDenied: () => this.denied(x - 34, this.boardTop + 70, 'no_stock'),
+    });
+    const extra = new Button(this.scene, {
+      x: x + 72,
+      y: this.boardTop + 96,
+      width: 64,
+      height: 72,
+      label: '+1',
+      sub: '덤',
+      style: 'warm',
+      palette: this.palette,
+      fontSize: 26,
+      onPress: () => this.handlers.sell(seat, true),
+      onDenied: () => this.denied(x + 72, this.boardTop + 70, 'no_stock'),
+    });
+    this.uiLayer.add([patience, give, extra]);
+    const view: CustomerView = { customer, root, person, bubble, count, line, patience, give, extra, waitShown: false, lineTimer: null };
+    view.lineTimer = this.scene.time.delayedCall(2200, () => this.fadeLine(view));
+    if (animate) {
+      root.setX(x + (seat === 0 ? -260 : 260)).setAlpha(0);
+      this.scene.tweens.add({ targets: root, x, alpha: 1, duration: 360, ease: 'Cubic.easeOut' });
+      bubble.setScale(0.4);
+      this.scene.tweens.add({ targets: bubble, scale: 1, duration: 260, delay: 220, ease: 'Back.easeOut' });
+    }
+    return view;
+  }
+
+  /** 대사를 흐리게 지운다 */
+  private fadeLine(view: CustomerView): void {
+    view.lineTimer = null;
+    this.scene.tweens.add({ targets: view.line, alpha: 0, duration: 300 });
+  }
+
+  /** 대사를 바꿔 잠깐 보여 준다 */
+  private say(view: CustomerView, text: string, hold = 1600): void {
+    view.lineTimer?.remove();
+    this.scene.tweens.killTweensOf(view.line);
+    view.line.setText(text).setAlpha(1);
+    view.lineTimer = this.scene.time.delayedCall(hold, () => this.fadeLine(view));
+  }
+
+  /** 손님을 자리에서 내보낸다: 표정·대사를 보여 준 뒤 걸어 나간다 */
+  private dismiss(seat: number, face: Face, line: string | null, delay: number): void {
+    const view = this.seats[seat];
+    if (!view) return;
+    this.seats[seat] = null;
+    view.give.destroy();
+    view.extra.destroy();
+    view.patience.destroy();
+    view.person.setTexture(TEX.person(view.customer.kind, view.customer.id % 2, face));
+    if (line) {
+      view.count.setVisible(false);
+      view.lineTimer?.remove();
+      this.scene.tweens.killTweensOf(view.line);
+      view.line.setText(line).setAlpha(1).setY(0).setFontSize(22);
+    } else {
+      view.bubble.setVisible(false);
+    }
+    this.scene.tweens.add({
+      targets: view.root,
+      x: view.root.x + (seat === 2 ? 280 : -280),
+      alpha: 0,
+      delay,
+      duration: 420,
+      ease: 'Cubic.easeIn',
+      onComplete: () => view.root.destroy(),
+    });
+  }
+
+  // ---------------------------------------------------------------- 사건 연출
+
+  /** 로직이 남긴 사건을 연출한다 */
+  handleEvents(events: DayEvent[]): void {
+    for (const e of events) {
+      switch (e.type) {
+        case 'arrive':
+          this.seats[e.seat]?.root.destroy();
+          this.seats[e.seat] = this.createCustomer(e.seat, e.customer, true);
+          this.sfx.bell();
+          break;
+        case 'leave': {
+          if (e.reason === 'closing') {
+            this.dismiss(e.seat, 'normal', null, 0);
+            break;
+          }
+          const key: LineKey = e.reason === 'overtaken' ? 'overtaken' : 'leave';
+          this.dismiss(e.seat, 'angry', pickLine(e.customer.kind, key), 700);
+          this.sfx.angry();
+          this.floatText(this.seatX[e.seat]!, this.boardTop - 40, `평판 ${e.rep}`, 0xe5414a, 26);
+          break;
+        }
+        case 'sale':
+          this.onSale(e);
+          break;
+        case 'stage': {
+          const m = this.molds[e.mold];
+          if (!m) break;
+          if (e.stage === 'burnt') {
+            this.sfx.burn();
+            this.smoke.explode(4, m.cx, m.cy - 10);
+          } else if (e.stage === 'good') {
+            this.steam.explode(3, m.cx, m.cy - 10);
+            this.scene.tweens.add({ targets: [m.a, m.b], scaleX: m.a.scaleX * 1.06, scaleY: m.a.scaleY * 1.06, duration: 120, yoyo: true });
+          }
+          break;
+        }
+        case 'shine': {
+          const m = this.molds[e.mold];
+          if (!m) break;
+          this.sfx.shine();
+          this.sparkles.explode(10, m.cx, m.cy);
+          break;
+        }
+        case 'closed':
+          this.showClosing();
+          break;
+      }
+    }
+  }
+
+  /** 판매 연출: 빵이 손님에게 날아가고, 표정·대사·받은 돈·콤보 */
+  private onSale(e: Extract<DayEvent, { type: 'sale' }>): void {
+    const x = this.seatX[e.seat]!;
+    const view = this.seats[e.seat];
+    // 진열대 앞쪽에서 손님에게 빵이 날아간다
+    e.given.forEach((q, i) => {
+      const from = this.shelfIcons[i];
+      const icon = this.scene.add.image(from?.x ?? this.g.shelf.x + 40, from?.y ?? this.g.shelf.y + 50, TEX.shelf(q)).setScale(from?.scale ?? 1);
+      this.fx.add(icon);
+      this.scene.tweens.add({
+        targets: icon,
+        x: x + (i - (e.given.length - 1) / 2) * 24,
+        y: this.boardTop - 10,
+        scale: 1.1,
+        duration: 320,
+        delay: i * 40,
+        ease: 'Cubic.easeOut',
+        onComplete: () => this.scene.tweens.add({ targets: icon, alpha: 0, duration: 200, onComplete: () => icon.destroy() }),
+      });
+    });
+    const face: Face = e.result === 'best' || e.result === 'good' ? 'happy' : e.result === 'bad' ? 'angry' : 'normal';
+    const line = pickLine(e.customer.kind, saleLineKey(e.customer.kind, e.result, e.given, e.extra), e.customer.order);
+    if (view) this.dismiss(e.seat, face, line, 900);
+    const total = e.paid + e.tip + e.bonus;
+    this.floatText(x, this.boardTop - 70, `+${won(total)}`, 0xf2b632, 34);
+    if (e.result === 'bad') this.sfx.angry();
+    else this.sfx.sale(e.combo);
+    if (e.combo >= 1) {
+      this.floatText(x, this.boardTop - 120, `콤보 ${e.combo}!`, 0xff8a3d, 30, 120);
+    }
+    if (e.result === 'best') this.sparkles.explode(12, x, this.boardTop - 120);
+    if (e.rep !== 0) this.floatText(x, this.boardTop - 20, `평판 ${e.rep > 0 ? '+' : ''}${e.rep}`, e.rep > 0 ? 0x2e9e5b : 0xe5414a, 22, 200);
+  }
+
+  /** 마감 알림 */
+  private showClosing(): void {
+    if (this.closingShown) return;
+    this.closingShown = true;
+    const { width, height } = this.scene.scale;
+    const text = this.scene.add.text(width / 2, height / 2, '마감!', textStyle(96, 0xffffff, '900')).setOrigin(0.5).setStroke('#3a2410', 12).setScale(0.3);
+    this.fx.add(text);
+    this.scene.tweens.add({ targets: text, scale: 1, duration: 360, ease: 'Back.easeOut' });
+    this.sfx.fanfare();
+  }
+
+  /** 떠오르며 사라지는 글자 */
+  private floatText(x: number, y: number, text: string, color: number, size: number, delay = 0): void {
+    const t = this.scene.add.text(x, y, text, textStyle(size, color, '900')).setOrigin(0.5).setStroke('#ffffff', 6).setAlpha(0);
+    this.fx.add(t);
+    this.scene.tweens.add({ targets: t, y: y - 60, alpha: { from: 1, to: 0 }, delay, duration: 1100, ease: 'Cubic.easeOut', onComplete: () => t.destroy() });
+  }
+
+  /** 안 되는 동작의 안내 */
+  denied(x: number, y: number, reason: string): void {
+    const text = DENY_TEXT[reason];
+    if (!text) return;
+    this.sfx.deny();
+    this.floatText(x, y, text, 0xe5414a, 24);
+  }
+
+  /** 빵틀에서 안 되는 동작: 칸이 흔들리고 안내 */
+  deniedMold(index: number, reason: string): void {
+    const m = this.molds[index];
+    if (!m) return;
+    this.scene.tweens.add({ targets: [m.a, m.b], x: m.cx + 6, duration: 50, yoyo: true, repeat: 2 });
+    this.denied(m.cx, m.cy - 40, reason);
+  }
+
+  // ---------------------------------------------------------------- 그리기
+
+  /** 지금 상태를 그린다 (매 프레임) */
+  render(sim: DaySim): void {
+    this.frame += 1;
+    this.renderHud(sim);
+    this.renderSky(sim);
+    this.renderMolds(sim);
+    this.renderShelf(sim);
+    this.renderCustomers(sim);
+    this.renderPump(sim);
+  }
+
+  /** 시계·진행 막대·돈 */
+  private renderHud(sim: DaySim): void {
+    const { hud } = this.g;
+    const minute = gameMinute(Math.min(sim.tick, DAY_TICKS - 1));
+    // 마감 30초 전부터는 시계와 진행 막대가 주황색이 된다 (새 손님이 오지 않는다)
+    const closing = sim.tick >= LAST_ARRIVAL_TICK;
+    const clock = clockText(minute);
+    if (this.clock.text !== clock) this.clock.setText(clock).setColor(hex(closing ? 0xe0731f : this.palette.text));
+    const g = this.progress.clear();
+    const x = 24;
+    const w = hud.w - 48;
+    g.fillStyle(this.palette.surfaceHover, 1).fillRoundedRect(x, hud.y + 70, w, 12, 6);
+    g.fillStyle(closing ? 0xe0731f : this.palette.accent, 1).fillRoundedRect(x, hud.y + 70, Math.max(12, (w * sim.tick) / DAY_TICKS), 12, 6);
+    if (sim.money !== this.shownMoney) {
+      this.shownMoney = sim.money;
+      this.money.setText(won(sim.money));
+    }
+    if (this.info) {
+      const s = sim.stats;
+      const served = s.served.best + s.served.good + s.served.meh + s.served.bad;
+      this.info.setText(`오늘 매출 ${won(s.revenue)}   재료비 ${won(s.doughCost)}\n손님 ${served}명 · 떠난 손님 ${s.left}명 · 황금 ${s.golden}개`);
+    }
+  }
+
+  /** 시간에 따라 하늘색이 바뀐다: 아침 → 한낮 → 노을 → 밤 */
+  private renderSky(sim: DaySim): void {
+    const minute = gameMinute(Math.min(sim.tick, DAY_TICKS - 1));
+    if (minute === this.skyMinute) return;
+    this.skyMinute = minute;
+    const keys: [number, number, number][] = [
+      [10 * 60, 0x9fd8ff, 0xe6f6ff],
+      [14 * 60, 0x6fbff5, 0xd2efff],
+      [17 * 60 + 30, 0xff9a5c, 0xffd9a0],
+      [19 * 60 + 30, 0x5a4a8a, 0xf08a6a],
+      [22 * 60, 0x1b2348, 0x3a3f74],
+    ];
+    let top = keys[0]![1];
+    let bottom = keys[0]![2];
+    for (let i = 0; i < keys.length - 1; i += 1) {
+      const [m1, t1, b1] = keys[i]!;
+      const [m2, t2, b2] = keys[i + 1]!;
+      if (minute >= m1 && minute <= m2) {
+        const t = (minute - m1) / (m2 - m1);
+        top = mix(t1, t2, t);
+        bottom = mix(b1, b2, t);
+      }
+    }
+    const { counter } = this.g;
+    this.sky.clear().fillGradientStyle(top, top, bottom, bottom, 1).fillRect(counter.x, counter.y, counter.w, this.boardTop - counter.y + 20);
+  }
+
+  /** 빵틀: 익힘에 따라 두 그림을 섞어 색이 서서히 바뀐다 */
+  private renderMolds(sim: DaySim): void {
+    const params = sim.params;
+    sim.molds.forEach((m, i) => {
+      const v = this.molds[i];
+      if (!v) return;
+      if (m.phase !== v.phase) this.onPhaseChange(v, v.phase, m.phase, sim);
+      v.phase = m.phase;
+      if (m.phase === 'empty') {
+        v.a.setVisible(false);
+        v.b.setVisible(false);
+        v.glow.setVisible(false);
+        return;
+      }
+      let aKey: string;
+      let bKey: string | null = null;
+      let mixT = 0;
+      let shining = false;
+      let puff: 'steam' | 'smoke' | null = null;
+      if (m.phase === 'bottom') {
+        if (m.bottom < DONE_AT) {
+          aKey = TEX.batter('raw');
+          bKey = TEX.batter('good');
+          mixT = m.bottom / DONE_AT;
+        } else if (m.bottom < params.burnAt) {
+          aKey = TEX.batter('good');
+          bKey = TEX.batter('burnt');
+          mixT = clamp01((m.bottom - DONE_AT) / (params.burnAt - DONE_AT)) ** 2;
+          puff = 'steam';
+        } else {
+          aKey = TEX.batter('burnt');
+          puff = 'smoke';
+        }
+      } else if (m.candidate) {
+        // 황금 후보: 모양만 다르고 색은 보통 빵처럼 익다가, 반짝이는 동안에만 금색이 된다(미리 꺼내지 않게)
+        const limit = DONE_AT + GOLD_WINDOW;
+        if (m.top < DONE_AT) {
+          aKey = TEX.candidate('raw');
+          bKey = TEX.candidate('good');
+          mixT = m.top / DONE_AT;
+        } else if (m.top < limit) {
+          aKey = TEX.fish('golden');
+          shining = true;
+        } else {
+          aKey = TEX.candidate('burnt');
+          puff = 'smoke';
+        }
+      } else {
+        const burnAt = params.burnAt;
+        if (m.top < DONE_AT) {
+          aKey = TEX.fish('raw');
+          bKey = TEX.fish('good');
+          mixT = m.top / DONE_AT;
+        } else if (m.top < burnAt) {
+          aKey = TEX.fish('good');
+          bKey = TEX.fish('burnt');
+          mixT = clamp01((m.top - DONE_AT) / (burnAt - DONE_AT)) ** 2;
+          puff = 'steam';
+        } else {
+          aKey = TEX.fish('burnt');
+          puff = 'smoke';
+        }
+      }
+      if (v.a.texture.key !== aKey) v.a.setTexture(aKey);
+      v.a.setVisible(true);
+      if (bKey) {
+        if (v.b.texture.key !== bKey) v.b.setTexture(bKey);
+        v.b.setVisible(true).setAlpha(mixT);
+      } else v.b.setVisible(false);
+      v.glow.setVisible(shining);
+      if (shining) v.glow.setAlpha(0.55 + 0.35 * Math.abs(((this.frame % 30) - 15) / 15));
+      if (puff && this.frame >= v.puffAt) {
+        v.puffAt = this.frame + (puff === 'smoke' ? 10 : 22);
+        (puff === 'smoke' ? this.smoke : this.steam).explode(1, v.cx + (Math.random() - 0.5) * 60 * this.moldScale, v.cy - 20 * this.moldScale);
+      }
+    });
+  }
+
+  /** 빵틀 단계가 바뀔 때의 짧은 연출 (붓기·뒤집기·꺼내기) */
+  private onPhaseChange(v: MoldView, from: MoldPhase, to: MoldPhase, sim: DaySim): void {
+    const scale = this.moldScale * BUN_SCALE;
+    if (from === 'empty' && to === 'bottom') {
+      this.sfx.pour();
+      v.a.setScale(scale * 0.3);
+      this.scene.tweens.add({ targets: v.a, scale, duration: 200, ease: 'Back.easeOut' });
+    } else if (from === 'bottom' && to === 'top') {
+      this.sfx.flip();
+      for (const img of [v.a, v.b]) {
+        img.setScale(scale, 0);
+        this.scene.tweens.add({ targets: img, scaleY: scale, duration: 160, ease: 'Cubic.easeOut' });
+      }
+    } else if (from === 'top' && to === 'empty') {
+      const q = sim.shelf.at(-1) ?? 'good';
+      this.sfx.take(q === 'golden');
+      const fly = this.scene.add.image(v.cx, v.cy, TEX.fish(q === 'golden' ? 'golden' : q)).setScale(scale);
+      this.fx.add(fly);
+      const target = this.shelfSlot(sim.shelf.length - 1, sim.params.shelfCap);
+      this.scene.tweens.add({
+        targets: fly,
+        x: target.x,
+        y: target.y,
+        scale: target.scale * (SHELF_W / BUN_W) * 1.2,
+        duration: 260,
+        ease: 'Cubic.easeIn',
+        onComplete: () => fly.destroy(),
+      });
+      if (q === 'golden') this.sparkles.explode(14, v.cx, v.cy);
+    }
+  }
+
+  /** 진열대 칸의 위치와 아이콘 크기 */
+  private shelfSlot(index: number, capacity: number): { x: number; y: number; scale: number } {
+    const { shelf } = this.g;
+    const rows = capacity <= 12 ? 1 : 2;
+    const perRow = Math.ceil(capacity / rows);
+    const slotW = (shelf.w - 32) / perRow;
+    const slotH = (shelf.h - 20) / rows;
+    const scale = Math.min((slotW * 0.96) / SHELF_W, (slotH * 0.9) / SHELF_H, 1.2);
+    const r = Math.floor(index / perRow);
+    const c = index % perRow;
+    return { x: shelf.x + 16 + slotW * (c + 0.5), y: shelf.y + 10 + slotH * (r + 0.5), scale };
+  }
+
+  /** 진열대: 바뀌었을 때만 아이콘을 다시 놓는다. 왼쪽이 먼저 나가는 빵 */
+  private renderShelf(sim: DaySim): void {
+    const cap = sim.params.shelfCap;
+    const key = `${cap}|${sim.shelf.join(',')}`;
+    if (key === this.shelfKey) return;
+    this.shelfKey = key;
+    for (const icon of this.shelfIcons) icon.destroy();
+    this.shelfIcons = [];
+    const g = this.shelfSlots.clear();
+    for (let i = 0; i < cap; i += 1) {
+      const s = this.shelfSlot(i, cap);
+      g.fillStyle(0x9aa1ab, 0.35).fillEllipse(s.x, s.y + 4, SHELF_W * s.scale * 0.8, SHELF_H * s.scale * 0.5);
+    }
+    sim.shelf.forEach((q, i) => {
+      const s = this.shelfSlot(i, cap);
+      const icon = this.scene.add.image(s.x, s.y, TEX.shelf(q)).setScale(s.scale);
+      this.root.add(icon);
+      this.shelfIcons.push(icon);
+    });
+    this.trashButton.setEnabled(sim.shelf.includes('burnt'));
+  }
+
+  /** 손님: 기다림 막대, 버튼 상태, 오래 기다리면 대사 */
+  private renderCustomers(sim: DaySim): void {
+    sim.seats.forEach((customer, seat) => {
+      const view = this.seats[seat];
+      if (!customer || !view) return;
+      const left = 1 - customer.waited / customer.patience;
+      const x = this.seatX[seat]!;
+      const w = 172;
+      const color = left > 0.5 ? 0x3fbf6f : left > 0.25 ? 0xf2b632 : 0xe5414a;
+      view.patience
+        .clear()
+        .fillStyle(0x3a2410, 0.45)
+        .fillRoundedRect(x - w / 2, this.boardTop + 34, w, 14, 7)
+        .fillStyle(color, 1)
+        .fillRoundedRect(x - w / 2, this.boardTop + 34, Math.max(10, w * left), 14, 7);
+      if (!view.waitShown && left < 0.3) {
+        view.waitShown = true;
+        this.say(view, pickLine(customer.kind, 'wait'));
+      }
+      const enough = sim.shelf.length >= customer.order;
+      view.give.setEnabled(enough);
+      view.extra.setEnabled(sim.shelf.length >= customer.order + 1);
+      if (enough) {
+        const q = quoteSale(sim, customer, false);
+        view.give.setText(`${customer.order}개 주기`, won(q.paid + q.tip + q.bonus));
+      } else view.give.setText(`${customer.order}개 주기`, `빵 ${customer.order - sim.shelf.length}개 부족`);
+      view.extra.setPulse(customer.kind === 'kid' && view.extra.isEnabled());
+    });
+  }
+
+  /** 펌프 손잡이·화구 불빛·화력 계기·콤보 */
+  private renderPump(sim: DaySim): void {
+    if (sim.pumping !== this.wasPumping) {
+      this.wasPumping = sim.pumping;
+      this.sfx.setPumping(sim.pumping);
+      this.pumpTween?.stop();
+      this.pumpTween = null;
+      const base = this.pumpHandle.getData('y0') ?? this.pumpHandle.y;
+      this.pumpHandle.setData('y0', base);
+      this.pumpHandle.setY(base);
+      if (sim.pumping) {
+        this.pumpTween = this.scene.tweens.add({ targets: this.pumpHandle, y: base + 40 * this.pumpHandle.scale, duration: 170, yoyo: true, repeat: -1 });
+      }
+    }
+    const heat = sim.heat / HEAT_MAX;
+    this.burner.setAlpha(0.18 + 0.6 * heat);
+    const { gauge } = this.g;
+    const x = gauge.x + 24;
+    const w = gauge.w - 48;
+    const y = gauge.y + gauge.h - 52;
+    const color = heat < 0.3 ? 0x5aa5e8 : heat < 0.7 ? 0xf2a03d : 0xe5414a;
+    this.gauge
+      .clear()
+      .fillStyle(this.palette.surfaceHover, 1)
+      .fillRoundedRect(x, y, w, 26, 13)
+      .fillStyle(color, 1)
+      .fillRoundedRect(x, y, Math.max(26, w * heat), 26, 13);
+    const speed = cookSpeed(sim.heat) / 100;
+    const label = `화력 ${Math.round(heat * 100)}% · 굽는 속도 ×${speed.toFixed(1)}`;
+    if (this.heatText.text !== label) this.heatText.setText(label);
+    this.sfx.setSizzle(sim.molds.filter((m) => m.phase !== 'empty').length);
+    if (sim.combo !== this.shownCombo) {
+      this.shownCombo = sim.combo;
+      this.comboText.setText(String(sim.combo)).setColor(hex(sim.combo > 0 ? 0xff8a3d : this.palette.textStrong));
+      if (sim.combo > 0) this.scene.tweens.add({ targets: this.comboText, scale: { from: 1.4, to: 1 }, duration: 260, ease: 'Back.easeOut' });
+    }
+  }
+
+  // ---------------------------------------------------------------- 누름
+
+  /** 빵틀 칸 찾기: 칸 사이 틈은 가까운 칸으로 친다 */
+  private moldAt(x: number, y: number): number {
+    return this.molds.findIndex((m) => inRect({ x: m.cell.x - 7, y: m.cell.y - 7, w: m.cell.w + 14, h: m.cell.h + 14 }, x, y));
+  }
+
+  /** 누름 시작. 다른 버튼 위를 누른 것이면 over에 그 버튼이 있다 */
+  pointerDown(p: Phaser.Input.Pointer, over: Phaser.GameObjects.GameObject[], sim: DaySim): void {
+    if (over.length > 0) return;
+    if (inRect(this.g.pump, p.x, p.y)) {
+      if (this.pumpPointer === null) {
+        this.pumpPointer = p.id;
+        this.handlers.pump(true);
+      }
+      return;
+    }
+    const i = this.moldAt(p.x, p.y);
+    if (i < 0) return;
+    const phase = sim.molds[i]!.phase;
+    this.swipe = { pointerId: p.id, phase, visited: new Set([i]) };
+    this.handlers.tap(i);
+  }
+
+  /** 쓸어 넘기기: 처음 누른 칸과 같은 동작이 가능한 칸에만 한다 */
+  pointerMove(p: Phaser.Input.Pointer, sim: DaySim): void {
+    const s = this.swipe;
+    if (!s || s.pointerId !== p.id || !p.isDown) return;
+    const i = this.moldAt(p.x, p.y);
+    if (i < 0 || s.visited.has(i)) return;
+    if (sim.molds[i]!.phase !== s.phase) return;
+    s.visited.add(i);
+    this.handlers.tap(i);
+  }
+
+  /** 누름 끝: 펌프를 누르던 손가락이면 펌프를 뗀다 */
+  pointerUp(p: Phaser.Input.Pointer): void {
+    if (this.swipe?.pointerId === p.id) this.swipe = null;
+    if (this.pumpPointer === p.id) {
+      this.pumpPointer = null;
+      this.handlers.pump(false);
+    }
+  }
+
+  /** 펌프를 놓은 것으로 친다 (멈춤·화면 가림) */
+  releaseAll(): void {
+    this.swipe = null;
+    if (this.pumpPointer !== null) {
+      this.pumpPointer = null;
+      this.handlers.pump(false);
+    }
+  }
+}

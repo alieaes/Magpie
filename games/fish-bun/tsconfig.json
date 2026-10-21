@@ -1,0 +1,9 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // scene은 브라우저(Phaser)에서 돈다. logic은 브라우저·Node 어느 쪽 API도 쓰지 않는다
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": []
+  },
+  "include": ["src", "test"]
+}

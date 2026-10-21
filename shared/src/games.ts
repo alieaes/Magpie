@@ -66,7 +66,7 @@ const GAME_DEFS = [
     orientation: 'portrait',
     scoreUnit: '원',
     sort: 'desc',
-    status: 'coming-soon',
+    status: 'playable',
     kind: 'growth',
     scoreLabel: '하루 수익',
     rankingNote: '하루 장사로 가장 많이 번 날의 수익이에요.',

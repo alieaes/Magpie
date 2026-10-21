@@ -8,6 +8,7 @@ import type { AnyGameModule } from '@magpie/shared/game-module';
 const LOADERS: Partial<Record<GameId, () => Promise<{ default: AnyGameModule }>>> = {
   'apple-ten': () => import('@magpie/game-apple-ten'),
   'lucky-scratch': () => import('@magpie/game-lucky-scratch'),
+  'fish-bun': () => import('@magpie/game-fish-bun'),
 };
 
 /** 이 게임의 코드가 등록돼 있는지 */

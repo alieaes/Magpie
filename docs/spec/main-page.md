@@ -8,7 +8,7 @@
 |---|---|
 | `/` | 메인 |
 | `/ranking?target=&period=` | 랭킹. 쿼리가 없거나 모르는 값이면 총합·일간 |
-| `/play/:gameId` | 게임 화면. 사과게임([apple-ten.md](./apple-ten.md)), 복권 긁기([lucky-scratch.md](./lucky-scratch.md)). 플레이 페이지 공통은 apple-ten.md. 성장형 게임은 [saves.md](./saves.md)의 셸 흐름 |
+| `/play/:gameId` | 게임 화면. 사과게임([apple-ten.md](./apple-ten.md)), 복권 긁기([lucky-scratch.md](./lucky-scratch.md)), 붕어빵 가게([fish-bun.md](./fish-bun.md)). 플레이 페이지 공통은 apple-ten.md. 성장형 게임은 [saves.md](./saves.md)의 셸 흐름 |
 | 그 외 | "페이지를 찾을 수 없어요" |
 
 ## 상단 바
@@ -52,5 +52,5 @@
 - 액센트 청록 `#0e7c86` / `#4fb8be`. 액센트는 활성 메뉴·탭, 1~3위 숫자, 내 순위 강조, 로고에만 쓴다.
 - 글꼴 Pretendard Variable(직접 호스팅, 동적 서브셋). 점수 숫자는 고정폭 숫자.
 - 모서리: 버튼·입력 8px, 카드·패널 12px. 아이콘 Phosphor Bold.
-- 게임 그림 바탕(흐린 파스텔): `--tint-red`(사과게임), `--tint-purple`(복권 긁기), `--tint-green`·`--tint-blue`·`--tint-yellow`·`--tint-teal`(준비 중 게임).
+- 게임 그림 바탕(흐린 파스텔): `--tint-red`(사과게임), `--tint-purple`(복권 긁기), `--tint-orange`(붕어빵 가게), `--tint-green`·`--tint-blue`·`--tint-yellow`·`--tint-teal`(준비 중 게임).
 - 카드·패널이 차례로 떠오르는 효과(600ms). 움직임 줄이기 설정이면 끈다.

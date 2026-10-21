@@ -23,6 +23,9 @@ importers:
       '@magpie/game-apple-ten':
         specifier: workspace:*
         version: link:../games/apple-ten
+      '@magpie/game-fish-bun':
+        specifier: workspace:*
+        version: link:../games/fish-bun
       '@magpie/game-lucky-scratch':
         specifier: workspace:*
         version: link:../games/lucky-scratch
@@ -76,6 +79,18 @@ importers:
         specifier: ^4.6.5
         version: 4.6.5
 
+  games/fish-bun:
+    dependencies:
+      '@magpie/shared':
+        specifier: workspace:*
+        version: link:../../shared
+      phaser:
+        specifier: ^4.2.1
+        version: 4.2.1
+      zod:
+        specifier: ^4.6.5
+        version: 4.6.5
+
   games/lucky-scratch:
     dependencies:
       '@magpie/shared':
@@ -99,6 +114,9 @@ importers:
       '@magpie/game-apple-ten':
         specifier: workspace:*
         version: link:../games/apple-ten
+      '@magpie/game-fish-bun':
+        specifier: workspace:*
+        version: link:../games/fish-bun
       '@magpie/game-lucky-scratch':
         specifier: workspace:*
         version: link:../games/lucky-scratch

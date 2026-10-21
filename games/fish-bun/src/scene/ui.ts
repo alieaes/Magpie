@@ -1,0 +1,208 @@
+// 게임 안 공통 UI: 셸 색(팔레트), 버튼, 글자 모양, 숫자 형식.
+// 버튼은 누르는 순간(pointerdown) 바로 동작하고 눌린 모양이 된다(반응이 느리지 않게, 복권 긁기 §3-7과 같은 원칙).
+
+import Phaser from 'phaser';
+
+export const FONT = '"Pretendard Variable", Pretendard, sans-serif';
+
+/** 셸의 CSS 변수에서 읽어 오는 색 (라이트·다크에 따라 다르다) */
+export interface ScenePalette {
+  bg: number;
+  surface: number;
+  surfaceHover: number;
+  border: number;
+  text: number;
+  textStrong: number;
+  text2: number;
+  accent: number;
+  buttonBg: number;
+  buttonText: number;
+  /** 다크 모드인지 */
+  dark: boolean;
+}
+
+/** 색 숫자를 CSS 색 문자열로 */
+export function hex(color: number): string {
+  return `#${color.toString(16).padStart(6, '0')}`;
+}
+
+/** 두 색을 섞는다. t = 0이면 a, 1이면 b */
+export function mix(a: number, b: number, t: number): number {
+  const ch = (shift: number) => Math.round(((a >> shift) & 0xff) * (1 - t) + ((b >> shift) & 0xff) * t);
+  return (ch(16) << 16) | (ch(8) << 8) | ch(0);
+}
+
+const numberFormat = new Intl.NumberFormat('ko-KR');
+
+/** 금액 "12,340원" */
+export function won(n: number): string {
+  return `${numberFormat.format(n)}원`;
+}
+
+/** 숫자에 쉼표 */
+export function num(n: number): string {
+  return numberFormat.format(n);
+}
+
+/** 게임 시계 분(자정부터)을 "오후 2:40"으로 */
+export function clockText(minute: number): string {
+  const h = Math.floor(minute / 60);
+  const m = minute % 60;
+  const half = h < 12 ? '오전' : '오후';
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${half} ${h12}:${String(m).padStart(2, '0')}`;
+}
+
+/** 글자 모양 */
+export function textStyle(size: number, color: number, weight = '700'): Phaser.Types.GameObjects.Text.TextStyle {
+  return { fontFamily: FONT, fontSize: `${size}px`, fontStyle: weight, color: hex(color) };
+}
+
+export type ButtonStyle = 'primary' | 'secondary' | 'warm' | 'ghost';
+
+export interface ButtonOptions {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  label: string;
+  sub?: string;
+  style: ButtonStyle;
+  palette: ScenePalette;
+  /** 큰 글자 크기 */
+  fontSize?: number;
+  /** 모서리 반지름 */
+  radius?: number;
+  onPress(): void;
+  /** 꺼진 버튼을 눌렀을 때 */
+  onDenied?(): void;
+}
+
+/** 가게 그림 위에 놓는 따뜻한 색 버튼(판매·덤)의 색 */
+const WARM = { fill: 0xffe3a3, hover: 0xffd57a, stroke: 0xc9852b, text: 0x5a3410, sub: 0x8a5a26 } as const;
+
+export class Button extends Phaser.GameObjects.Container {
+  private readonly opts: ButtonOptions;
+  private readonly bg: Phaser.GameObjects.Graphics;
+  private readonly label: Phaser.GameObjects.Text;
+  private readonly sub: Phaser.GameObjects.Text | null;
+  private enabled = true;
+  private hovered = false;
+  private pulseTween: Phaser.Tweens.Tween | null = null;
+
+  constructor(scene: Phaser.Scene, opts: ButtonOptions) {
+    super(scene, opts.x, opts.y);
+    this.opts = opts;
+    const { width, height } = opts;
+    const size = opts.fontSize ?? 28;
+    this.bg = scene.add.graphics();
+    this.label = scene.add.text(0, opts.sub ? -height * 0.14 : 0, opts.label, textStyle(size, this.textColor(), '800')).setOrigin(0.5);
+    this.sub = opts.sub
+      ? scene.add.text(0, height * 0.22, opts.sub, textStyle(Math.round(size * 0.62), this.subColor(), '600')).setOrigin(0.5)
+      : null;
+    this.add([this.bg, this.label, ...(this.sub ? [this.sub] : [])]);
+    this.setSize(width, height);
+    this.setInteractive({ useHandCursor: true });
+    this.on(Phaser.Input.Events.POINTER_OVER, () => {
+      this.hovered = true;
+      this.draw();
+    });
+    this.on(Phaser.Input.Events.POINTER_OUT, () => {
+      this.hovered = false;
+      this.setScale(1);
+      this.draw();
+    });
+    this.on(Phaser.Input.Events.POINTER_DOWN, () => this.press());
+    this.on(Phaser.Input.Events.POINTER_UP, () => this.setScale(1));
+    this.draw();
+    scene.add.existing(this);
+  }
+
+  /** 큰 글자 색 */
+  private textColor(): number {
+    const { style, palette } = this.opts;
+    if (style === 'primary') return palette.buttonText;
+    if (style === 'warm') return WARM.text;
+    return palette.textStrong;
+  }
+
+  /** 작은 글자 색 */
+  private subColor(): number {
+    const { style, palette } = this.opts;
+    if (style === 'primary') return palette.buttonText;
+    if (style === 'warm') return WARM.sub;
+    return palette.text2;
+  }
+
+  /** 바탕을 다시 그린다 */
+  private draw(): void {
+    const { width, height, style, palette } = this.opts;
+    const g = this.bg.clear();
+    const r = this.opts.radius ?? Math.min(20, height / 2);
+    let fill: number;
+    let stroke: number | null = null;
+    if (style === 'primary') fill = this.hovered ? mix(palette.buttonBg, palette.accent, 0.25) : palette.buttonBg;
+    else if (style === 'warm') {
+      fill = this.hovered ? WARM.hover : WARM.fill;
+      stroke = WARM.stroke;
+    } else if (style === 'ghost') {
+      fill = this.hovered ? palette.surfaceHover : palette.surface;
+    } else {
+      fill = this.hovered ? palette.surfaceHover : palette.surface;
+      stroke = palette.border;
+    }
+    if (style === 'warm') g.fillStyle(0x7a4a18, 0.35).fillRoundedRect(-width / 2, -height / 2 + 5, width, height, r);
+    g.fillStyle(fill, 1).fillRoundedRect(-width / 2, -height / 2, width, height, r);
+    if (stroke !== null) g.lineStyle(3, stroke, 1).strokeRoundedRect(-width / 2, -height / 2, width, height, r);
+    this.setAlpha(this.enabled ? 1 : 0.4);
+  }
+
+  /** 누름: 바로 눌린 모양 + 동작 */
+  private press(): void {
+    this.setScale(0.95);
+    if (!this.enabled) {
+      this.opts.onDenied?.();
+      return;
+    }
+    this.opts.onPress();
+  }
+
+  /** 켜기·끄기 */
+  setEnabled(enabled: boolean): this {
+    if (this.enabled === enabled) return this;
+    this.enabled = enabled;
+    if (this.input) this.input.cursor = enabled ? 'pointer' : 'default';
+    if (!enabled) this.setPulse(false);
+    this.draw();
+    return this;
+  }
+
+  /** 켜져 있는지 */
+  isEnabled(): boolean {
+    return this.enabled;
+  }
+
+  /** 글자를 바꾼다. 같으면 다시 그리지 않는다 */
+  setText(label: string, sub?: string): this {
+    if (this.label.text !== label) this.label.setText(label);
+    if (sub !== undefined && this.sub && this.sub.text !== sub) this.sub.setText(sub);
+    return this;
+  }
+
+  /** 눈길을 끌도록 살짝 커졌다 작아지기를 반복한다 */
+  setPulse(on: boolean): this {
+    if (on && !this.pulseTween) {
+      this.pulseTween = this.scene.tweens.add({ targets: this, scale: 1.05, duration: 520, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    } else if (!on && this.pulseTween) {
+      this.pulseTween.stop();
+      this.pulseTween = null;
+      this.setScale(1);
+    }
+    return this;
+  }
+
+  override destroy(fromScene?: boolean): void {
+    this.pulseTween?.stop();
+    super.destroy(fromScene);
+  }
+}

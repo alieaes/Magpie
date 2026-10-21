@@ -3,6 +3,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { FinishPlayResponse, GameSummary, RankingResponse, SaveSnapshot, StartPlayResponse } from '@magpie/shared';
+import { defaultLogics } from '../src/plays/logics';
 import { TEST_DAY_TICKS, upgradeCost, type TestShopInput, type TestShopState } from './growth-fixture';
 import { GROWTH_TEST_GAME, canRunDb, playAppleGreedy, withTestApp, type TestApp, type TestUser } from './helpers';
 
@@ -177,6 +178,33 @@ describe.skipIf(!canRunDb)('성장형 저장 (개발 DB)', () => {
       expect(growth.participants).toBe(1);
       expect(growth.entries[0]?.score).toBe(7);
     });
+  });
+
+  it('실제 붕어빵 가게 로직: 저장 → 하루 검증 → 다음 날 저장, 강화 규칙', async () => {
+    await withTestApp(
+      async (ctx) => {
+        const user = await ctx.login();
+        const first = (await (await ctx.get(`/api/saves/${GAME}`, user.cookie)).json()) as SaveSnapshot<{ day: number; money: number }>;
+        expect(first).toMatchObject({ version: 1, state: { v: 1, day: 1, money: 1000, reputation: 0 } });
+
+        // 빵틀 하나에 붓기만 하고 끝낸 하루: 재료비 50원, 하루 수익 −50원 → 점수 0
+        const play = await startDay(ctx, user);
+        ctx.advance(180_500);
+        const res = await ctx.post(`/api/plays/${play.playId}/finish`, { inputs: [[30, 0, 0]], ticks: 10_800, score: 0 }, user.cookie);
+        const body = (await res.json()) as FinishPlayResponse;
+        expect(body).toMatchObject({ accepted: true, score: 0, save: { version: 2, state: { day: 2, money: 950 } } });
+
+        // 빵틀 길들이기 1,500원: 돈이 모자라다
+        const action = await ctx.post(`/api/saves/${GAME}/actions`, { version: 2, action: { op: 'upgrade', key: 'seasoning' } }, user.cookie);
+        expect(action.status).toBe(400);
+        expect(await action.json()).toMatchObject({ reason: 'no_money' });
+        // 없는 강화는 형식 오류
+        const bad = await ctx.post(`/api/saves/${GAME}/actions`, { version: 2, action: { op: 'upgrade', key: 'rocket' } }, user.cookie);
+        expect(bad.status).toBe(400);
+        expect(await bad.json()).toMatchObject({ error: { code: 'BAD_REQUEST' } });
+      },
+      { logics: defaultLogics },
+    );
   });
 
   it('탈퇴하면 저장과 가게 행동 기록도 지운다', async () => {
