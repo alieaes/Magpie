@@ -6,8 +6,9 @@ import { drawTicket, luckyScratchLogic, type LotteryInput } from '@magpie/game-l
 import type { FinishPlayRequest } from '@magpie/shared';
 import { isTimePlausible, judgePlay } from '../src/plays/judge';
 import { isRecordable } from '../src/plays/logics';
-import { inlineReplayRunner } from '../src/plays/replay-runner';
-import { playAppleGreedy } from './helpers';
+import { createInlineRunner, inlineReplayRunner } from '../src/plays/replay-runner';
+import { testShopLogic, type TestShopState } from './growth-fixture';
+import { GROWTH_TEST_GAME, playAppleGreedy, testLogics } from './helpers';
 
 const START = new Date('2026-10-08T00:00:00Z');
 
@@ -67,6 +68,44 @@ describe('judgePlay', () => {
   it('다른 시드의 판에 기록을 붙이면 통과하지 못한다', async () => {
     const result = await judge('other-seed', { inputs, ticks, score });
     expect(result.accepted).toBe(false);
+  });
+});
+
+describe('isTimePlausible: 일시정지가 있는 게임(성장형)', () => {
+  it('실제 시간이 길어도 통과하고, 게임 시간이 실제 시간 + 5초를 넘으면 거절', () => {
+    expect(isTimePlausible(600, 10_800, START, after(3600), true)).toBe(true);
+    expect(isTimePlausible(600, 10_800, START, after(5), true)).toBe(true);
+    expect(isTimePlausible(600, 10_800, START, after(4.9), true)).toBe(false);
+    expect(isTimePlausible(10_801, 10_800, START, after(3600), true)).toBe(false);
+  });
+});
+
+describe('judgePlay: 성장형', () => {
+  const state = testShopLogic.initialState();
+  const inputs = [
+    { t: 60, earn: 3 },
+    { t: 120, earn: 4 },
+  ];
+  /** 시험용 가게 로직으로 하루를 검사한다 */
+  function judgeDay(score: number, dayState: TestShopState = state) {
+    return judgePlay({
+      gameId: GROWTH_TEST_GAME,
+      logic: testShopLogic,
+      seed: 'day-seed',
+      startedAt: START,
+      finishedAt: after(600),
+      submission: { inputs, ticks: 120, score },
+      runner: createInlineRunner(testLogics),
+      state: dayState,
+    });
+  }
+
+  it('통과하면 다음 날 저장 상태를 같이 준다', async () => {
+    expect(await judgeDay(7)).toEqual({ accepted: true, score: 7, nextState: { v: 1, day: 2, money: 7, level: 0 } });
+  });
+
+  it('그날 아침 상태로 다시 돌린다: 강화 단계가 다르면 점수가 달라 mismatch', async () => {
+    expect(await judgeDay(7, { ...state, level: 1 })).toEqual({ accepted: false, reason: 'mismatch' });
   });
 });
 

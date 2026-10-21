@@ -17,7 +17,8 @@
 
 ## 게임 로직 규격 (`shared/src/game-logic.ts`)
 
-게임 패키지의 `logic`이 `GameLogic`을 내놓고, 서버는 `server/src/plays/logics.ts`에 등록한다.
+게임 패키지의 `logic`이 `GameLogic`(미니게임) 또는 `GrowthLogic`(성장형, [saves.md](./saves.md))을 내놓고, 서버는 `server/src/plays/logics.ts`의 등록부(`LogicRegistry`)에 등록한다.
+성장형 게임의 판은 하루이고, 아래 검사에 저장 버전 확인과 일시정지를 허용하는 시간 검사가 더해진다([saves.md](./saves.md) "하루 검증").
 
 | 항목 | 내용 |
 |---|---|
@@ -47,7 +48,7 @@
 
 | 표 | 내용 |
 |---|---|
-| `plays` | `status`, `reject_reason`(`bad_input` / `time` / `mismatch` / `abandoned` / `admin`(관리자가 지움, [admin.md](./admin.md))), `score`(통과한 판만, 서버 점수), `client_score`(보낸 점수), `ended_at`(끝 요청 시각. 버려진 판은 NULL) |
+| `plays` | `status`, `reject_reason`(`bad_input` / `time` / `mismatch` / `abandoned` / `admin`(관리자가 지움, [admin.md](./admin.md)) / `stale_save`(성장형: 판을 연 뒤 저장이 바뀜)), `score`(통과한 판만, 서버 점수), `client_score`(보낸 점수), `ended_at`(끝 요청 시각. 버려진 판은 NULL), `save_version`(성장형만, 판을 연 때의 저장 버전) |
 | `play_replays` | 보낸 `inputs`의 JSON을 gzip. 거절된 판도 남긴다 |
 | `best_daily`, `best_alltime` | 통과한 판이 더 좋을 때만 갱신. 동점이면 먼저 달성한 기록을 둔다. 일간의 날짜는 끝 요청 시각의 KST 날짜 |
 
@@ -60,8 +61,8 @@
 
 | 요청 | 본문 | 응답 |
 |---|---|---|
-| `POST /api/plays` | `{ "gameId" }` | `200 { playId, seed }`. 비로그인 `401 UNAUTHORIZED`, 닉네임 전 `403 NICKNAME_REQUIRED`, 없는·기록할 수 없는 게임 `400 BAD_REQUEST`, 유저당 분당 20회 초과 `429 TOO_MANY_REQUESTS` |
-| `POST /api/plays/:id/finish` | `{ inputs: [], ticks, score }` | `200 { accepted: true, score, best: { today, allTime }, rank: { today } }` 또는 `200 { accepted: false, reason }` |
+| `POST /api/plays` | `{ "gameId" }` | `200 { playId, seed }`(성장형은 `saveVersion` 추가). 비로그인 `401 UNAUTHORIZED`, 닉네임 전 `403 NICKNAME_REQUIRED`, 없는·기록할 수 없는 게임 `400 BAD_REQUEST`, 유저당 분당 20회 초과 `429 TOO_MANY_REQUESTS` |
+| `POST /api/plays/:id/finish` | `{ inputs: [], ticks, score }` | `200 { accepted: true, score, best: { today, allTime }, rank: { today } }`(성장형은 새 저장 `save` 추가) 또는 `200 { accepted: false, reason }` |
 
 `finish`의 오류(판을 건드리지 않는다):
 

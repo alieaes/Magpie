@@ -1,7 +1,9 @@
 // 서버 테스트 공용 도구. DB 통합 테스트는 개발 DB(-dev)에 붙어 트랜잭션 안에서 돌리고 항상 되돌린다.
 
 import type { Kysely } from 'kysely';
-import { COLS, ROWS, createBoard, rectSum, trySelect, type AppleInput, type CellRect } from '@magpie/game-apple-ten/logic';
+import { COLS, ROWS, appleTenLogic, createBoard, rectSum, trySelect, type AppleInput, type CellRect } from '@magpie/game-apple-ten/logic';
+import { luckyScratchLogic } from '@magpie/game-lucky-scratch/logic';
+import { findGame } from '@magpie/shared';
 import { createApp } from '../src/app';
 import { cookieSettings } from '../src/auth/cookies';
 import { createSession } from '../src/auth/session';
@@ -9,8 +11,11 @@ import { findOrCreateUser, setNickname } from '../src/auth/users';
 import { loadConfig, loadEnvFile, type Config } from '../src/config';
 import { createDb } from '../src/db';
 import type { Database } from '../src/db/types';
+import { createLogicRegistry } from '../src/plays/logics';
 import { createPlayService } from '../src/plays/service';
 import { createRankingService } from '../src/ranking/service';
+import { createSaveService } from '../src/saves/service';
+import { testShopLogic } from './growth-fixture';
 
 loadEnvFile();
 
@@ -46,6 +51,15 @@ export async function inRollback(fn: (trx: Kysely<Database>) => Promise<void>): 
 /** 테스트 앱의 시계 시작점. 실제 데이터의 오늘 랭킹과 겹치지 않는 날이다 (KST 2000-01-02 12:00) */
 export const TEST_T0 = new Date('2000-01-02T03:00:00Z');
 
+/** 성장형 시험에 쓰는 게임 id. 게임 목록의 성장형 게임 자리에 시험용 로직을 끼운다 */
+export const GROWTH_TEST_GAME = 'fish-bun';
+
+/** 테스트 앱의 로직 등록부: 실제 미니게임 로직 + 성장형 자리에 시험용 가게 로직(준비 중이어도 기록할 수 있게) */
+export const testLogics = createLogicRegistry(
+  { 'apple-ten': appleTenLogic, 'lucky-scratch': luckyScratchLogic, [GROWTH_TEST_GAME]: testShopLogic },
+  (gameId) => gameId === GROWTH_TEST_GAME || findGame(gameId)?.status === 'playable',
+);
+
 /** 테스트 유저: 번호와 세션 쿠키 헤더 값 */
 export interface TestUser {
   id: number;
@@ -73,8 +87,9 @@ export function withTestApp(fn: (app: TestApp) => Promise<void>): Promise<void> 
     let clock = TEST_T0.getTime();
     const now = () => new Date(clock);
     const ranking = createRankingService(trx, now);
-    const plays = createPlayService(trx, { ranking, now });
-    const app = createApp({ db: trx, config, ranking, plays, oidc: null });
+    const plays = createPlayService(trx, { ranking, now, logics: testLogics });
+    const saves = createSaveService(trx, { logics: testLogics, now });
+    const app = createApp({ db: trx, config, ranking, logics: testLogics, plays, saves, oidc: null });
     let seq = 0;
     /** 우리 사이트에서 온 것처럼(Origin) JSON 본문 요청을 보낸다 */
     const send = (method: string, path: string, body: unknown, cookie: string | undefined) =>

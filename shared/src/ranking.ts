@@ -48,6 +48,8 @@ export interface GameSummary {
   todayTop: { nickname: string; score: number } | null;
   myTodayBest: number | null;
   myAllTimeBest: number | null;
+  /** 성장형 게임만, 로그인했고 저장이 있을 때. 저장이 몇 일째인지 */
+  progress?: { day: number };
 }
 
 /**

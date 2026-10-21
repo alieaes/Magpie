@@ -1,9 +1,10 @@
 // 랭킹 SQL. 규칙: docs/design/261006-06-ranking.md
 //  - 게임별: 최고 기록 정렬, 동점이면 먼저 달성한 사람이 위 (ROW_NUMBER로 순위가 겹치지 않는다)
-//  - 총합: 게임별 순위를 환산점(1위 1000점, 1000 × (N − 순위 + 1) / N)으로 바꿔 유저별로 더한다
+//  - 총합: 게임별 순위를 환산점(1위 1000점, 1000 × (N − 순위 + 1) / N)으로 바꿔 유저별로 더한다.
+//    성장형 게임은 총합에서 뺀다 (docs/design/261021-05-growth-ranking.md)
 
 import { sql, type Kysely, type RawBuilder } from 'kysely';
-import { GAMES, TOTAL_POINTS_PER_GAME, type GameMeta, type RankingPeriod } from '@magpie/shared';
+import { GAMES, TOTAL_POINTS_PER_GAME, isGrowthGame, type GameMeta, type RankingPeriod } from '@magpie/shared';
 import type { Database } from '../db/types';
 
 /** 순위가 매겨진 한 줄. 캐시에는 전체 순위를 통째로 둔다 */
@@ -64,7 +65,7 @@ export async function rankTotal(
                                 ORDER BY ${sortKey()} ASC, b.achieved_at ASC, b.user_id ASC) AS rnk,
              COUNT(*) OVER (PARTITION BY b.game_id) AS n
         FROM ${table} b
-       WHERE ${where}
+       WHERE ${where} AND ${totalGamesOnly()}
     ), totals AS (
       SELECT user_id,
              CAST(SUM(ROUND(${TOTAL_POINTS_PER_GAME} * (n - rnk + 1) / n)) AS SIGNED) AS total,
@@ -87,6 +88,13 @@ function sortKey(): RawBuilder<unknown> {
   const ascIds = GAMES.filter((g) => g.sort === 'asc').map((g) => g.id);
   if (ascIds.length === 0) return sql`-b.score`;
   return sql`(CASE WHEN b.game_id IN (${sql.join(ascIds)}) THEN b.score ELSE -b.score END)`;
+}
+
+/** 총합에 들어가는 게임만 남기는 조건. 성장형 게임은 플레이 시간이 쌓일수록 점수가 올라 총합에서 뺀다 */
+function totalGamesOnly(): RawBuilder<unknown> {
+  const growthIds = GAMES.filter(isGrowthGame).map((g) => g.id);
+  if (growthIds.length === 0) return sql`1 = 1`;
+  return sql`b.game_id NOT IN (${sql.join(growthIds)})`;
 }
 
 /** DB 드라이버가 준 값을 숫자로 맞춘다 (BIGINT가 문자열로 올 때를 대비) */

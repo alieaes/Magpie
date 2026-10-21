@@ -25,12 +25,14 @@ export interface SessionsTable {
 /** 판 검증 상태 */
 export type PlayStatus = 'pending' | 'accepted' | 'rejected';
 
-/** 003_plays.sql, 005_plays_reason.sql */
+/** 003_plays.sql, 005_plays_reason.sql, 007_game_saves.sql */
 export interface PlaysTable {
   id: Generated<number>;
   user_id: number;
   game_id: string;
   seed: string;
+  /** 성장형만. 판을 연 때의 저장 버전 */
+  save_version: ColumnType<number | null, number | null | undefined, number | null>;
   score: number | null;
   /** 클라이언트가 보낸 점수 (분석용) */
   client_score: ColumnType<number | null, number | null | undefined, number | null>;
@@ -81,6 +83,28 @@ export interface AdminActionsTable {
   detail: ColumnType<unknown, string | null, string | null>;
 }
 
+/** 007_game_saves.sql. 성장형 게임 저장 */
+export interface GameSavesTable {
+  user_id: number;
+  game_id: string;
+  version: number;
+  /** 넣을 때는 JSON 문자열. 읽으면 문자열(MariaDB JSON = LONGTEXT)이거나 드라이버가 푼 객체 */
+  data: ColumnType<unknown, string, string>;
+  created_at: Date;
+  updated_at: Date;
+}
+
+/** 007_game_saves.sql. 가게 행동 기록 (분석·복구용) */
+export interface SaveActionsTable {
+  id: Generated<number>;
+  user_id: number;
+  game_id: string;
+  /** 적용 전 저장 버전 */
+  version: number;
+  action: ColumnType<unknown, string, string>;
+  created_at: Date;
+}
+
 export interface Database {
   users: UsersTable;
   sessions: SessionsTable;
@@ -89,4 +113,6 @@ export interface Database {
   best_daily: BestDailyTable;
   best_alltime: BestAlltimeTable;
   admin_actions: AdminActionsTable;
+  game_saves: GameSavesTable;
+  save_actions: SaveActionsTable;
 }

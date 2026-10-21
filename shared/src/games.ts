@@ -7,6 +7,12 @@ export type ScoreSort = 'desc' | 'asc';
 /** 로비 카드 상태. coming-soon이면 카드가 흐리게 보이고 누를 수 없다 */
 export type GameStatus = 'playable' | 'coming-soon';
 
+/**
+ * 게임 종류. minigame = 한 판으로 끝나는 게임, growth = 하루 단위로 저장하며 키우는 성장형.
+ * 근거: docs/design/261021-04-game-save.md
+ */
+export type GameKind = 'minigame' | 'growth';
+
 /** 로비·랭킹·점수 제출이 같이 보는 게임 정보 */
 export interface GameMeta {
   id: string;
@@ -20,6 +26,10 @@ export interface GameMeta {
   howTo?: string;
   /** 플레이 중 상단에 보여줄 점수 이름. 없으면 "점수" */
   scoreLabel?: string;
+  /** 없으면 미니게임 */
+  kind?: GameKind;
+  /** 랭킹에서 이 게임 탭을 고르면 보여줄 설명 한 줄 */
+  rankingNote?: string;
 }
 
 /**
@@ -48,6 +58,18 @@ const GAME_DEFS = [
     howTo:
       '복권 10장으로 시작해요. 같은 그림 3개가 나오면 당첨! 당첨금으로 복권을 더 사거나, 원할 때 정산하면 소지금이 기록돼요. 제한 시간은 5분이고, 정산할 때 긁지 않은 복권은 무효예요.',
     scoreLabel: '소지금',
+  },
+  {
+    id: 'fish-bun',
+    name: '붕어빵 가게',
+    tagline: '붕어빵을 구워 팔고 가게를 키워라',
+    orientation: 'portrait',
+    scoreUnit: '원',
+    sort: 'desc',
+    status: 'coming-soon',
+    kind: 'growth',
+    scoreLabel: '하루 수익',
+    rankingNote: '하루 장사로 가장 많이 번 날의 수익이에요.',
   },
   {
     id: 'fruit-merge',
@@ -107,4 +129,9 @@ export function isGameId(id: string): id is GameId {
 /** id로 게임 정보를 찾는다. 없으면 undefined */
 export function findGame(id: string): Game | undefined {
   return GAME_BY_ID.get(id);
+}
+
+/** 성장형 게임인지 (하루 단위 저장, 총합 랭킹에서 빠진다) */
+export function isGrowthGame(game: GameMeta): boolean {
+  return game.kind === 'growth';
 }

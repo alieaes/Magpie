@@ -39,6 +39,10 @@ const unit = computed(() => props.game.scoreUnit);
           <dd v-if="summary?.todayTop" class="num">{{ formatNumber(summary.todayTop.score) }}{{ unit }}</dd>
           <dd v-else class="empty">첫 기록에 도전</dd>
         </div>
+        <div v-if="loggedIn && summary?.progress" class="stat">
+          <dt>내 가게</dt>
+          <dd class="num">{{ formatNumber(summary.progress.day) }}일째</dd>
+        </div>
         <div v-if="loggedIn" class="stat">
           <dt>내 최고</dt>
           <dd v-if="summary?.myAllTimeBest != null" class="num">{{ formatNumber(summary.myAllTimeBest) }}{{ unit }}</dd>

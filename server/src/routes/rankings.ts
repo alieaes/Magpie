@@ -5,6 +5,7 @@ import { RANKING_MAX_LIMIT, isGameId, type RankingTarget } from '@magpie/shared'
 import type { AppEnv } from '../app-env';
 import { jsonError } from '../lib/errors';
 import type { RankingService } from '../ranking/service';
+import type { SaveService } from '../saves/service';
 
 const RankingQuery = z.object({
   target: z
@@ -17,7 +18,7 @@ const RankingQuery = z.object({
 });
 
 /** 랭킹 조회 API: GET /api/rankings, GET /api/games/summary */
-export function rankingRoutes(ranking: RankingService) {
+export function rankingRoutes(ranking: RankingService, saves: SaveService) {
   return new Hono<AppEnv>()
     .get(
       '/rankings',
@@ -36,6 +37,17 @@ export function rankingRoutes(ranking: RankingService) {
     )
     .get('/games/summary', async (c) => {
       const userId = c.get('user')?.id ?? null;
-      return c.json(await ranking.getGamesSummary(userId), 200);
+      const [summaries, days] = await Promise.all([
+        ranking.getGamesSummary(userId),
+        userId === null ? Promise.resolve(new Map<string, number>()) : saves.progress(userId),
+      ]);
+      // 성장형 게임은 저장이 몇 일째인지 같이 준다
+      return c.json(
+        summaries.map((s) => {
+          const day = days.get(s.gameId);
+          return day === undefined ? s : { ...s, progress: { day } };
+        }),
+        200,
+      );
     });
 }

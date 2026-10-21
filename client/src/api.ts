@@ -10,6 +10,7 @@ import type {
   RankingPeriod,
   RankingResponse,
   RankingTarget,
+  SaveSnapshot,
   StartPlayResponse,
 } from '@magpie/shared';
 
@@ -82,6 +83,31 @@ export async function finishPlay(playId: number, body: FinishPlayRequest): Promi
   const res = await client.api.plays[':id'].finish.$post({ param: { id: String(playId) }, json: body });
   if (!res.ok) throw await toApiError(res);
   return res.json();
+}
+
+/** 성장형 게임 저장을 불러온다. 처음이면 서버가 시작 상태로 만들어 준다 */
+export async function fetchSave(gameId: GameId): Promise<SaveSnapshot> {
+  const res = await client.api.saves[':gameId'].$get({ param: { gameId } });
+  if (!res.ok) throw await toApiError(res);
+  return res.json();
+}
+
+/** 가게 행동의 결과. reason이 'conflict'면 다른 곳에서 저장이 바뀐 것이고 save에 최신 저장이 온다 */
+export type SaveActionOutcome = { ok: true; save: SaveSnapshot } | { ok: false; reason: string; save?: SaveSnapshot };
+
+/** 가게 행동(강화 구매 등)을 보낸다. 저장 충돌·규칙 위반은 결과로 돌려주고, 그 밖의 실패는 ApiError */
+export async function sendSaveAction(gameId: GameId, version: number, action: unknown): Promise<SaveActionOutcome> {
+  const res = await client.api.saves[':gameId'].actions.$post({ param: { gameId }, json: { version, action } });
+  if (res.ok) return { ok: true, save: await res.json() };
+  let body: { error?: { code?: string; message?: string }; reason?: string; save?: SaveSnapshot } = {};
+  try {
+    body = (await res.json()) as typeof body;
+  } catch {
+    // 본문이 JSON이 아니면 아래에서 상태 코드로만 오류를 만든다
+  }
+  if (body.error?.code === 'SAVE_CONFLICT' && body.save) return { ok: false, reason: 'conflict', save: body.save };
+  if (body.error?.code === 'ACTION_REJECTED' && body.reason) return { ok: false, reason: body.reason };
+  throw new ApiError(res.status, body.error?.code, body.error?.message);
 }
 
 /** 탈퇴한다. confirm은 닉네임(닉네임 전이면 "탈퇴"). 다르면 ApiError(문구 포함) */

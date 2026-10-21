@@ -6,5 +6,6 @@ export * from './nickname';
 export * from './plays';
 export * from './random';
 export * from './ranking';
+export * from './saves';
 export * from './tick';
 export * from './time';

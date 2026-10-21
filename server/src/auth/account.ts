@@ -11,7 +11,7 @@ import type { Database } from '../db/types';
 const CHUNK = 500;
 
 /**
- * 유저를 지운다. 한 트랜잭션에서 최고 기록, 판과 입력 기록, 세션, 유저 줄을 지운다.
+ * 유저를 지운다. 한 트랜잭션에서 최고 기록, 판과 입력 기록, 성장형 게임 저장과 가게 행동 기록, 세션, 유저 줄을 지운다.
  * 관리자 작업 기록은 남기되 대상 번호만 남도록 이전 닉네임을 지운다.
  */
 export async function deleteAccount(db: Kysely<Database>, userId: number): Promise<void> {
@@ -48,6 +48,14 @@ export async function deleteAccount(db: Kysely<Database>, userId: number): Promi
     for (const part of chunks(playIds)) {
       await trx.deleteFrom('play_replays').where('play_id', 'in', part).execute();
       await trx.deleteFrom('plays').where('id', 'in', part).execute();
+    }
+
+    const actionIds = (await trx.selectFrom('save_actions').select('id').where('user_id', '=', userId).execute()).map((r) => r.id);
+    for (const part of chunks(actionIds)) await trx.deleteFrom('save_actions').where('id', 'in', part).execute();
+
+    const saveGames = (await trx.selectFrom('game_saves').select('game_id').where('user_id', '=', userId).execute()).map((r) => r.game_id);
+    if (saveGames.length > 0) {
+      await trx.deleteFrom('game_saves').where('user_id', '=', userId).where('game_id', 'in', saveGames).execute();
     }
 
     const sessions = (await trx.selectFrom('sessions').select('id_hash').where('user_id', '=', userId).execute()).map((r) => r.id_hash);

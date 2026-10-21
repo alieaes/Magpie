@@ -64,7 +64,7 @@
 | `DELETE /api/me` | `{ "confirm": "<닉네임 또는 '탈퇴'>" }` | `204`, 세션 쿠키를 지운다. 비로그인 `401`, 확인 문구가 다르면 `400 CONFIRM_MISMATCH` |
 
 - 확인 문구: 닉네임을 똑같이(앞뒤 공백만 무시), 닉네임 전이면 "탈퇴" (`deleteConfirmText`, `shared/src/account.ts`). 요청 위조 방지(Origin 확인)를 받는다.
-- 한 트랜잭션에서 지운다(`server/src/auth/account.ts`): `best_daily`, `best_alltime`, `play_replays`, `plays`, `sessions`(다른 기기 로그인도 끝남), `users`(닉네임은 다른 사람이 쓸 수 있게 된다).
+- 한 트랜잭션에서 지운다(`server/src/auth/account.ts`): `best_daily`, `best_alltime`, `play_replays`, `plays`, `save_actions`, `game_saves`(성장형 게임 저장, [saves.md](./saves.md)), `sessions`(다른 기기 로그인도 끝남), `users`(닉네임은 다른 사람이 쓸 수 있게 된다).
   먼저 읽고 기본 키로 지운다(틈 잠금으로 다른 유저의 기록 저장과 교착이 나지 않게). 500개씩 나눠 지운다.
 - 관리자 작업 기록(`admin_actions`)은 남기되, 이 유저가 대상인 닉네임 초기화 기록의 이전 닉네임(`detail.nickname`)을 지운다. 유저 번호만 남는다.
 - 지운 뒤 그 프로세스의 랭킹 캐시를 비운다. 다른 유저의 순위·환산점은 조회할 때 다시 계산된다.

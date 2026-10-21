@@ -1,7 +1,8 @@
 <script setup lang="ts">
 // 게임 화면 (/play/:gameId). 시작·결과 화면과 점수·시간 막대는 셸이 그리고, 판은 게임 패키지가 그린다.
 // 로그인하고 닉네임이 있으면 기록 모드(서버가 시드를 주고 끝난 판을 다시 계산), 아니면 연습 모드.
-// 근거: docs/design/261006-08-play-submission.md, docs/design/261006-09-apple-ten.md §3
+// 성장형 게임은 GrowthPlayView가 맡는다(가게·정산 화면을 게임이 그린다).
+// 근거: docs/design/261006-08-play-submission.md, docs/design/261006-09-apple-ten.md §3, docs/design/261021-04-game-save.md §6
 import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { storeToRefs } from 'pinia';
@@ -9,9 +10,11 @@ import { PhArrowClockwise, PhFlagCheckered, PhPlay, PhSpeakerHigh, PhSpeakerSlas
 import { findGame, isGameId, randomSeed, type FinishPlayResponse, type Game, type PlayRejectReason } from '@magpie/shared';
 import type { GameInstance, HudState, PlayResult } from '@magpie/shared/game-module';
 import { ApiError, finishPlay, startPlay } from '../api';
+import { useSound } from '../composables/useSound';
 import { formatNumber } from '../format';
 import { hasGameModule, loadGameModule } from '../games/registry';
 import { useAuthStore } from '../stores/auth';
+import GrowthPlayView from './GrowthPlayView.vue';
 import NotFoundPage from './NotFoundPage.vue';
 
 type Phase = 'ready' | 'loading' | 'playing' | 'submitting' | 'ended' | 'error';
@@ -22,6 +25,7 @@ const REJECT_MESSAGES: Record<PlayRejectReason, string> = {
   mismatch: '기록을 확인하지 못해 저장하지 않았어요.',
   abandoned: '새 판을 시작해서 이 판은 기록되지 않았어요.',
   admin: '관리자가 지운 기록이에요.',
+  stale_save: '다른 곳에서 저장이 바뀌어 기록되지 않았어요.',
 };
 
 const route = useRoute();
@@ -39,54 +43,8 @@ const submitFailed = ref(false);
 let instance: GameInstance | null = null;
 let playId: number | null = null;
 
-// 소리 끄기. 다음 판에도 유지하려고 브라우저에 저장한다 (저장소를 못 쓰면 기본값)
-const MUTE_KEY = 'magpie.muted';
-function readMuted(): boolean {
-  try {
-    return localStorage.getItem(MUTE_KEY) === '1';
-  } catch {
-    return false;
-  }
-}
-const muted = ref(readMuted());
-
-// 음량(0~100). 기본 70
-const VOLUME_KEY = 'magpie.volume';
-function readVolume(): number {
-  try {
-    const saved = Number(localStorage.getItem(VOLUME_KEY));
-    return localStorage.getItem(VOLUME_KEY) !== null && saved >= 0 && saved <= 100 ? saved : 70;
-  } catch {
-    return 70;
-  }
-}
-const volume = ref(readVolume());
-
-/** 음량 슬라이더. 0으로 내리면 음소거, 올리면 음소거를 푼다 */
-function onVolume(): void {
-  instance?.setVolume?.(volume.value / 100);
-  if (muted.value !== (volume.value === 0)) {
-    muted.value = volume.value === 0;
-    instance?.setMuted?.(muted.value);
-  }
-  try {
-    localStorage.setItem(VOLUME_KEY, String(volume.value));
-    localStorage.setItem(MUTE_KEY, muted.value ? '1' : '0');
-  } catch {
-    // 저장 실패는 무시한다
-  }
-}
-
-/** 소리 켜기/끄기 버튼 */
-function toggleMuted(): void {
-  muted.value = !muted.value;
-  instance?.setMuted?.(muted.value);
-  try {
-    localStorage.setItem(MUTE_KEY, muted.value ? '1' : '0');
-  } catch {
-    // 저장 실패는 무시한다
-  }
-}
+// 소리 끄기·음량 (브라우저에 저장)
+const { muted, volume, attach: attachSound, onVolume, toggleMuted } = useSound();
 
 /** 주소의 게임. 플레이할 수 있고 코드가 등록된 게임만 */
 const game = computed<Game | null>(() => {
@@ -149,6 +107,7 @@ async function start(): Promise<void> {
   try {
     // 게임 코드를 먼저 받고 판을 연다. 서버는 판을 연 때부터 시간을 재므로 내려받는 시간이 들어가지 않게 한다
     const module = await loadGameModule(current.id);
+    if (module.kind === 'growth') throw new Error(`성장형 게임은 GrowthPlayView가 띄운다: ${current.id}`);
     const record = canRecord.value;
     let seed: string;
     if (record) {
@@ -167,6 +126,7 @@ async function start(): Promise<void> {
       onHud: (state) => (hud.value = state),
       onEnd: (r) => void onEnd(r),
     });
+    attachSound(instance);
     if (phase.value === 'loading') phase.value = 'playing';
   } catch (err) {
     console.error('[play] 게임을 띄우지 못했다', err);
@@ -209,6 +169,7 @@ function finish(): void {
 function destroyGame(): void {
   instance?.destroy();
   instance = null;
+  attachSound(null);
 }
 
 watch(
@@ -225,6 +186,8 @@ onBeforeUnmount(destroyGame);
 
 <template>
   <NotFoundPage v-if="!game" />
+
+  <GrowthPlayView v-else-if="game.kind === 'growth'" :key="game.id" :game="game" />
 
   <main v-else class="play">
     <header class="head">

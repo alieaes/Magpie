@@ -7,6 +7,7 @@ import { PhClock } from '@phosphor-icons/vue';
 import {
   RANKING_MAX_LIMIT,
   TOTAL_POINTS_PER_GAME,
+  findGame,
   type RankingEntry,
   type RankingPeriod,
   type RankingTarget,
@@ -48,6 +49,8 @@ const { data, loading, error, reload } = useAsyncData(
 );
 const remaining = useCountdown(() => data.value?.resetsAt, () => void reload());
 const unit = computed(() => scoreUnit(target.value));
+/** 게임 탭의 설명 한 줄 (성장형 게임은 점수가 무엇인지 알려 준다) */
+const gameNote = computed(() => (target.value === 'total' ? null : (findGame(target.value)?.rankingNote ?? null)));
 
 /** 확인을 기다리는 관리 작업 */
 const pending = ref<{ kind: 'removePlay' | 'resetNickname'; entry: RankingEntry } | null>(null);
@@ -112,8 +115,9 @@ async function runAction(): Promise<void> {
     </div>
 
     <p v-if="target === 'total'" class="note">
-      게임마다 1위를 {{ formatNumber(TOTAL_POINTS_PER_GAME) }}점으로 환산해 더한 점수예요. 순위가 내려갈수록 점수가 줄어요.
+      미니게임마다 1위를 {{ formatNumber(TOTAL_POINTS_PER_GAME) }}점으로 환산해 더한 점수예요. 순위가 내려갈수록 점수가 줄어요.
     </p>
+    <p v-else-if="gameNote" class="note">{{ gameNote }}</p>
 
     <p v-if="data && data.participants > 0" class="participants num">
       {{ formatNumber(data.participants) }}명 참여

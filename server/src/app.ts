@@ -7,6 +7,7 @@ import type { Config } from './config';
 import type { Db } from './db';
 import { jsonError } from './lib/errors';
 import { sameOriginOnly } from './lib/origin';
+import { defaultLogics, type LogicRegistry } from './plays/logics';
 import { createPlayService, type PlayService } from './plays/service';
 import { createRankingService, type RankingService } from './ranking/service';
 import { adminRoutes } from './routes/admin';
@@ -15,13 +16,18 @@ import { healthRoutes } from './routes/health';
 import { meRoutes } from './routes/me';
 import { playRoutes } from './routes/plays';
 import { rankingRoutes } from './routes/rankings';
+import { saveRoutes } from './routes/saves';
+import { createSaveService, type SaveService } from './saves/service';
 
 /** 라우트가 쓰는 의존성. 테스트에서는 서비스와 로그인 설정을 바꿔 끼울 수 있다 */
 export interface AppDeps {
   db: Db;
   config: Config;
   ranking?: RankingService;
+  /** 게임 로직 등록부. 테스트는 시험용 성장형 로직을 끼운다 */
+  logics?: LogicRegistry;
   plays?: PlayService;
+  saves?: SaveService;
   /** 없으면 .env의 Google 설정으로 만든다. null이면 로그인을 막는다 */
   oidc?: OidcConfigLoader | null;
 }
@@ -38,7 +44,9 @@ export function createApp({
   db,
   config,
   ranking = createRankingService(db),
-  plays = createPlayService(db, { ranking }),
+  logics = defaultLogics,
+  plays = createPlayService(db, { ranking, logics }),
+  saves = createSaveService(db, { logics }),
   oidc = defaultOidc(config),
 }: AppDeps) {
   const cookies = cookieSettings(config.SITE_URL);
@@ -53,9 +61,10 @@ export function createApp({
       await next();
       c.header('Cache-Control', 'no-store');
     })
-    .route('/', rankingRoutes(ranking))
+    .route('/', rankingRoutes(ranking, saves))
     .route('/', meRoutes({ db, cookies, loginAvailable: oidc !== null, ranking }))
-    .route('/', playRoutes(plays))
+    .route('/', playRoutes(plays, logics))
+    .route('/', saveRoutes(saves, logics))
     .route('/', adminRoutes({ db, ranking }));
 
   const auth = new Hono<AppEnv>()

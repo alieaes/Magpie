@@ -14,6 +14,7 @@
 - **총합**: 게임별 순위를 환산점으로 바꿔 유저별로 더한다.
   - `환산점 = round(1000 × (N − 순위 + 1) / N)`, N = 그 기간 그 게임 참여자 수. 1위는 1000점.
   - 안 한 게임은 0점.
+  - **성장형 게임(`kind: 'growth'`)은 넣지 않는다.** 플레이 시간이 쌓일수록 점수가 오르는 게임이라서다([saves.md](./saves.md)). 게임별 랭킹에는 나온다.
   - 총합이 같으면, 총합에 들어간 기록 중 가장 늦은 기록을 먼저 달성한 사람이 위.
   - SQL(윈도우 함수)로 계산한다 (`server/src/ranking/queries.ts`). 같은 공식의 TS 버전 `rankToPoints`는 화면 설명과 테스트에 쓴다.
 - **반영 조건**: 판이 검증을 통과하면(`plays.status = 'accepted'`) 더 좋은 기록일 때만 `best_daily`, `best_alltime`을 갱신한다.
@@ -54,3 +55,4 @@
 ### `GET /api/games/summary`
 
 게임마다 `{ gameId, todayTop: {nickname, score} | null, myTodayBest, myAllTimeBest }`. `my*`는 비로그인이면 `null`.
+로그인했고 저장이 있는 성장형 게임에는 `progress: { day }`(몇 일째)가 붙는다([saves.md](./saves.md)).

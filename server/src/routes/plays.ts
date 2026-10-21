@@ -8,7 +8,7 @@ import { isGameId, type GameId } from '@magpie/shared';
 import type { AppEnv } from '../app-env';
 import { jsonError, rejectInvalid } from '../lib/errors';
 import { RateLimiter } from '../lib/rate-limit';
-import { isRecordable } from '../plays/logics';
+import { defaultLogics, type LogicRegistry } from '../plays/logics';
 import type { PlayService } from '../plays/service';
 
 // 유저당 판 시작은 분당 20회까지
@@ -33,7 +33,7 @@ const FinishBody = z.object({
 });
 
 /** /api/plays 라우트 */
-export function playRoutes(plays: PlayService) {
+export function playRoutes(plays: PlayService, logics: LogicRegistry = defaultLogics) {
   const startLimiter = new RateLimiter(START_LIMIT, START_WINDOW_MS);
 
   return new Hono<AppEnv>()
@@ -42,7 +42,7 @@ export function playRoutes(plays: PlayService) {
       if (!user) return jsonError(c, 401, 'UNAUTHORIZED', '로그인이 필요해요.');
       if (!user.nickname) return jsonError(c, 403, 'NICKNAME_REQUIRED', '닉네임을 정하면 기록이 남아요.');
       const { gameId } = c.req.valid('json');
-      if (!isRecordable(gameId)) return jsonError(c, 400, 'BAD_REQUEST', '기록할 수 없는 게임입니다.');
+      if (!logics.isRecordable(gameId)) return jsonError(c, 400, 'BAD_REQUEST', '기록할 수 없는 게임입니다.');
       if (!startLimiter.hit(String(user.id))) {
         return jsonError(c, 429, 'TOO_MANY_REQUESTS', '판을 너무 자주 시작했어요. 잠시 뒤 다시 해 주세요.');
       }

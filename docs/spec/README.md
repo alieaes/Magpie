@@ -8,6 +8,7 @@
 | [auth.md](./auth.md) | Google 로그인, 세션, 요청 위조 방지, 닉네임, 탈퇴 |
 | [ranking.md](./ranking.md) | 랭킹 규칙(기간, 동점, 총합 환산), 표, 조회 API |
 | [plays.md](./plays.md) | 판 기록과 점수 제출: 판 시작·끝 API, 서버 재계산 검사, 최고 기록 갱신, 연습·기록 모드 |
+| [saves.md](./saves.md) | 성장형 게임 저장: 저장·가게 행동 API, 하루 검증, 체험, 셸 흐름(GrowthPlayView, GrowthSession) |
 | [admin.md](./admin.md) | 관리자: 지정 명령, 기록 삭제, 닉네임 초기화, 작업 기록 |
 | [main-page.md](./main-page.md) | 페이지 주소, 상단 바, 메인·랭킹 화면, 디자인 토큰 |
 | [apple-ten.md](./apple-ten.md) | 사과게임 규칙·로직, 시드 난수, 게임·플레이 화면, 셸과 게임의 약속 |
