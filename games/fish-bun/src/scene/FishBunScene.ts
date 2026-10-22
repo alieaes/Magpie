@@ -28,7 +28,7 @@ import { canvasSize, type Layout } from './layout';
 import { REJECT_TEXT, buildSettleScreen, buildShopScreen, buildUpgradeScreen, type SettleStatus } from './screens';
 import type { Sfx } from './sound';
 import { framedBox, roundBox } from './style';
-import { Button, textStyle, type ScenePalette } from './ui';
+import { Button, textStyle, titleStyle, type ScenePalette } from './ui';
 
 export interface FishBunSceneOptions {
   layout: Layout;
@@ -340,7 +340,7 @@ export class FishBunScene extends Phaser.Scene {
     const dim = this.add.rectangle(0, 0, width, height, 0x000000, 0.55).setOrigin(0).setInteractive();
     const cw = Math.min(560, width - 80);
     const card = framedBox(this.add.graphics(), width / 2 - cw / 2, height / 2 - 230, cw, 460, 28, p.surface, p.border);
-    const title = this.add.text(width / 2, height / 2 - 160, '잠깐 쉬는 중', textStyle(40, p.textStrong, '900')).setOrigin(0.5);
+    const title = this.add.text(width / 2, height / 2 - 160, '잠깐 쉬는 중', titleStyle(40, p.textStrong)).setOrigin(0.5);
     const note = this.add
       .text(width / 2, height / 2 - 92, '멈춘 동안은 시간이 흐르지 않아요.\n그만두면 오늘 장사는 저장되지 않아요.', {
         ...textStyle(22, p.text2, '600'),

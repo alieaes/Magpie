@@ -24,8 +24,8 @@ import {
 } from '../logic/rules';
 import { BUN_W, MOLD_W, SHELF_W, TEX } from './art';
 import type { Layout, Rect } from './layout';
-import { disc, framedBox, meter, roundBox, vGradient } from './style';
-import { Button, num, textStyle, won, type ScenePalette } from './ui';
+import { PIXEL_ART, disc, framedBox, meter, roundBox, vGradient } from './style';
+import { Button, num, textStyle, titleStyle, won, type ScenePalette } from './ui';
 
 /** 정산 화면의 저장 상태 */
 export type SettleStatus =
@@ -128,7 +128,7 @@ function storefront(scene: Phaser.Scene, r: Rect): Phaser.GameObjects.Container 
   root.add(sign);
   // 까치와 가게 이름을 한 덩어리로 간판 가운데에 놓는다
   const magpie = scene.add.image(0, signY + signH / 2, TEX.magpie).setScale((signH * 0.8) / 96);
-  const name = scene.add.text(0, signY + signH / 2, '까치 붕어빵', textStyle(Math.round(signH * 0.42), 0x5a3410, '900')).setOrigin(0, 0.5);
+  const name = scene.add.text(0, signY + signH / 2, '까치 붕어빵', titleStyle(Math.round(signH * 0.42), 0x5a3410)).setOrigin(0, 0.5);
   const gap = 12;
   const groupW = magpie.displayWidth + gap + name.width;
   const left = r.x + r.w / 2 - groupW / 2;
@@ -174,7 +174,7 @@ export function buildShopScreen(o: ShopScreenOptions): Phaser.GameObjects.Contai
   const next = nextLevelAt(level);
   const cx = card.x + 32;
   let y = card.y + 56;
-  root.add(scene.add.text(cx, y, `${num(state.day)}일째 아침`, textStyle(46, p.textStrong, '900')).setOrigin(0, 0.5));
+  root.add(scene.add.text(cx, y, `${num(state.day)}일째 아침`, titleStyle(46, p.textStrong)).setOrigin(0, 0.5));
   y += 72;
   root.add(scene.add.text(cx, y, '가진 돈', textStyle(24, p.text2, '700')).setOrigin(0, 0.5));
   root.add(scene.add.text(card.x + card.w - 32, y, won(state.money), textStyle(34, p.textStrong, '800')).setOrigin(1, 0.5));
@@ -253,7 +253,7 @@ export function buildUpgradeScreen(o: UpgradeScreenOptions): Phaser.GameObjects.
   const root = scene.add.container(0, 0);
   const portrait = o.layout === 'portrait';
   root.add(new Button(scene, { x: 24 + 80, y: 56, width: 160, height: 68, label: '가게로', style: 'secondary', palette: p, fontSize: 26, onPress: o.onBack }));
-  root.add(scene.add.text(width / 2, 56, '가게 꾸리기', textStyle(38, p.textStrong, '900')).setOrigin(0.5));
+  root.add(scene.add.text(width / 2, 56, '가게 꾸리기', titleStyle(38, p.textStrong)).setOrigin(0.5));
   root.add(scene.add.text(width - 24, 56, won(state.money), textStyle(30, p.textStrong, '800')).setOrigin(1, 0.5));
 
   const cols = portrait ? 1 : 2;
@@ -306,6 +306,10 @@ export function buildUpgradeScreen(o: UpgradeScreenOptions): Phaser.GameObjects.
     button.setEnabled(!o.trial && check.ok && o.buying === null);
     root.add(button);
   });
+  // 글꼴 출처 (넥슨 서체는 출처 표기를 권장한다. 근거: docs/design/261022-04-fish-bun-title-font.md §3)
+  if (PIXEL_ART) {
+    root.add(scene.add.text(width / 2, scene.scale.height - 30, '글꼴: 던파 비트비트체 v2(넥슨), 갈무리11', textStyle(22, p.text2)).setOrigin(0.5));
+  }
   return root;
 }
 
@@ -339,7 +343,7 @@ export function buildSettleScreen(o: SettleScreenOptions): Phaser.GameObjects.Co
   const left = card.x + 40;
   const right = card.x + card.w - 40;
   let y = card.y + 64;
-  root.add(scene.add.text(card.x + card.w / 2, y, `${num(o.day)}일째 장사 끝`, textStyle(44, p.textStrong, '900')).setOrigin(0.5));
+  root.add(scene.add.text(card.x + card.w / 2, y, `${num(o.day)}일째 장사 끝`, titleStyle(44, p.textStrong)).setOrigin(0.5));
   y += 84;
 
   /** 이름 · 값 한 줄 */

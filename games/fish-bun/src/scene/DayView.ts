@@ -26,7 +26,7 @@ import { pickLine, saleLineKey, type LineKey } from './lines';
 import type { Face } from './people';
 import type { Sfx } from './sound';
 import { DOT, PIXEL_ART, disc, framedBox, meter, roundBox, vGradient } from './style';
-import { Button, clockText, hex, mix, num, textStyle, won, type ScenePalette } from './ui';
+import { Button, clockText, hex, mix, num, textStyle, titleStyle, won, type ScenePalette } from './ui';
 
 /** 장사 화면이 장면에 알리는 누름 */
 export interface DayHandlers {
@@ -323,7 +323,7 @@ export class DayView {
     const flame = this.scene.add.image(gauge.x + 36, gauge.y + 40, TEX.icon('flame')).setScale(0.6);
     this.heatText = this.scene.add.text(gauge.x + 64, gauge.y + 40, '', textStyle(22, p.textStrong, '800')).setOrigin(0, 0.5);
     const comboLabel = this.scene.add.text(combo.x + combo.w / 2, combo.y + 30, '콤보', textStyle(20, p.text2, '700')).setOrigin(0.5);
-    this.comboText = this.scene.add.text(combo.x + combo.w / 2, combo.y + combo.h / 2 + 14, '0', textStyle(52, p.textStrong, '900')).setOrigin(0.5);
+    this.comboText = this.scene.add.text(combo.x + combo.w / 2, combo.y + combo.h / 2 + 14, '0', titleStyle(52, p.textStrong)).setOrigin(0.5);
     this.root.add([panel, body, this.pumpHandle, label, hint, this.gauge, flame, this.heatText, comboLabel, this.comboText]);
     if (info) {
       this.info = this.scene.add.text(info.x + 24, info.y + info.h / 2, '', textStyle(22, p.text, '600')).setOrigin(0, 0.5).setLineSpacing(8);
@@ -570,7 +570,7 @@ export class DayView {
     if (this.closingShown) return;
     this.closingShown = true;
     const { width, height } = this.scene.scale;
-    const text = this.scene.add.text(width / 2, height / 2, '마감!', textStyle(96, 0xffffff, '900')).setOrigin(0.5).setStroke('#3a2410', 12).setScale(0.3);
+    const text = this.scene.add.text(width / 2, height / 2, '마감!', titleStyle(96, 0xffffff)).setOrigin(0.5).setStroke('#3a2410', 12).setScale(0.3);
     this.fx.add(text);
     this.scene.tweens.add({ targets: text, scale: 1, duration: 360, ease: 'Back.easeOut' });
     this.sfx.fanfare();

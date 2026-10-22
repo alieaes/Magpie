@@ -10,6 +10,12 @@ export { mix } from './style';
 /** 게임 안 글꼴. 도트 그림체면 갈무리11(index.ts에서 불러온다) */
 export const FONT = PIXEL_ART ? '"Galmuri11", "Pretendard Variable", Pretendard, sans-serif' : '"Pretendard Variable", Pretendard, sans-serif';
 
+/** 제목 글꼴(던파 비트비트체 v2)을 문서에 더할 때 쓰는 이름 */
+export const TITLE_FAMILY = 'DNFBitBitv2';
+
+/** 제목·큰 숫자 글꼴. 도트 그림체면 던파 비트비트체 v2, 못 받으면 갈무리11로 그린다 */
+const TITLE_FONT = PIXEL_ART ? `"${TITLE_FAMILY}", ${FONT}` : FONT;
+
 /** 도트 글꼴의 격자. 글자 크기를 이 배수로 맞춰야 획이 또렷하다 */
 const FONT_GRID = 11;
 
@@ -63,6 +69,14 @@ export function fontSize(size: number): number {
 /** 글자 모양. 도트 글꼴은 굵은 꼴 하나만 쓴다 */
 export function textStyle(size: number, color: number, weight = '700'): Phaser.Types.GameObjects.Text.TextStyle {
   return { fontFamily: FONT, fontSize: `${fontSize(size)}px`, fontStyle: PIXEL_ART ? 'bold' : weight, color: hex(color) };
+}
+
+/**
+ * 제목·큰 숫자 글자 모양. 비트비트체는 계단을 모양으로 그린 글꼴이라 격자에 맞출 크기가 따로 없다.
+ * 보통 꼴 하나뿐이라 굵게(가짜 굵기)를 쓰지 않는다
+ */
+export function titleStyle(size: number, color: number): Phaser.Types.GameObjects.Text.TextStyle {
+  return { fontFamily: TITLE_FONT, fontSize: `${Math.round(size)}px`, fontStyle: PIXEL_ART ? 'normal' : '900', color: hex(color) };
 }
 
 export type ButtonStyle = 'primary' | 'secondary' | 'warm' | 'ghost';
