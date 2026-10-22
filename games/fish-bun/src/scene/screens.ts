@@ -64,6 +64,10 @@ const NEW_CUSTOMER: Record<number, string> = {
 /** 평판 레벨에 열리는 메뉴 (MENUS의 열리는 레벨) */
 const NEW_MENU: Record<number, string> = Object.fromEntries(MENUS.filter((m) => m.unlock > 1).map((m) => [m.unlock, `${m.name} 붕어빵`]));
 
+/** 가로 배치 가게 화면: 상태 카드 높이(내용에 맞춤)와 그 아래 버튼 묶음 높이 */
+const SHOP_CARD_H = 340;
+const SHOP_BUTTONS_H = 300;
+
 /** 판 거절 사유의 안내 */
 export const REJECT_TEXT: Record<string, string> = {
   stale_save: '다른 곳에서 가게가 바뀌어 이 날은 저장되지 않았어요.',
@@ -88,7 +92,8 @@ function storefront(scene: Phaser.Scene, r: Rect): Phaser.GameObjects.Container 
   for (let i = 0, x = r.x; x < r.x + r.w; i += 1) {
     const w = 80 + ((i * 37) % 70);
     const h = r.h * (0.25 + ((i * 29) % 30) / 100);
-    g.fillRect(x, r.y + r.h * 0.8 - h, w - 10, h);
+    // 마지막 건물은 그림 영역 밖으로 나가지 않게 자른다
+    g.fillRect(x, r.y + r.h * 0.8 - h, Math.min(w - 10, r.x + r.w - x), h);
     x += w;
   }
   g.fillStyle(0xc8ccd2, 1).fillRect(r.x, r.y + r.h * 0.8, r.w, r.h * 0.2);
@@ -177,7 +182,10 @@ export function buildShopScreen(o: ShopScreenOptions): Phaser.GameObjects.Contai
   const art: Rect = portrait ? { x: 0, y: 0, w: width, h: 700 } : { x: 0, y: 0, w: 900, h: height };
   root.add(storefront(scene, art));
 
-  const card: Rect = portrait ? { x: 24, y: 724, w: width - 48, h: 380 } : { x: 940, y: 60, w: 580, h: 520 };
+  // 가로 배치는 카드 높이를 내용에 맞추고, 카드와 아래 버튼 묶음(약 300)을 세로 가운데에 둔다
+  const card: Rect = portrait
+    ? { x: 24, y: 724, w: width - 48, h: 380 }
+    : { x: 940, y: Math.round((height - (SHOP_CARD_H + SHOP_BUTTONS_H)) / 2), w: 580, h: SHOP_CARD_H };
   root.add(panel(scene, card, p));
   const level = levelOf(state.reputation);
   const next = nextLevelAt(level);

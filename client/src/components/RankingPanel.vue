@@ -76,8 +76,10 @@ const moreLink = computed(() => ({ path: '/ranking', query: { target: target.val
   background: var(--surface);
 }
 
+/* 제목은 늘 한 줄. 자리가 모자라면 고르기·기간 버튼이 아래 줄(오른쪽 정렬)로 내려간다 */
 .head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
@@ -89,12 +91,14 @@ const moreLink = computed(() => ({ path: '/ranking', query: { target: target.val
   font-weight: 700;
   letter-spacing: -0.01em;
   color: var(--text-strong);
+  white-space: nowrap;
 }
 
 .controls {
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-left: auto;
 }
 
 .target-label {

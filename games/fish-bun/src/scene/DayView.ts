@@ -102,6 +102,9 @@ interface MoldView {
   puffAt: number;
 }
 
+/** 키운 말풍선에서 대사 아래 끝의 높이 (말풍선 중심 기준, 아래 테두리 52) */
+const BUBBLE_TEXT_BOTTOM = 40;
+
 /** 0~1로 자른다 */
 function clamp01(t: number): number {
   return Math.min(1, Math.max(0, t));
@@ -459,11 +462,19 @@ export class DayView {
     const bubbleY = this.g.counter.y + 120;
     const bubble = this.scene.add.container(0, bubbleY);
     const bubbleBg = this.scene.add.graphics();
-    // 메뉴를 돌려 말하는 손님은 단서 대사가 두 줄이라 말풍선을 위로 키운다(꼬리 위치는 같다)
     const guesses = guessesMenu(customer.kind);
-    const top = guesses ? -76 : -52;
-    const rowY = guesses ? -46 : -18;
-    const lineY = guesses ? 14 : 26;
+    // 대사를 먼저 만들어 줄 수를 잰다. 일본어는 띄어쓰기가 없어서 글자 단위로 줄을 바꾼다
+    const lineText = pickLine(customer.kind, 'order', { count: customer.order, menu: guesses || this.menus > 1 ? customer.menu : null, lang: customer.lang });
+    const lineStyle = customer.lang === 'ja' ? jaTextStyle(19, 0x5a4636) : textStyle(19, 0x5a4636, '700');
+    const line = this.scene.add
+      .text(0, 0, lineText, { ...lineStyle, align: 'center', wordWrap: { width: 196, useAdvancedWrap: customer.lang === 'ja' } })
+      .setOrigin(0.5);
+    // 대사가 두 줄을 넘거나 단서 대사(메뉴를 돌려 말하는 손님)면 말풍선을 위로 키워 대사 아래 끝을 맞춘다. 꼬리 위치는 같다
+    const tall = guesses || line.getWrappedText(lineText).length > 2;
+    const lineY = tall ? BUBBLE_TEXT_BOTTOM - line.height / 2 : 26;
+    const rowY = tall ? BUBBLE_TEXT_BOTTOM - line.height - 26 : -18;
+    const top = tall ? rowY - 30 : -52;
+    line.setY(lineY);
     if (PIXEL_ART) {
       // 도트 말풍선: 어두운 테두리 상자 + 계단 꼬리
       framedBox(bubbleBg, -104, top, 208, 52 - top, 22, 0xffffff, 0x3a2a1a);
@@ -482,12 +493,6 @@ export class DayView {
     const menuIcon: IconName | null = guesses ? (customer.kind === 'tourist' ? 'question' : null) : this.menus > 1 ? MENU_ICON[customer.menu]! : null;
     const countX = trait && menuIcon ? 40 : trait || menuIcon ? 18 : 0;
     const count = this.scene.add.text(countX, rowY, `${customer.order}개`, textStyle(40, 0x3a2410, '900')).setOrigin(0.5);
-    const lineText = pickLine(customer.kind, 'order', { count: customer.order, menu: guesses || this.menus > 1 ? customer.menu : null, lang: customer.lang });
-    const lineStyle = customer.lang === 'ja' ? jaTextStyle(19, 0x5a4636) : textStyle(19, 0x5a4636, '700');
-    // 일본어는 띄어쓰기가 없어서 글자 단위로 줄을 바꾼다
-    const line = this.scene.add
-      .text(0, lineY, lineText, { ...lineStyle, align: 'center', wordWrap: { width: 196, useAdvancedWrap: customer.lang === 'ja' } })
-      .setOrigin(0.5);
     bubble.add([bubbleBg, count, line]);
     // 메뉴 아이콘은 성격 아이콘보다 크게 해서 둘이 섞여 보이지 않게 한다
     if (trait) bubble.add(this.scene.add.image(menuIcon ? -80 : -60, rowY, TEX.icon(trait)).setScale(menuIcon ? 0.45 : 0.55));
