@@ -9,7 +9,7 @@ import { AVERAGE, SKILLED, playDay, playDays, type DayLog } from './bot';
 function print(title: string, logs: DayLog[]): void {
   const rows = logs.map(
     (l) =>
-      `${String(l.day).padStart(3)}일 수익 ${String(l.profit).padStart(6)} 돈 ${String(l.money).padStart(7)} 평판 ${String(l.reputation).padStart(5)}(Lv${levelOf(l.reputation)}) 빵틀 ${String(l.molds).padStart(2)} 손님 ${l.served}/${l.customers} 떠남 ${l.left} 황금 ${l.golden} 메뉴 ${l.soldBy.join('/')} ${l.bought.join(',')}`,
+      `${String(l.day).padStart(3)}일 수익 ${String(l.profit).padStart(6)} 돈 ${String(l.money).padStart(7)} 평판 ${String(l.reputation).padStart(5)}(Lv${levelOf(l.reputation)}) 빵틀 ${String(l.molds).padStart(2)} 손님 ${l.served}/${l.customers} 떠남 ${l.left} 황금 ${l.golden} 메뉴 ${l.soldBy.join('/')} 깨짐 ${l.broken} ${l.bought.join(',')}`,
   );
   console.log(`--- ${title}\n${rows.join('\n')}`);
 }

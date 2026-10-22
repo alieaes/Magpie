@@ -1,7 +1,9 @@
 // 손님 대사. 짧고 요즘 말투, 존댓말 기본(꼬마만 반말). 애교체·사투리·성별 호칭·유행어는 쓰지 않는다.
-// 대사 고르기는 연출이라 로직(서버 재계산)과 무관하다. 근거: docs/design/261021-02-fish-bun-customers.md §3
+// 진상 손님은 무례하지만 욕설은 쓰지 않는다. 관광객은 영어·일본어로 말한다.
+// 대사 고르기는 연출이라 로직(서버 재계산)과 무관하다.
+// 근거: docs/design/261021-02-fish-bun-customers.md §3, docs/design/261022-03-fish-bun-special-customers.md §1-2~§1-4
 
-import type { CustomerKind, Quality, SaleResult } from '../logic/rules';
+import { MENUS, type CustomerKind, type Lang, type Menu, type Quality, type SaleResult } from '../logic/rules';
 
 /** 대사 상황 */
 export type LineKey = 'order' | 'wait' | 'good' | 'best' | 'extra' | 'noExtra' | 'raw' | 'burnt' | 'leave' | 'overtaken' | 'wrongMenu';
@@ -9,7 +11,10 @@ export type LineKey = 'order' | 'wait' | 'good' | 'best' | 'extra' | 'noExtra' |
 /** 주문 개수 말 ("두 개") */
 const COUNT_WORDS = ['', '한 개', '두 개', '세 개', '네 개', '다섯 개', '여섯 개'];
 
-/** {n}은 주문 개수 말로, {m}은 메뉴 이름("슈크림 ")으로 바뀐다. 메뉴가 팥 하나뿐인 날은 {m}이 빈 말이다 */
+/**
+ * {n}은 주문 개수 말로, {m}은 메뉴 이름과 띄어쓰기("슈크림 ")로, {M}은 메뉴 이름("슈크림")으로 바뀐다.
+ * 메뉴가 팥 하나뿐인 날은 {m}이 빈 말이다. 조사가 메뉴 이름의 받침에 따라 달라지는 말은 쓰지 않는다
+ */
 const LINES: Record<CustomerKind, Partial<Record<LineKey, readonly string[]>>> = {
   regular: {
     order: ['{m}{n} 주세요', '{m}{n}만 포장이요', '{m}붕어빵 {n}요', '{m}{n} 부탁해요'],
@@ -75,13 +80,105 @@ const LINES: Record<CustomerKind, Partial<Record<LineKey, readonly string[]>>> =
     burnt: ['탄 맛이 나요'],
     leave: ['별 하나…'],
   },
+  // 수수께끼 손님의 주문은 RIDDLES에서 고른다
+  riddler: {
+    wait: ['힌트는 다 드렸어요', '음, 어려운가요?'],
+    good: ['정답이에요!', '역시 알아들으셨네요'],
+    best: ['정답에 금빛까지!', '완벽한 정답이에요'],
+    extra: ['정답에 덤까지요?'],
+    raw: ['정답인데 덜 익었네요'],
+    burnt: ['정답인데 탔네요'],
+    leave: ['다음에 다시 낼게요'],
+    wrongMenu: ['{M}, 그게 정답이었는데…', '아쉽네요, 정답은 {M}!'],
+  },
+  // 관광객의 대사는 TOURIST_LINES에서 고른다
+  tourist: {},
+  rude: {
+    order: ['{m}{n}, 빨리요', '{m}{n}요. 얼른요'],
+    wait: ['아직이에요? 참 나', '얼마나 걸려요?'],
+    good: ['흠, 나쁘지 않네', '뭐, 괜찮네요'],
+    best: ['흠, 이건 좀 괜찮네'],
+    extra: ['흠, 덤은 받죠'],
+    raw: ['장사 이렇게 할 거예요?!', '덜 익었잖아요!'],
+    burnt: ['장사 이렇게 할 거예요?!', '탔잖아요, 참 나'],
+    leave: ['에잇, 됐어요!', '장사 이렇게 할 거예요?!'],
+    wrongMenu: ['{m}시켰다고요!'],
+  },
 };
 
-/** 그 상황의 대사 하나. 없으면 동네 손님 대사를 빌린다. menu는 대사에 넣을 메뉴 이름(없으면 빼고 말한다) */
-export function pickLine(kind: CustomerKind, key: LineKey, count = 1, menu = ''): string {
-  const options = LINES[kind][key] ?? LINES.regular[key] ?? [''];
-  const line = options[Math.floor(Math.random() * options.length)] ?? '';
-  return line.replace('{n}', COUNT_WORDS[count] ?? `${count}개`).replace('{m}', menu ? `${menu} ` : '');
+/** 수수께끼 손님의 주문: 메뉴를 돌려 말한다. 같은 말이 두 메뉴에 들어맞지 않게 쓴다 (MENUS 순서) */
+const RIDDLES: readonly (readonly string[])[] = [
+  ['할머니 댁에서 먹던 맛으로요', '까맣고 달콤한 거요', '제일 기본으로 주세요', '겨울 하면 생각나는 그 맛'],
+  ['노랗고 부드러운 거요', '빵집 크림빵 같은 걸로', '구름처럼 말랑한 맛이요'],
+  ['치즈가 쭉 늘어나는 거요', '단 거 말고 짭짤한 걸로', '이탈리아 사람이 좋아할 맛'],
+];
+
+/** 관광객이 말하는 메뉴 이름과 개수 말 */
+const TOURIST_WORDS: Record<Lang, { menus: readonly string[]; counts: readonly string[] }> = {
+  en: { menus: ['red bean', 'custard', 'pizza'], counts: ['', 'one', 'two', 'three', 'four', 'five'] },
+  ja: { menus: ['あんこ', 'カスタード', 'ピザ'], counts: ['', 'ひとつ', 'ふたつ', 'みっつ', 'よっつ', 'いつつ'] },
+};
+
+/** 관광객 대사. {menu}는 메뉴 이름, {count}는 개수 말 */
+const TOURIST_LINES: Record<Lang, Partial<Record<LineKey, readonly string[]>>> = {
+  en: {
+    order: ['{menu}, {count} please!', '{count} {menu}, thanks!', 'Can I get {count} {menu}?'],
+    wait: ['Is it ready?', 'Still waiting…'],
+    good: ['Thank you!', 'So good!'],
+    best: ['Wow, golden!', 'Amazing!'],
+    extra: ['A bonus? Thanks!'],
+    raw: ['A bit soft inside…'],
+    burnt: ['A bit burnt…'],
+    leave: ['I have to go…'],
+    wrongMenu: ['Oh, I wanted {menu}…'],
+  },
+  ja: {
+    order: ['{menu}、{count}ください', '{menu}を{count}お願いします', '{menu}、{count}！'],
+    wait: ['まだかな…'],
+    good: ['ありがとう！', 'おいしい！'],
+    best: ['わあ、金色だ！'],
+    extra: ['おまけ？うれしい！'],
+    raw: ['ちょっと生っぽい…'],
+    burnt: ['ちょっとこげてる…'],
+    leave: ['もう行かなきゃ…'],
+    wrongMenu: ['あ、{menu}がよかった…'],
+  },
+};
+
+/** 목록에서 하나를 고른다 */
+function pick(options: readonly string[]): string {
+  return options[Math.floor(Math.random() * options.length)] ?? '';
+}
+
+export interface LineOptions {
+  /** 주문 개수 */
+  count?: number;
+  /** 대사에 넣을 메뉴. null이면 메뉴를 빼고 말한다(메뉴가 팥 하나뿐인 날) */
+  menu?: Menu | null;
+  /** 관광객이 말하는 말 */
+  lang?: Lang | null;
+}
+
+/** 그 상황의 대사 하나. 없으면 동네 손님 대사를 빌린다. 수수께끼 손님의 주문은 수수께끼, 관광객은 그 나라 말 */
+export function pickLine(kind: CustomerKind, key: LineKey, { count = 1, menu = null, lang = null }: LineOptions = {}): string {
+  if (kind === 'tourist' && lang) {
+    const words = TOURIST_WORDS[lang];
+    const line = pick(TOURIST_LINES[lang][key] ?? TOURIST_LINES[lang].good ?? ['']);
+    // 문장 첫 글자는 대문자 (일본어는 그대로)
+    return capitalize(line.replace('{menu}', words.menus[menu ?? 0] ?? '').replace('{count}', words.counts[count] ?? String(count)));
+  }
+  if (kind === 'riddler' && key === 'order') return pick(RIDDLES[menu ?? 0] ?? RIDDLES[0]!);
+  const line = pick(LINES[kind][key] ?? LINES.regular[key] ?? ['']);
+  const name = menu === null ? '' : (MENUS[menu]?.name ?? '');
+  return line
+    .replace('{n}', COUNT_WORDS[count] ?? `${count}개`)
+    .replace('{m}', name ? `${name} ` : '')
+    .replace('{M}', name);
+}
+
+/** 첫 글자를 대문자로 (영어 문장) */
+function capitalize(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
 /** 판매 결과의 대사 상황. 주문과 다른 메뉴를 받았으면 그 말부터 한다 */

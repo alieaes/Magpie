@@ -25,9 +25,33 @@ export type IconName =
   | 'back'
   | 'menuBean'
   | 'menuCream'
-  | 'menuPizza';
+  | 'menuPizza'
+  | 'question'
+  | 'globe'
+  | 'bolt';
 
-const ICON_NAMES: readonly IconName[] = ['pause', 'trash', 'clock', 'plusOne', 'noBurnt', 'camera', 'star', 'heart', 'flame', 'store', 'back', 'menuBean', 'menuCream', 'menuPizza'];
+const ICON_NAMES: readonly IconName[] = [
+  'pause',
+  'trash',
+  'clock',
+  'plusOne',
+  'noBurnt',
+  'camera',
+  'star',
+  'heart',
+  'flame',
+  'store',
+  'back',
+  'menuBean',
+  'menuCream',
+  'menuPizza',
+  'question',
+  'globe',
+  'bolt',
+];
+
+/** 깨진 빵틀의 금 단계 (고칠수록 줄어든다) */
+export const CRACK_LEVELS = 3;
 
 /** 메뉴 표시 아이콘 (MENUS 순서: 팥 콩, 슈크림 크림 방울, 피자 조각) */
 export const MENU_ICON: readonly IconName[] = ['menuBean', 'menuCream', 'menuPizza'];
@@ -62,6 +86,8 @@ export const TEX = {
   icon: (name: IconName) => `fb-icon-${name}`,
   person: (kind: string, variant: number, face: Face) => `fb-person-${kind}-${variant}-${face}`,
   magpie: 'fb-magpie',
+  /** 깨진 빵틀 위에 덮는 금 (1~3) */
+  crack: (level: number) => `fb-crack-${level}`,
 } as const;
 
 /** SVG 문서로 감싼다 */
@@ -375,11 +401,32 @@ function iconSvg(name: IconName): string {
     case 'menuCream':
       return `<path d="M32 6 C40 18 52 28 52 40 C52 52 42 58 32 58 C22 58 12 52 12 40 C12 28 24 18 32 6 Z" fill="#ffd54a" stroke="#b77f0c" stroke-width="4" stroke-linejoin="round"/>
         <path d="M22 40 C22 32 26 28 30 26" fill="none" stroke="#fff7cf" stroke-width="5" stroke-linecap="round"/>`;
+    case 'question':
+      return `<circle cx="32" cy="32" r="26" fill="#ffd34d" stroke="#b77f0c" stroke-width="4"/>
+        <path d="M22 26 C22 14 42 12 42 24 C42 32 32 32 32 40" fill="none" stroke="#5a3410" stroke-width="7" stroke-linecap="round"/><circle cx="32" cy="50" r="4.5" fill="#5a3410"/>`;
+    case 'globe':
+      return `<circle cx="32" cy="32" r="26" fill="#5ab4e8" stroke="#2a6f9e" stroke-width="4"/>
+        <path d="M18 18 C26 22 28 30 22 36 C18 40 20 48 26 52 M40 10 C36 18 44 24 50 22 M44 40 C38 42 38 50 44 54" fill="none" stroke="#3fae6a" stroke-width="7" stroke-linecap="round"/>
+        <path d="M6 32 h52 M32 6 C20 18 20 46 32 58 M32 6 C44 18 44 46 32 58" fill="none" stroke="#ffffff" stroke-width="2" opacity="0.6"/>`;
+    case 'bolt':
+      return `<path d="M36 4 L12 36 H30 L24 60 L52 24 H34 Z" fill="#ffc83d" stroke="#b25d0c" stroke-width="4" stroke-linejoin="round"/>`;
     case 'menuPizza':
       return `<path d="M8 14 Q32 4 56 14 L32 60 Z" fill="#ffd66b" stroke="#a8650c" stroke-width="4" stroke-linejoin="round"/>
         <path d="M8 14 Q32 4 56 14" fill="none" stroke="#c9852b" stroke-width="8" stroke-linecap="round"/>
         <circle cx="26" cy="24" r="5" fill="#d8452c"/><circle cx="38" cy="28" r="5" fill="#d8452c"/><circle cx="32" cy="42" r="4" fill="#d8452c"/>`;
   }
+}
+
+/** 깨진 빵틀 위의 금 (빵틀과 같은 크기). level이 클수록 금이 많다 */
+function crackSvg(level: number): string {
+  const cracks = [
+    'M104 14 L96 34 L110 50 L98 70 L106 92 L100 116',
+    'M30 30 L50 44 L44 60 L66 74',
+    'M176 26 L160 46 L170 62 L150 84 L158 104',
+  ].slice(0, level);
+  return cracks
+    .map((d) => `<path d="${d}" fill="none" stroke="#0b0c0e" stroke-width="7" stroke-linejoin="round" stroke-linecap="round"/><path d="${d}" fill="none" stroke="#9aa1ab" stroke-width="2" transform="translate(2 1)" opacity="0.7"/>`)
+    .join('');
 }
 
 /** 동전 (64 × 64) */
@@ -447,6 +494,7 @@ export async function buildTextures(iconColor: string): Promise<TextureSet> {
   bake(TEX.pumpHandle, pumpHandleSvg(), 100, 60);
   bake(TEX.coin, coinSvg(), ICON, ICON, 3);
   bake(TEX.magpie, magpieSvg(), 128, 96, 3);
+  for (let level = 1; level <= CRACK_LEVELS; level += 1) bake(TEX.crack(level), crackSvg(level), MOLD_W, MOLD_H);
   for (const name of ICON_NAMES) {
     bake(TEX.icon(name), iconSvg(name).replaceAll('currentColor', iconColor), ICON, ICON, 3);
   }

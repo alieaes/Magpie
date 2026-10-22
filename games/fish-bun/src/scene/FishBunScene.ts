@@ -41,6 +41,8 @@ export interface FishBunSceneOptions {
   session: GrowthSession;
   save: SaveSnapshot;
   onDayActive?(active: boolean): void;
+  /** 하루를 열기 전에 그날 평판에 필요한 것(일본어 글꼴 등)을 받아 둔다 */
+  prepareDay?(reputation: number): Promise<void>;
 }
 
 type Screen = 'shop' | 'upgrades' | 'day' | 'settle';
@@ -292,7 +294,7 @@ export class FishBunScene extends Phaser.Scene {
     this.starting = true;
     this.show('shop');
     try {
-      const { seed } = await this.opts.session.startDay();
+      const [{ seed }] = await Promise.all([this.opts.session.startDay(), this.opts.prepareDay?.(this.save.state.reputation)]);
       const sim = createDay(this.save.state, seed, true);
       this.run = { seed, sim, inputs: [], elapsed: 0, paused: false, ended: false, view: null, batter: 0 };
       this.starting = false;
@@ -315,10 +317,10 @@ export class FishBunScene extends Phaser.Scene {
     return result;
   }
 
-  /** 빵틀 누름. 빈 틀이면 고른 반죽(menu)을 붓고, 굽는 틀이면 빵틀 번호만 보낸다 */
+  /** 빵틀 누름. 빈 틀이면 고른 반죽(menu)을 붓고, 굽는 틀·깨진 틀이면 빵틀 번호만 보낸다 */
   private tapMold(index: number, menu: Menu): boolean {
     const mold = this.run?.sim.molds[index];
-    const result = this.act(OP.tap, mold?.phase === 'empty' ? tapArg(index, menu) : index);
+    const result = this.act(OP.tap, mold?.phase === 'empty' && !mold.broken ? tapArg(index, menu) : index);
     if (result && !result.ok && result.reason !== 'too_fast') this.run?.view?.deniedMold(index, result.reason);
     return result?.ok ?? false;
   }

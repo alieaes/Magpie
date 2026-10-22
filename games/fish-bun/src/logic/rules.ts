@@ -1,12 +1,12 @@
 // 하루 장사 시뮬레이션: 굽기·화력·손님·판매·마감·정산. 화면(scene)과 서버(replayDay)가 같은 코드로 하루를 진행한다.
 // 정수 연산, 시드 난수, 60틱 고정 간격만 쓴다 (CLAUDE.md §4-3). 근거: docs/design/261021-01-fish-bun.md §2~§4, §6
-// 메뉴(팥·슈크림·피자): docs/design/261022-02-fish-bun-menu.md
+// 메뉴(팥·슈크림·피자): docs/design/261022-02-fish-bun-menu.md, 특별 손님·깨진 빵틀: docs/design/261022-03-fish-bun-special-customers.md
 //
 // 진행 규칙: 입력은 그 틱을 진행하기 전에 적용한다. 다시 돌릴 때는 입력의 틱까지 진행한 뒤 입력을 적용하고,
 // 입력이 끝나면 마감(DAY_TICKS)까지 진행해 정산한다. 화면도 지금 틱(sim.tick)에 입력을 적용하고 그 틱을 기록한다.
 
 import { SeededRandom } from '@magpie/shared';
-import { KINDS, drawCustomer, drawGap, judgeSale, reputationChange, valueTenths, type CustomerKind, type Quality, type SaleResult } from './customers';
+import { KINDS, drawCustomer, drawGap, judgeSale, reputationChange, valueTenths, type CustomerKind, type Lang, type Quality, type SaleResult } from './customers';
 import {
   applyReputation,
   breadPrice,
@@ -41,6 +41,10 @@ export const MAX_INPUTS = 6000;
 export const MIN_TAP_GAP = 6;
 /** 손님이 떠난 뒤 다음 손님이 들어오기까지 최소 틱 */
 export const WALK_IN_TICKS = 60;
+/** 깨진 빵틀을 고치는 누름 횟수 */
+export const REPAIR_HITS = 5;
+/** 깨진 빵틀이 저절로 고쳐지는 틱 (20초) */
+export const REPAIR_TICKS = 20 * 60;
 /** 문을 열고 첫 손님이 오는 틱 범위 */
 const FIRST_ARRIVAL: readonly [number, number] = [120, 240];
 
@@ -93,6 +97,12 @@ export interface Mold {
   candidate: boolean;
   /** 마지막으로 누른 틱 */
   lastTap: number;
+  /** 진상 손님이 깨뜨린 틀인지. 깨진 틀은 비어 있고, 누르면 고친다 */
+  broken: boolean;
+  /** 깨진 틀을 고치려고 누른 횟수 */
+  hits: number;
+  /** 깨진 틱 */
+  brokenAt: number;
 }
 
 /** 한 면의 익힘 단계 */
@@ -104,6 +114,8 @@ export interface Customer {
   kind: CustomerKind;
   /** 주문한 메뉴 */
   menu: Menu;
+  /** 관광객이 주문하는 말. 다른 손님은 null */
+  lang: Lang | null;
   order: number;
   patience: number;
   waited: number;
@@ -131,6 +143,10 @@ export type DayEvent =
     }
   | { type: 'stage'; mold: number; side: 'bottom' | 'top'; stage: SideStage }
   | { type: 'shine'; mold: number }
+  /** 진상 손님이 빵틀을 깼다. wasted면 굽던 빵이 버려졌다 */
+  | { type: 'break'; mold: number; wasted: boolean }
+  /** 깨진 틀을 한 번 두드렸다(hits). fixed면 고쳐졌다(5번 누르거나 20초가 지나서) */
+  | { type: 'repair'; mold: number; hits: number; fixed: boolean }
   | { type: 'closed' };
 
 /** 하루 기록 (정산 화면) */
@@ -152,8 +168,10 @@ export interface DayStats {
   maxCombo: number;
   /** 버린 탄 빵 */
   trashed: number;
-  /** 마감 때 남아서 폐기한 빵 */
+  /** 폐기한 빵: 마감 때 남은 빵 + 빵틀이 깨져 버려진 빵 */
   wasted: number;
+  /** 진상 손님이 깬 빵틀 수 */
+  broken: number;
   /** 평판 변화 합 */
   repChange: number;
   /** 하루 시작 지원금 */
@@ -203,6 +221,8 @@ export interface DaySim {
   events: DayEvent[] | null;
   readonly customersRng: SeededRandom;
   readonly goldRng: SeededRandom;
+  /** 진상 손님이 깰 빵틀을 고르는 난수 (손님 순서와 따로) */
+  readonly troubleRng: SeededRandom;
 }
 
 export type InputResult = { ok: true } | { ok: false; reason: string };
@@ -244,7 +264,7 @@ export function shelfCount(sim: DaySim): number {
 
 /** 빈 빵틀 */
 function emptyMold(): Mold {
-  return { phase: 'empty', bottom: 0, top: 0, menu: 0, candidate: false, lastTap: -MIN_TAP_GAP };
+  return { phase: 'empty', bottom: 0, top: 0, menu: 0, candidate: false, lastTap: -MIN_TAP_GAP, broken: false, hits: 0, brokenAt: 0 };
 }
 
 /** 빈 하루 기록 */
@@ -261,6 +281,7 @@ function emptyStats(subsidy: number): DayStats {
     maxCombo: 0,
     trashed: 0,
     wasted: 0,
+    broken: 0,
     repChange: 0,
     subsidy,
     customers: 0,
@@ -303,6 +324,7 @@ export function createDay(state: ShopState, seed: string, withEvents = false): D
     events: withEvents ? [] : null,
     customersRng,
     goldRng: new SeededRandom(`${seed}#gold`),
+    troubleRng: new SeededRandom(`${seed}#trouble`),
   };
 }
 
@@ -325,6 +347,33 @@ function leave(sim: DaySim, seat: number, reason: 'timeout' | 'overtaken' | 'clo
     sim.nextArrival = Math.max(sim.nextArrival, sim.tick + WALK_IN_TICKS);
   }
   emit(sim, { type: 'leave', seat, customer, reason, rep });
+  // 진상 손님은 기다리다 떠나면 빵틀을 깬다
+  if (reason === 'timeout' && customer.kind === 'rude') breakMold(sim);
+}
+
+/**
+ * 진상 손님이 빵틀 하나를 깬다: 굽는 틀 중 하나(없으면 빈 틀 중 하나)를 troubleRng로 고른다. 굽던 빵은 폐기한다.
+ * 이미 깨진 틀은 고르지 않고, 모두 깨졌으면 아무 일도 없다
+ */
+function breakMold(sim: DaySim): void {
+  const intact = sim.molds.map((m, i) => ({ m, i })).filter(({ m }) => !m.broken);
+  const baking = intact.filter(({ m }) => m.phase !== 'empty');
+  const pool = baking.length > 0 ? baking : intact;
+  if (pool.length === 0) return;
+  const { m: mold, i } = pool[sim.troubleRng.int(0, pool.length - 1)]!;
+  const wasted = mold.phase !== 'empty';
+  if (wasted) sim.stats.wasted += 1;
+  Object.assign(mold, { ...emptyMold(), menu: mold.menu, lastTap: mold.lastTap, broken: true, brokenAt: sim.tick });
+  sim.stats.broken += 1;
+  emit(sim, { type: 'break', mold: i, wasted });
+}
+
+/** 깨진 틀을 고친다 */
+function fixMold(sim: DaySim, index: number, hits: number): void {
+  const mold = sim.molds[index]!;
+  mold.broken = false;
+  mold.hits = 0;
+  emit(sim, { type: 'repair', mold: index, hits, fixed: true });
 }
 
 /** 한 틱 진행한다: 화력 → 빵틀 익힘 → 손님 기다림 → 새 손님 → 마감 */
@@ -335,6 +384,10 @@ export function advance(sim: DaySim): void {
   const speed = cookSpeed(sim.heat);
 
   sim.molds.forEach((mold, i) => {
+    if (mold.broken) {
+      if (sim.tick - mold.brokenAt >= REPAIR_TICKS) fixMold(sim, i, mold.hits);
+      return;
+    }
     const doneAt = params.doneAt[mold.menu]!;
     if (mold.phase === 'bottom') {
       const burnAt = params.burnAt[mold.menu]!;
@@ -363,8 +416,8 @@ export function advance(sim: DaySim): void {
     const seat = sim.seats.indexOf(null);
     if (seat >= 0) {
       // 뽑는 순서(손님 → 다음 간격)를 바꾸면 저장된 하루의 재계산이 달라진다
-      const { kind, menu, order } = drawCustomer(sim.customersRng, sim.repLevel, params.menus);
-      const customer: Customer = { id: sim.nextId, kind, menu, order, patience: KINDS[kind].patience, waited: 0 };
+      const { kind, menu, lang, order } = drawCustomer(sim.customersRng, sim.repLevel, params.menus);
+      const customer: Customer = { id: sim.nextId, kind, menu, lang, order, patience: KINDS[kind].patience, waited: 0 };
       sim.nextId += 1;
       sim.seats[seat] = customer;
       sim.stats.customers += 1;
@@ -380,7 +433,7 @@ export function advance(sim: DaySim): void {
 /** 마감: 남은 손님은 그냥 떠나고, 진열대·빵틀에 남은 빵은 폐기한다 */
 function close(sim: DaySim): void {
   sim.seats.forEach((_, seat) => leave(sim, seat, 'closing'));
-  sim.stats.wasted = shelfCount(sim) + sim.molds.filter((m) => m.phase !== 'empty').length;
+  sim.stats.wasted += shelfCount(sim) + sim.molds.filter((m) => m.phase !== 'empty').length;
   sim.pumping = false;
   sim.closed = true;
   emit(sim, { type: 'closed' });
@@ -408,14 +461,21 @@ export function applyInput(sim: DaySim, op: number, arg: number): InputResult {
   }
 }
 
-/** 빵틀 탭: 빈 틀이면 붓기(값의 메뉴로), 아랫면 굽는 중이면 뒤집기, 윗면 굽는 중이면 꺼내기 */
+/** 빵틀 탭: 깨진 틀이면 고치기, 빈 틀이면 붓기(값의 메뉴로), 아랫면 굽는 중이면 뒤집기, 윗면 굽는 중이면 꺼내기 */
 function tap(sim: DaySim, arg: number): InputResult {
   const index = arg % TAP_MENU_UNIT;
   const menu = Math.floor(arg / TAP_MENU_UNIT);
   const mold = sim.molds[index];
   if (!mold) return { ok: false, reason: 'bad_mold' };
-  if (menu >= MENUS.length || (menu > 0 && mold.phase !== 'empty')) return { ok: false, reason: 'bad_menu' };
+  if (menu >= MENUS.length || (menu > 0 && (mold.phase !== 'empty' || mold.broken))) return { ok: false, reason: 'bad_menu' };
   if (sim.tick - mold.lastTap < MIN_TAP_GAP) return { ok: false, reason: 'too_fast' };
+  if (mold.broken) {
+    mold.hits += 1;
+    mold.lastTap = sim.tick;
+    if (mold.hits >= REPAIR_HITS) fixMold(sim, index, mold.hits);
+    else emit(sim, { type: 'repair', mold: index, hits: mold.hits, fixed: false });
+    return { ok: true };
+  }
   if (mold.phase === 'empty') {
     if (menu >= sim.params.menus) return { ok: false, reason: 'locked_menu' };
     const cost = MENUS[menu]!.cost;
@@ -452,11 +512,14 @@ export function quoteSale(sim: DaySim, customer: Customer, extra: boolean, combo
   const base = given.slice(0, customer.order).reduce((sum, q) => sum + Math.floor((price * valueTenths(q, customer.kind)) / 10), 0);
   const allGood = given.every((q) => q === 'good' || q === 'golden');
   const paid = result === 'bad' ? Math.floor(base / 2) : base;
-  const tip = result === 'best' || (result !== 'bad' && customer.kind === 'elder' && allGood) ? Math.floor(base / 5) : 0;
+  // 수수께끼를 맞히면(메뉴가 맞고 불만이 아니면) 팁 30%. 그 밖의 팁은 최고 또는 어르신(모두 알맞음 이상) 20%
+  const solved = customer.kind === 'riddler' && result !== 'bad';
+  const tipTenths = solved ? 3 : result === 'best' || (result !== 'bad' && customer.kind === 'elder' && allGood) ? 2 : 0;
+  const tip = Math.floor((base * tipTenths) / 10);
   const comboUp = extra && (result === 'best' || result === 'good');
   const nextCombo = comboUp ? combo + 1 : 0;
   const bonus = comboUp ? Math.floor(((paid + tip) * Math.min(nextCombo, 10)) / 10) : 0;
-  return { given, result, paid, tip, bonus, combo: nextCombo };
+  return { given, result, paid, tip, bonus, combo: nextCombo, solved };
 }
 
 /** 판매: 진열대의 menu 빵을 앞에서부터 주문 개수(덤이면 +1)만큼 준다 */
@@ -482,7 +545,8 @@ function sell(sim: DaySim, seat: number, extra: boolean, menu: Menu): InputResul
   sim.stats.sold += count;
   sim.stats.soldBy[menu]! += count;
   sim.stats.served[quote.result] += 1;
-  const rep = reputationChange(quote.result, customer.kind);
+  // 수수께끼를 맞히면 평판 +1 더
+  const rep = reputationChange(quote.result, customer.kind) + (quote.solved ? 1 : 0);
   sim.stats.repChange += rep;
   sim.seats[seat] = null;
   sim.nextArrival = Math.max(sim.nextArrival, sim.tick + WALK_IN_TICKS);
@@ -500,6 +564,8 @@ function sell(sim: DaySim, seat: number, extra: boolean, menu: Menu): InputResul
     combo: quote.combo,
     rep,
   });
+  // 진상 손님은 불만이면 빵틀을 깬다
+  if (customer.kind === 'rude' && quote.result === 'bad') breakMold(sim);
   return { ok: true };
 }
 

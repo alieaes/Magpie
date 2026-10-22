@@ -3,17 +3,22 @@
 
 import Phaser from 'phaser';
 import galmuriBoldUrl from 'galmuri/dist/Galmuri11-Bold.woff2?url';
+import galmuriRegularUrl from 'galmuri/dist/Galmuri11.woff2?url';
 import type { GrowthGameModule } from '@magpie/shared/game-module';
 import titleFontUrl from '../assets/fonts/dnf-bitbit-v2/DNFBitBitv2.otf?url';
-import { initialShopState } from './logic/rules';
+import { initialShopState, levelOf, type ShopState } from './logic/rules';
 import { buildTextures } from './scene/art';
 import { FishBunScene } from './scene/FishBunScene';
 import { canvasSize, type Layout } from './scene/layout';
 import { Sfx } from './scene/sound';
 import { PIXEL_ART } from './scene/style';
-import { FONT, TITLE_FAMILY, hex, type ScenePalette } from './scene/ui';
+import { FONT, JA_FAMILY, TITLE_FAMILY, hex, type ScenePalette } from './scene/ui';
 
 let pixelFonts: Promise<void> | null = null;
+let japaneseFont: Promise<void> | null = null;
+
+/** 관광객이 일본어로 주문하기 시작하는 평판 레벨 */
+const JAPANESE_LEVEL = 4;
 
 /** 글꼴 파일 하나를 받아 문서에 더한다. 실패하면 대체 글꼴로 그리게 경고만 남긴다 */
 function loadFace(family: string, url: string, descriptors?: FontFaceDescriptors): Promise<void> {
@@ -36,6 +41,16 @@ function loadPixelFonts(): Promise<void> {
     loadFace(TITLE_FAMILY, titleFontUrl),
   ]).then(() => undefined);
   return pixelFonts;
+}
+
+/**
+ * 일본어 대사 글꼴(갈무리11 보통 꼴, 약 500KB, 가나·한자 포함)을 한 번만 불러온다.
+ * 관광객이 오는 평판 Lv4부터만 받는다. 근거: docs/design/261022-03-fish-bun-special-customers.md §1-3
+ */
+function loadJapaneseFont(): Promise<void> {
+  if (!PIXEL_ART) return Promise.resolve();
+  japaneseFont ??= loadFace(JA_FAMILY, galmuriRegularUrl);
+  return japaneseFont;
 }
 
 /** 게임 영역이 세로로 길면 세로 배치(휴대폰) */
@@ -85,7 +100,9 @@ const fishBun: GrowthGameModule = {
   async mount(parent, options) {
     const sfx = new Sfx(options.muted ?? false, options.volume ?? 1);
     // 화면 글자를 캔버스에 그리기 전에 글꼴을 받아 둔다
-    if (PIXEL_ART) await loadPixelFonts();
+    if (PIXEL_ART) {
+      await Promise.all([loadPixelFonts(), levelOf((options.save.state as ShopState).reputation) >= JAPANESE_LEVEL ? loadJapaneseFont() : undefined]);
+    }
     else {
       await Promise.all(
         ['900 44px', '800 30px', '700 24px', '600 20px'].map((f) => document.fonts.load(`${f} ${FONT}`, '까치붕어빵장사시작0123456789원').catch(() => undefined)),
@@ -101,6 +118,8 @@ const fishBun: GrowthGameModule = {
       sfx,
       session: options.session,
       save: options.save,
+      // 하루를 열 때 그날 평판이 Lv4 이상이면 일본어 글꼴을 받아 둔다
+      prepareDay: (reputation) => (levelOf(reputation) >= JAPANESE_LEVEL ? loadJapaneseFont() : Promise.resolve()),
       ...(options.onDayActive ? { onDayActive: options.onDayActive } : {}),
     });
     const { width, height } = canvasSize(layout);

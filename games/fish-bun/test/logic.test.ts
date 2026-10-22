@@ -12,6 +12,8 @@ import {
   LAST_ARRIVAL_TICK,
   MENUS,
   MIN_TAP_GAP,
+  REPAIR_HITS,
+  REPAIR_TICKS,
   OP,
   advance,
   applyInput,
@@ -54,7 +56,7 @@ function must(sim: DaySim, op: number, arg: number): void {
 
 /** 카운터에 손님을 바로 앉힌다 */
 function seat(sim: DaySim, index: number, customer: Partial<Customer>): Customer {
-  const c: Customer = { id: 100 + index, kind: 'regular', menu: 0, order: 1, patience: 1200, waited: 0, ...customer };
+  const c: Customer = { id: 100 + index, kind: 'regular', menu: 0, lang: null, order: 1, patience: 1200, waited: 0, ...customer };
   sim.seats[index] = c;
   return c;
 }
@@ -453,6 +455,128 @@ describe('메뉴 (팥·슈크림·피자)', () => {
     const two = new Set<number>();
     for (let i = 0; i < 400; i += 1) two.add(drawCustomer(sim.customersRng, 3, 2).menu);
     expect([...two].sort()).toEqual([0, 1]);
+  });
+});
+
+describe('특별 손님 (수수께끼·관광객·진상)', () => {
+  /** 평판 Lv5(세 메뉴, 특별 손님 모두 등장)이고 화력이 50%에 머무는 가게 */
+  const lv5 = () => steadyShop({ reputation: 280 });
+
+  it('수수께끼 손님: 맞는 메뉴면 판정대로 + 팁 30% + 평판 +1, 다른 메뉴면 불만', () => {
+    const sim = createDay(lv5(), 'riddle');
+    seat(sim, 0, { kind: 'riddler', menu: 1, order: 1 });
+    sim.shelves = [['good'], ['good'], []];
+    const start = sim.money;
+    must(sim, OP.sell, sellArg(0, false, 1));
+    // 160 + 팁 48
+    expect(sim.money - start).toBe(160 + 48);
+    expect(sim.stats.repChange).toBe(2 + 1);
+
+    seat(sim, 1, { kind: 'riddler', menu: 1, order: 1 });
+    const before = sim.money;
+    must(sim, OP.sell, sellArg(1, false, 0));
+    expect(sim.money - before).toBe(60);
+    expect(sim.stats.served.bad).toBe(1);
+    expect(sim.stats.repChange).toBe(3 - 3);
+  });
+
+  it('관광객: 맞는 메뉴면 판정대로(팁 없음), 다른 메뉴면 불만', () => {
+    const sim = createDay(lv5(), 'tourist');
+    seat(sim, 0, { kind: 'tourist', menu: 2, lang: 'ja', order: 1 });
+    sim.shelves = [['good'], [], ['good']];
+    const start = sim.money;
+    must(sim, OP.sell, sellArg(0, false, 2));
+    expect(sim.money - start).toBe(200);
+    expect(sim.stats.served.good).toBe(1);
+    seat(sim, 1, { kind: 'tourist', menu: 2, lang: 'en', order: 1 });
+    must(sim, OP.sell, sellArg(1, false, 0));
+    expect(sim.stats.served.bad).toBe(1);
+  });
+
+  it('특별 손님은 등장 레벨부터 오고, 수수께끼는 열린 메뉴만, 관광객 말은 시드대로 정해진다', () => {
+    const kindsAt = (level: number, menus: number, seed: string) => {
+      const rng = new SeededRandom(seed);
+      return Array.from({ length: 600 }, () => drawCustomer(rng, level, menus));
+    };
+    const lv2 = kindsAt(2, 1, 'k2');
+    expect(lv2.some((c) => ['riddler', 'tourist', 'rude'].includes(c.kind))).toBe(false);
+    const lv3 = kindsAt(3, 2, 'k3');
+    expect(lv3.some((c) => c.kind === 'riddler')).toBe(true);
+    expect(lv3.some((c) => c.kind === 'tourist' || c.kind === 'rude')).toBe(false);
+    expect(lv3.filter((c) => c.kind === 'riddler').every((c) => c.menu < 2)).toBe(true);
+    const lv5 = kindsAt(5, 3, 'k5');
+    const tourists = lv5.filter((c) => c.kind === 'tourist');
+    expect(new Set(tourists.map((c) => c.lang))).toEqual(new Set(['en', 'ja']));
+    expect(lv5.filter((c) => c.kind !== 'tourist').every((c) => c.lang === null)).toBe(true);
+    expect(lv5.some((c) => c.kind === 'rude')).toBe(true);
+    expect(kindsAt(5, 3, 'k5')).toEqual(lv5);
+  });
+
+  it('진상 손님이 불만이면 굽는 빵틀 하나가 깨지고 굽던 빵은 폐기, 깨질 틀은 시드대로', () => {
+    const run1 = () => {
+      const sim = createDay(lv5(), 'rude-bad');
+      must(sim, OP.tap, 0);
+      must(sim, OP.tap, 1);
+      // 탄 빵 두 개(−4) → 불만
+      seat(sim, 0, { kind: 'rude', order: 2 });
+      sim.shelves = [['burnt', 'burnt'], [], []];
+      sim.events = [];
+      must(sim, OP.sell, sellArg(0, false, 0));
+      return sim;
+    };
+    const sim = run1();
+    const broken = sim.molds.findIndex((m) => m.broken);
+    expect([0, 1]).toContain(broken);
+    expect(sim.molds[broken]!.phase).toBe('empty');
+    expect(sim.stats.broken).toBe(1);
+    expect(sim.stats.wasted).toBe(1);
+    expect(sim.events).toContainEqual({ type: 'break', mold: broken, wasted: true });
+    expect(run1().molds.findIndex((m) => m.broken)).toBe(broken);
+  });
+
+  it('진상 손님이 기다리다 떠나면 빵틀을 깬다. 굽는 틀이 없으면 빈 틀 중에서', () => {
+    const sim = createDay(lv5(), 'rude-leave');
+    sim.nextArrival = DAY_TICKS;
+    seat(sim, 0, { kind: 'rude', patience: 3 });
+    run(sim, 3);
+    expect(sim.stats.left).toBe(1);
+    expect(sim.stats.broken).toBe(1);
+    expect(sim.stats.wasted).toBe(0);
+    // 만족이면 깨지 않는다
+    seat(sim, 1, { kind: 'rude', order: 1 });
+    sim.shelves = [['good'], [], []];
+    must(sim, OP.sell, sellArg(1, false, 0));
+    expect(sim.stats.broken).toBe(1);
+  });
+
+  it('깨진 빵틀: 부을 수 없고 5번 누르면 고쳐지며, 안 고치면 20초 뒤 저절로 고쳐진다', () => {
+    const sim = createDay(lv5(), 'repair');
+    sim.nextArrival = DAY_TICKS;
+    seat(sim, 0, { kind: 'rude', patience: 1 });
+    run(sim, 1);
+    const i = sim.molds.findIndex((m) => m.broken);
+    expect(i).toBeGreaterThanOrEqual(0);
+    expect(applyInput(sim, OP.tap, tapArg(i, 1))).toEqual({ ok: false, reason: 'bad_menu' });
+    for (let hit = 1; hit < REPAIR_HITS; hit += 1) {
+      must(sim, OP.tap, i);
+      expect(sim.molds[i]!.broken).toBe(true);
+      run(sim, MIN_TAP_GAP);
+    }
+    must(sim, OP.tap, i);
+    expect(sim.molds[i]!.broken).toBe(false);
+    run(sim, MIN_TAP_GAP);
+    must(sim, OP.tap, i);
+    expect(sim.molds[i]!.phase).toBe('bottom');
+
+    const auto = createDay(lv5(), 'repair');
+    auto.nextArrival = DAY_TICKS;
+    seat(auto, 0, { kind: 'rude', patience: 1 });
+    run(auto, 1);
+    const j = auto.molds.findIndex((m) => m.broken);
+    run(auto, REPAIR_TICKS - 1);
+    expect(auto.molds[j]!.broken).toBe(true);
+    run(auto, 1);
+    expect(auto.molds[j]!.broken).toBe(false);
   });
 });
 

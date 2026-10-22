@@ -1,13 +1,13 @@
-// 손님 그림: 6종 × 생김새 2가지 × 표정 3가지(보통·기쁨·화남)를 SVG로 그린다 (200 × 220, 머리와 어깨).
+// 손님 그림: 9종 × 생김새 2가지 × 표정 3가지(보통·기쁨·화남)를 SVG로 그린다 (200 × 220, 머리와 어깨).
 // 원작 손님 그림·이름은 쓰지 않는다. 성격은 상황(바쁨, 방송 중, 리뷰)에서 오게 하고 성별·나이를 한쪽으로 몰지 않는다.
-// 근거: docs/design/261021-02-fish-bun-customers.md §1-1
+// 근거: docs/design/261021-02-fish-bun-customers.md §1-1, docs/design/261022-03-fish-bun-special-customers.md §4
 
 import type { CustomerKind } from '../logic/rules';
 
 export type Face = 'normal' | 'happy' | 'angry';
 
 export const PEOPLE_FACES: readonly Face[] = ['normal', 'happy', 'angry'];
-export const PEOPLE_KINDS: readonly CustomerKind[] = ['regular', 'kid', 'office', 'elder', 'creator', 'reviewer'];
+export const PEOPLE_KINDS: readonly CustomerKind[] = ['regular', 'kid', 'office', 'elder', 'creator', 'reviewer', 'riddler', 'tourist', 'rude'];
 /** 종류마다 생김새 가짓수 */
 export const PEOPLE_VARIANTS = 2;
 
@@ -26,14 +26,16 @@ function head(skin: string, shade: string): string {
     <ellipse cx="100" cy="92" rx="56" ry="58" fill="${skin}" stroke="${shade}" stroke-width="2.5"/>`;
 }
 
-/** 눈·눈썹·입·볼 */
-function face(f: Face, browColor = INK): string {
+/** 눈·눈썹·입·볼. grumpy면 보통·기쁨 표정에도 눈썹을 찌푸린다(진상 손님) */
+function face(f: Face, browColor = INK, grumpy = false): string {
+  /** 찌푸린 눈썹 (안쪽이 내려간다) */
+  const frown = `<path d="M64 76 L90 84 M136 76 L110 84" stroke="${browColor}" stroke-width="5" stroke-linecap="round"/>`;
   const blush = `<ellipse cx="68" cy="114" rx="10" ry="6" fill="#ff8f8f" opacity="${f === 'happy' ? 0.7 : f === 'angry' ? 0.75 : 0.4}"/>
     <ellipse cx="132" cy="114" rx="10" ry="6" fill="#ff8f8f" opacity="${f === 'happy' ? 0.7 : f === 'angry' ? 0.75 : 0.4}"/>`;
   if (f === 'happy') {
     return `${blush}
       <path d="M68 98 q10 -12 20 0 M112 98 q10 -12 20 0" fill="none" stroke="${INK}" stroke-width="5" stroke-linecap="round"/>
-      <path d="M66 76 q12 -8 24 -2 M110 74 q12 -6 24 2" fill="none" stroke="${browColor}" stroke-width="4" stroke-linecap="round"/>
+      ${grumpy ? frown : `<path d="M66 76 q12 -8 24 -2 M110 74 q12 -6 24 2" fill="none" stroke="${browColor}" stroke-width="4" stroke-linecap="round"/>`}
       <path d="M82 114 q18 26 36 0 Z" fill="#8a2b2b" stroke="${INK}" stroke-width="3" stroke-linejoin="round"/>
       <path d="M90 124 q10 8 20 0" fill="#ff8a8a"/>`;
   }
@@ -49,8 +51,15 @@ function face(f: Face, browColor = INK): string {
   return `${blush}
     <ellipse cx="78" cy="98" rx="6" ry="8" fill="${INK}"/><ellipse cx="122" cy="98" rx="6" ry="8" fill="${INK}"/>
     <circle cx="80" cy="95" r="2" fill="#ffffff"/><circle cx="124" cy="95" r="2" fill="#ffffff"/>
-    <path d="M66 78 q12 -6 24 0 M110 78 q12 -6 24 0" fill="none" stroke="${browColor}" stroke-width="4" stroke-linecap="round"/>
-    <path d="M88 120 q12 10 24 0" fill="none" stroke="${INK}" stroke-width="4" stroke-linecap="round"/>`;
+    ${grumpy ? frown : `<path d="M66 78 q12 -6 24 0 M110 78 q12 -6 24 0" fill="none" stroke="${browColor}" stroke-width="4" stroke-linecap="round"/>`}
+    ${grumpy ? `<path d="M88 124 h24" stroke="${INK}" stroke-width="4" stroke-linecap="round"/>` : `<path d="M88 120 q12 10 24 0" fill="none" stroke="${INK}" stroke-width="4" stroke-linecap="round"/>`}`;
+}
+
+/** 팔짱 낀 두 팔 (어깨 앞) */
+function crossedArms(color: string, shade: string, skin: string): string {
+  return `<path d="M30 206 C60 182 140 182 170 206 L170 222 L30 222 Z" fill="${color}" stroke="${shade}" stroke-width="3"/>
+    <path d="M44 200 C76 186 124 186 156 200" fill="none" stroke="${shade}" stroke-width="3"/>
+    <ellipse cx="46" cy="204" rx="12" ry="9" fill="${skin}" stroke="${shade}" stroke-width="2"/><ellipse cx="154" cy="204" rx="12" ry="9" fill="${skin}" stroke="${shade}" stroke-width="2"/>`;
 }
 
 /** 안경 */
@@ -149,5 +158,58 @@ export function personSvg(kind: CustomerKind, variant: number, f: Face): string 
            ${[50, 70, 92, 114, 134, 152].map((x, i) => `<circle cx="${x}" cy="${i === 0 || i === 5 ? 66 : 44}" r="18" fill="#2a1d18"/>`).join('')}
            ${face(f, '#2a1d18')}${glasses('#2a1d18')}
            <g transform="translate(26 172) rotate(8)"><rect width="44" height="50" rx="4" fill="#fff8d6" stroke="#8a6a3a" stroke-width="3"/><path d="M8 14 h28 M8 26 h28" stroke="#8a6a3a" stroke-width="3"/></g>`;
+    case 'riddler':
+      return v === 0
+        ? // 체크무늬 탐정 모자, 갈색 코트와 돋보기
+          `${body('#a8743f', '#7a5028')}<path d="M70 154 L100 190 L130 154" fill="none" stroke="#7a5028" stroke-width="4"/>
+           ${head('#f3cfae', '#d29f7a')}
+           <path d="M46 84 C44 50 72 36 100 36 C128 36 156 50 154 84 C144 66 124 60 100 60 C76 60 56 68 46 84 Z" fill="#4a3426"/>
+           <path d="M42 62 C46 26 154 26 158 62 Z" fill="#b08a55" stroke="#6b4e2a" stroke-width="3"/>
+           <path d="M60 34 v28 M80 28 v34 M100 26 v36 M120 28 v34 M140 34 v28 M48 48 h104" stroke="#6b4e2a" stroke-width="2" opacity="0.6"/>
+           <path d="M40 62 C70 70 130 70 160 62 C150 74 50 74 40 62 Z" fill="#8a6a3a"/>
+           ${face(f, '#4a3426')}
+           <g transform="translate(138 172)"><circle r="18" fill="#dff3ff" stroke="#3a3e44" stroke-width="5"/><path d="M12 14 L30 40" stroke="#3a3e44" stroke-width="7" stroke-linecap="round"/></g>`
+        : // 물음표 배지 단 비니, 큰 둥근 안경, 노란 스웨터
+          `${body('#f2c94c', '#c99a1f')}<path d="M40 190 h120 M36 204 h128" stroke="#c99a1f" stroke-width="4" opacity="0.6"/>
+           ${head('#d9a67e', '#b07a52')}
+           <path d="M44 90 C40 52 70 38 100 38 C130 38 160 52 156 90 C150 72 128 64 100 64 C72 64 50 72 44 90 Z" fill="#2a1d18"/>
+           <path d="M46 70 C46 26 154 26 154 70 Z" fill="#3c8d8a" stroke="#25625f" stroke-width="3"/><rect x="44" y="62" width="112" height="14" rx="6" fill="#25625f"/>
+           <circle cx="128" cy="44" r="11" fill="#ffffff" stroke="#25625f" stroke-width="2"/>
+           <path d="M124 41 q4 -6 8 0 q0 4 -4 5 v3" fill="none" stroke="#e5414a" stroke-width="3" stroke-linecap="round"/><circle cx="128" cy="53" r="1.6" fill="#e5414a"/>
+           ${face(f, '#2a1d18')}
+           <g fill="none" stroke="#2b2b33" stroke-width="5"><circle cx="78" cy="98" r="19"/><circle cx="122" cy="98" r="19"/><path d="M97 98 h6"/></g>`;
+    case 'tourist':
+      return v === 0
+        ? // 챙 넓은 모자, 목에 건 카메라, 배낭끈
+          `${body('#4fb3d9', '#2f86a8')}<path d="M52 158 L60 222 M148 158 L140 222" stroke="#6b4e2a" stroke-width="10" stroke-linecap="round"/>
+           <path d="M72 156 C80 186 120 186 128 156" fill="none" stroke="#2b2b33" stroke-width="3"/>
+           <rect x="82" y="180" width="36" height="26" rx="5" fill="#2b2b33"/><circle cx="100" cy="193" r="8" fill="#9fb4c8" stroke="#ffffff" stroke-width="2"/>
+           ${head('#f6d2b5', '#d9a27f')}
+           <path d="M46 88 C42 56 70 42 100 42 C130 42 158 56 154 88 C146 72 126 66 100 66 C74 66 54 72 46 88 Z" fill="#c98a4a"/>
+           <ellipse cx="100" cy="56" rx="84" ry="16" fill="#f3e3b5" stroke="#b8965a" stroke-width="3"/>
+           <path d="M58 54 C58 20 142 20 142 54 Z" fill="#f3e3b5" stroke="#b8965a" stroke-width="3"/><rect x="58" y="44" width="84" height="8" fill="#e5414a"/>
+           ${face(f, '#8a5a26')}`
+        : // 모자, 머리 위 선글라스, 손에 든 지도, 배낭끈
+          `${body('#e86f4f', '#b54a30')}<path d="M52 158 L60 222 M148 158 L140 222" stroke="#2f3d63" stroke-width="10" stroke-linecap="round"/>
+           ${head('#c98e64', '#a06a42')}
+           <path d="M44 88 C40 50 70 34 100 34 C130 34 160 50 156 88 C148 66 126 58 100 58 C74 58 52 66 44 88 Z" fill="#1f1d1c"/>
+           <path d="M50 66 C50 28 150 28 150 66 Z" fill="#2f3d63"/><path d="M96 64 C120 60 158 62 176 72 C150 76 120 74 96 70 Z" fill="#24304f"/>
+           <g transform="translate(0 6)"><rect x="62" y="56" width="30" height="14" rx="6" fill="#1f1d1c"/><rect x="108" y="56" width="30" height="14" rx="6" fill="#1f1d1c"/><path d="M92 62 h16" stroke="#1f1d1c" stroke-width="3"/></g>
+           ${face(f, '#1f1d1c')}
+           <g transform="translate(20 170) rotate(-8)"><path d="M0 0 l18 6 l18 -6 l18 6 v40 l-18 -6 l-18 6 l-18 -6 Z" fill="#fff4d6" stroke="#8a6a3a" stroke-width="3"/><path d="M8 18 q10 10 22 0 t18 8" fill="none" stroke="#3fae6a" stroke-width="3"/><circle cx="40" cy="14" r="4" fill="#e5414a"/></g>`;
+    case 'rude':
+      return v === 0
+        ? // 짧은 머리, 가죽 재킷, 팔짱, 찌푸린 눈썹
+          `${body('#3a3633', '#1f1c1a')}<path d="M86 152 L100 170 L114 152 Z" fill="#9aa1ab"/>
+           ${head('#efc7a3', '#cc9a73')}
+           <path d="M46 80 C44 46 74 32 102 32 C130 32 156 46 154 80 C150 62 134 52 100 52 C70 52 52 62 46 80 Z" fill="#5a4030"/>
+           ${face(f, '#3a2a20', true)}
+           ${crossedArms('#3a3633', '#1f1c1a', '#efc7a3')}`
+        : // 뽀글 파마, 패딩 조끼, 팔짱, 찌푸린 눈썹
+          `${body('#8a9a5b', '#5f6b3c')}<path d="M100 154 v68" stroke="#5f6b3c" stroke-width="3"/>
+           ${head('#e2b48c', '#be8a62')}
+           ${[48, 66, 84, 102, 120, 138, 154].map((x, i) => `<circle cx="${x}" cy="${i === 0 || i === 6 ? 70 : i % 2 ? 42 : 50}" r="16" fill="#6b4a3a"/>`).join('')}
+           ${face(f, '#4a3020', true)}
+           ${crossedArms('#8a9a5b', '#5f6b3c', '#e2b48c')}`;
   }
 }

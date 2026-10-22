@@ -54,7 +54,12 @@ const UPGRADE_INFO: Record<UpgradeKey, { name: string; label: string; value(leve
 };
 
 /** 평판 레벨에 새로 오는 손님 */
-const NEW_CUSTOMER: Record<number, string> = { 2: '바쁜 직장인', 3: '단골 어르신', 4: '먹방 크리에이터', 5: '리뷰어' };
+const NEW_CUSTOMER: Record<number, string> = {
+  2: '바쁜 직장인',
+  3: '단골 어르신, 수수께끼 손님',
+  4: '먹방 크리에이터, 관광객, 진상 손님',
+  5: '리뷰어',
+};
 
 /** 평판 레벨에 열리는 메뉴 (MENUS의 열리는 레벨) */
 const NEW_MENU: Record<number, string> = Object.fromEntries(MENUS.filter((m) => m.unlock > 1).map((m) => [m.unlock, `${m.name} 붕어빵`]));
@@ -365,7 +370,11 @@ export function buildSettleScreen(o: SettleScreenOptions): Phaser.GameObjects.Co
   row('하루 수익', won(outcome.profit), outcome.profit >= 0 ? p.accent : 0xc0392b, 44);
   if (stats.subsidy > 0) row('운영 지원금', `+${won(stats.subsidy)}`, p.text, 24);
   const served = stats.served.best + stats.served.good + stats.served.meh + stats.served.bad;
-  const wasteParts = [stats.wasted > 0 ? `남은 빵 폐기 ${stats.wasted}개` : '', stats.trashed > 0 ? `버린 탄 빵 ${stats.trashed}개` : ''].filter(Boolean);
+  const wasteParts = [
+    stats.wasted > 0 ? `남은 빵 폐기 ${stats.wasted}개` : '',
+    stats.trashed > 0 ? `버린 탄 빵 ${stats.trashed}개` : '',
+    stats.broken > 0 ? `깨진 빵틀 ${stats.broken}번` : '',
+  ].filter(Boolean);
   const lines = [
     `손님 ${num(served + stats.left)}명 · 최고 ${stats.served.best} · 만족 ${stats.served.good} · 아쉬움 ${stats.served.meh} · 불만 ${stats.served.bad} · 떠남 ${stats.left}`,
     `최대 콤보 ${stats.maxCombo} · 황금붕어빵 ${stats.golden}개${wasteParts.length ? ` · ${wasteParts.join(' · ')}` : ''}`,

@@ -1,5 +1,5 @@
 // 손님: 종류·성격·등장 표·만족 판정. 정수 연산만 쓴다.
-// 근거: docs/design/261021-02-fish-bun-customers.md
+// 근거: docs/design/261021-02-fish-bun-customers.md, 특별 손님: docs/design/261022-03-fish-bun-special-customers.md
 
 import type { SeededRandom } from '@magpie/shared';
 import { signFactor } from './growth';
@@ -8,10 +8,19 @@ import { drawMenu, type Menu } from './menus';
 /** 빵 품질. 두 면 중 나쁜 쪽으로 정하고, 황금은 반짝일 때 꺼낸 황금 후보 */
 export type Quality = 'golden' | 'good' | 'raw' | 'burnt';
 
-/** 손님 종류: 동네 손님, 꼬마, 바쁜 직장인, 단골 어르신, 먹방 크리에이터, 리뷰어 */
-export type CustomerKind = 'regular' | 'kid' | 'office' | 'elder' | 'creator' | 'reviewer';
+/** 손님 종류: 동네 손님, 꼬마, 바쁜 직장인, 단골 어르신, 먹방 크리에이터, 리뷰어, 수수께끼 손님, 관광객, 진상 손님 */
+export type CustomerKind = 'regular' | 'kid' | 'office' | 'elder' | 'creator' | 'reviewer' | 'riddler' | 'tourist' | 'rude';
 
-export const CUSTOMER_KINDS: readonly CustomerKind[] = ['regular', 'kid', 'office', 'elder', 'creator', 'reviewer'];
+export const CUSTOMER_KINDS: readonly CustomerKind[] = ['regular', 'kid', 'office', 'elder', 'creator', 'reviewer', 'riddler', 'tourist', 'rude'];
+
+/** 관광객이 주문하는 말: 영어, 일본어 */
+export type Lang = 'en' | 'ja';
+export const LANGS: readonly Lang[] = ['en', 'ja'];
+
+/** 메뉴를 바로 말하지 않아 무엇을 원하는지 알아맞혀야 하는 손님 (수수께끼 손님·관광객) */
+export function guessesMenu(kind: CustomerKind): boolean {
+  return kind === 'riddler' || kind === 'tourist';
+}
 
 /** 판매 결과: 최고, 만족, 아쉬움, 불만 */
 export type SaleResult = 'best' | 'good' | 'meh' | 'bad';
@@ -31,6 +40,9 @@ export const KINDS: Readonly<Record<CustomerKind, KindDef>> = {
   elder: { order: [2, 3], patience: 30 * 60 },
   creator: { order: [3, 5], patience: 20 * 60 },
   reviewer: { order: [1, 2], patience: 20 * 60 },
+  riddler: { order: [1, 2], patience: 25 * 60 },
+  tourist: { order: [1, 3], patience: 25 * 60 },
+  rude: { order: [1, 3], patience: 12 * 60 },
 };
 
 interface ArrivalRow {
@@ -40,13 +52,13 @@ interface ArrivalRow {
   weights: readonly number[];
 }
 
-/** 평판 레벨별 등장 표 (설계 §4). 5레벨 이상은 마지막 줄 */
+/** 평판 레벨별 등장 표 (손님 설계 §4, 특별 손님 설계 §2). 5레벨 이상은 마지막 줄. Lv1~2는 특별 손님을 넣기 전과 같다 */
 export const ARRIVALS: readonly ArrivalRow[] = [
-  { gap: [7 * 60, 11 * 60], weights: [80, 20, 0, 0, 0, 0] },
-  { gap: [6 * 60, 10 * 60], weights: [60, 20, 20, 0, 0, 0] },
-  { gap: [6 * 60, 9 * 60], weights: [50, 15, 20, 15, 0, 0] },
-  { gap: [5 * 60, 8 * 60], weights: [40, 15, 20, 15, 10, 0] },
-  { gap: [4 * 60, 7 * 60], weights: [35, 15, 20, 15, 10, 5] },
+  { gap: [7 * 60, 11 * 60], weights: [80, 20, 0, 0, 0, 0, 0, 0, 0] },
+  { gap: [6 * 60, 10 * 60], weights: [60, 20, 20, 0, 0, 0, 0, 0, 0] },
+  { gap: [6 * 60, 9 * 60], weights: [44, 14, 18, 14, 0, 0, 10, 0, 0] },
+  { gap: [5 * 60, 8 * 60], weights: [34, 12, 16, 12, 8, 0, 8, 6, 4] },
+  { gap: [4 * 60, 7 * 60], weights: [30, 11, 15, 12, 8, 5, 8, 6, 5] },
 ];
 
 /** 평판 레벨의 등장 표 줄 */
@@ -61,10 +73,14 @@ export function drawGap(rng: SeededRandom, repLevel: number, signLevel: number):
 }
 
 /**
- * 다음 손님의 종류·주문 메뉴·개수를 뽑는다. 뽑는 순서(종류 → 메뉴 → 개수)를 바꾸면 저장된 하루의 재계산이 달라진다.
- * 메뉴는 열린 메뉴가 둘 이상일 때만 뽑는다(drawMenu)
+ * 다음 손님의 종류·주문 메뉴·(관광객이면) 말·개수를 뽑는다. 뽑는 순서(종류 → 메뉴 → 말 → 개수)를 바꾸면 저장된 하루의 재계산이 달라진다.
+ * 메뉴는 열린 메뉴가 둘 이상일 때만 뽑는다(drawMenu). 수수께끼 손님도 열린 메뉴 안에서만 낸다
  */
-export function drawCustomer(rng: SeededRandom, repLevel: number, openMenus: number): { kind: CustomerKind; menu: Menu; order: number } {
+export function drawCustomer(
+  rng: SeededRandom,
+  repLevel: number,
+  openMenus: number,
+): { kind: CustomerKind; menu: Menu; lang: Lang | null; order: number } {
   const { weights } = arrivalRow(repLevel);
   let roll = rng.int(0, 99);
   let kind: CustomerKind = 'regular';
@@ -76,8 +92,9 @@ export function drawCustomer(rng: SeededRandom, repLevel: number, openMenus: num
     roll -= weights[i]!;
   }
   const menu = drawMenu(rng, openMenus);
+  const lang = kind === 'tourist' ? LANGS[rng.int(0, LANGS.length - 1)]! : null;
   const [min, max] = KINDS[kind].order;
-  return { kind, menu, order: rng.int(min, max) };
+  return { kind, menu, lang, order: rng.int(min, max) };
 }
 
 /** 빵 값 배율(십분율): 황금 3, 알맞음 1, 덜 익음 0.5, 탐 0.3. 먹방 크리에이터는 품질을 따지지 않는다(황금은 그대로) */

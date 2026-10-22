@@ -196,6 +196,20 @@ export class Sfx {
     this.tone(200, 0.1, 'square', 0.08);
   }
 
+  /** 진상 손님이 빵틀을 깸: "쾅" 낮은 음 + 깨지는 "쨍그랑" */
+  crash(): void {
+    this.tone(90, 0.3, 'square', 0.22, 0, 50);
+    this.burst(0.35, 'highpass', 7000, 2500, 0.45);
+    [2637, 3136, 2349].forEach((f, i) => this.tone(f, 0.12, 'triangle', 0.08, 0.04 + i * 0.05));
+  }
+
+  /** 깨진 빵틀 고치기 망치 "땅". 다 고치면 밝은 음 */
+  hammer(fixed: boolean): void {
+    this.tone(520, 0.08, 'square', 0.14, 0, 380);
+    this.burst(0.05, 'bandpass', 3000, 2000, 0.3);
+    if (fixed) [784, 1046.5].forEach((f, i) => this.tone(f, 0.16, 'sine', 0.14, 0.08 + i * 0.07));
+  }
+
   /** 버튼 */
   click(): void {
     this.tone(1200, 0.04, 'triangle', 0.12);

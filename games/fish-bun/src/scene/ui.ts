@@ -16,6 +16,12 @@ export const TITLE_FAMILY = 'DNFBitBitv2';
 /** 제목·큰 숫자 글꼴. 도트 그림체면 던파 비트비트체 v2, 못 받으면 갈무리11로 그린다 */
 const TITLE_FONT = PIXEL_ART ? `"${TITLE_FAMILY}", ${FONT}` : FONT;
 
+/** 일본어 대사 글꼴(갈무리11 보통 꼴: 가나·한자가 있다)을 문서에 더할 때 쓰는 이름. 평판 Lv4부터 받는다 */
+export const JA_FAMILY = 'Galmuri11R';
+
+/** 일본어 대사 글꼴. 굵은 꼴에는 가나가 없어서 보통 꼴로 그린다 */
+const JA_FONT = PIXEL_ART ? `"${JA_FAMILY}", ${FONT}` : FONT;
+
 /** 도트 글꼴의 격자. 글자 크기를 이 배수로 맞춰야 획이 또렷하다 */
 const FONT_GRID = 11;
 
@@ -69,6 +75,11 @@ export function fontSize(size: number): number {
 /** 글자 모양. 도트 글꼴은 굵은 꼴 하나만 쓴다 */
 export function textStyle(size: number, color: number, weight = '700'): Phaser.Types.GameObjects.Text.TextStyle {
   return { fontFamily: FONT, fontSize: `${fontSize(size)}px`, fontStyle: PIXEL_ART ? 'bold' : weight, color: hex(color) };
+}
+
+/** 일본어 대사 글자 모양 (관광객). 보통 꼴이라 굵게 쓰지 않는다 */
+export function jaTextStyle(size: number, color: number): Phaser.Types.GameObjects.Text.TextStyle {
+  return { fontFamily: JA_FONT, fontSize: `${fontSize(size)}px`, fontStyle: PIXEL_ART ? 'normal' : '700', color: hex(color) };
 }
 
 /**

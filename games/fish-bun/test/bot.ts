@@ -11,6 +11,7 @@ import {
   applyShopAction,
   canUpgrade,
   createDay,
+  guessesMenu,
   sellArg,
   settleDay,
   shelfCount,
@@ -32,10 +33,12 @@ export interface BotSkill {
   extraRate: number;
   /** 유지하려는 화력 */
   heatTarget: number;
+  /** 수수께끼·외국어 주문을 맞히는 확률(%) */
+  guessRight: number;
 }
 
-export const AVERAGE: BotSkill = { reaction: 18, timingError: 40, goldenHit: 40, extraRate: 40, heatTarget: 3600 };
-export const SKILLED: BotSkill = { reaction: 8, timingError: 15, goldenHit: 85, extraRate: 80, heatTarget: 4200 };
+export const AVERAGE: BotSkill = { reaction: 18, timingError: 40, goldenHit: 40, extraRate: 40, heatTarget: 3600, guessRight: 80 };
+export const SKILLED: BotSkill = { reaction: 8, timingError: 15, goldenHit: 85, extraRate: 80, heatTarget: 4200, guessRight: 100 };
 
 /** 하루를 흉내 플레이어로 돌린다. 화면처럼 지금 틱에 입력을 적용하고 그 틱을 기록한다 */
 export function playDay(state: ShopState, seed: string, skill: BotSkill, botSeed = seed): { inputs: FishInput[]; sim: DaySim } {
@@ -90,7 +93,13 @@ export function playDay(state: ShopState, seed: string, skill: BotSkill, botSeed
         }
         const wantsExtra = c.kind === 'kid' || rng.int(0, 99) < skill.extraRate;
         const extra = wantsExtra && stock >= c.order + 1;
-        act(OP.sell, sellArg(seat, extra, c.menu));
+        // 수수께끼·외국어 주문은 가끔 틀린다: 진열대에 있는 다른 메뉴를 준다
+        let menu = c.menu;
+        if (guessesMenu(c.kind) && rng.int(0, 99) >= skill.guessRight) {
+          const other = MENUS.findIndex((_, m) => m !== c.menu && m < sim.params.menus && sim.shelves[m]!.length >= c.order + (extra ? 1 : 0));
+          if (other >= 0) menu = other;
+        }
+        act(OP.sell, sellArg(seat, extra, menu));
       }
 
       // 빵틀: 메뉴마다 (기다리는 주문 + 미리 구울 개수) − (진열대 + 굽는 중)이 가장 모자란 메뉴를 붓는다
@@ -101,6 +110,11 @@ export function playDay(state: ShopState, seed: string, skill: BotSkill, botSeed
         return need - sim.shelves[m]!.length - baking;
       });
       sim.molds.forEach((mold, i) => {
+        // 깨진 틀은 고친다 (판단할 때마다 한 번씩 두드린다)
+        if (mold.broken) {
+          act(OP.tap, i);
+          return;
+        }
         if (mold.phase !== phases[i]) {
           phases[i] = mold.phase;
           const doneAt = sim.params.doneAt[mold.menu]!;
@@ -150,6 +164,8 @@ export interface DayLog {
   golden: number;
   /** 메뉴별 판 개수 */
   soldBy: number[];
+  /** 깨진 빵틀 수 */
+  broken: number;
   bought: string[];
 }
 
@@ -174,6 +190,7 @@ export function playDays(days: number, skill: BotSkill, seedPrefix: string): Day
       left: s.left,
       golden: s.golden,
       soldBy: s.soldBy,
+      broken: s.broken,
       bought: after.bought,
     });
     state = after.state;
