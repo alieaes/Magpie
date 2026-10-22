@@ -102,7 +102,15 @@ interface MoldView {
   hint: Phaser.GameObjects.Text;
   phase: MoldPhase;
   puffAt: number;
+  /** 지난 프레임에 내던 김·연기 (알맞음 구간에 들어서는 순간을 알아채는 데 쓴다) */
+  puff: 'steam' | 'smoke' | null;
 }
+
+/** 알맞게 익은 빵의 신호: 김 간격(프레임), 들어서는 순간 한꺼번에 내는 김 알 수, 숨 쉬듯 부푸는 폭과 주기(프레임) */
+const READY_STEAM_GAP = 12;
+const READY_STEAM_BURST = 5;
+const READY_BREATH = 0.04;
+const READY_BREATH_PERIOD = 48;
 
 /** 키운 말풍선에서 대사 아래 끝의 높이 (말풍선 중심 기준, 아래 테두리 52) */
 const BUBBLE_TEXT_BOTTOM = 40;
@@ -351,7 +359,7 @@ export class DayView {
         .setOrigin(0.5)
         .setVisible(false);
       this.root.add([base, glow, a, b, mark, crack, hint]);
-      this.molds.push({ cell, cx, cy, a, b, glow, mark, crack, hint, phase: 'empty', puffAt: 0 });
+      this.molds.push({ cell, cx, cy, a, b, glow, mark, crack, hint, phase: 'empty', puffAt: 0, puff: null });
     });
     // 지금 상태를 바로 맞춘다(배치를 바꿔 다시 그릴 때 등장 연출 없이)
     sim.molds.forEach((m, i) => (this.molds[i]!.phase = m.phase));
@@ -428,8 +436,8 @@ export class DayView {
         speedY: { min: -70, max: -40 },
         speedX: { min: -12, max: 12 },
         // 도트 조각은 처음부터 제 크기라 덜 키운다
-        scale: PIXEL_ART ? { start: 0.75, end: 1.25 } : { start: 0.35, end: 0.9 },
-        alpha: { start: 0.5, end: 0 },
+        scale: PIXEL_ART ? { start: 0.9, end: 1.4 } : { start: 0.45, end: 1.0 },
+        alpha: { start: 0.65, end: 0 },
         emitting: false,
       })
       .setDepth(30);
@@ -876,6 +884,7 @@ export class DayView {
       if (m.broken) {
         // 깨진 틀: 금(고칠수록 줄어든다)과 남은 누름 횟수. 깨질 때의 연출은 break 사건이 한다
         v.phase = m.phase;
+        v.puff = null;
         v.a.setVisible(false);
         v.b.setVisible(false);
         v.glow.setVisible(false);
@@ -894,6 +903,7 @@ export class DayView {
       if (m.phase !== v.phase) this.onPhaseChange(v, v.phase, m.phase, sim, m.menu);
       v.phase = m.phase;
       if (m.phase === 'empty') {
+        v.puff = null;
         v.a.setVisible(false);
         v.b.setVisible(false);
         v.glow.setVisible(false);
@@ -964,8 +974,21 @@ export class DayView {
       } else v.b.setVisible(false);
       v.glow.setVisible(shining);
       if (shining) v.glow.setAlpha(0.55 + 0.35 * Math.abs(((this.frame % 30) - 15) / 15));
+      // 알맞게 익은 동안: 들어서는 순간 김이 퐁 올라오고, 빵이 숨 쉬듯 살짝 부푼다
+      const base = this.moldScale * BUN_SCALE;
+      if (puff === 'steam') {
+        if (v.puff !== 'steam') {
+          this.steam.explode(READY_STEAM_BURST, v.cx, v.cy - 20 * this.moldScale);
+          v.puffAt = this.frame + READY_STEAM_GAP;
+        }
+        const wave = Math.abs(((this.frame % READY_BREATH_PERIOD) / READY_BREATH_PERIOD) * 2 - 1);
+        for (const img of [v.a, v.b]) img.setScale(base * (1 + READY_BREATH * wave));
+      } else if (v.puff === 'steam') {
+        for (const img of [v.a, v.b]) img.setScale(base);
+      }
+      v.puff = puff;
       if (puff && this.frame >= v.puffAt) {
-        v.puffAt = this.frame + (puff === 'smoke' ? 10 : 22);
+        v.puffAt = this.frame + (puff === 'smoke' ? 10 : READY_STEAM_GAP);
         (puff === 'smoke' ? this.smoke : this.steam).explode(1, v.cx + (Math.random() - 0.5) * 60 * this.moldScale, v.cy - 20 * this.moldScale);
       }
     });
