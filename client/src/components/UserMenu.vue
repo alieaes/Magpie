@@ -48,8 +48,8 @@ async function onLogout(): Promise<void> {
       v-if="!user"
       type="button"
       class="login"
-      :disabled="!auth.loginAvailable"
-      :title="auth.loginAvailable ? undefined : '로그인은 곧 열려요'"
+      :disabled="!auth.canLogin"
+      :title="auth.canLogin ? undefined : '로그인은 곧 열려요'"
       @click="auth.login()"
     >
       <PhSignIn :size="16" weight="bold" />

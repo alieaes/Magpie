@@ -11,6 +11,8 @@ const EnvSchema = z.object({
   // Google 로그인. 둘 다 있어야 로그인이 열린다. 없으면 서버는 뜨고 로그인만 막힌다
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
+  // 개발용 테스트 로그인. -dev DB + localhost 사이트면 저절로 켜지고, 0이면 끈다 (docs/spec/auth.md)
+  DEV_LOGIN: z.string().optional(),
 });
 
 /** 서버 설정. 값은 환경 변수(.env)에서 온다 */

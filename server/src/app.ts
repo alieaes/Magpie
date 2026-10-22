@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import type { AppEnv } from './app-env';
 import { cookieSettings } from './auth/cookies';
+import { devLoginEnabled } from './auth/dev-login';
 import { googleConfigLoader, type OidcConfigLoader } from './auth/google';
 import { sessionMiddleware } from './auth/session';
 import type { Config } from './config';
@@ -50,6 +51,7 @@ export function createApp({
   oidc = defaultOidc(config),
 }: AppDeps) {
   const cookies = cookieSettings(config.SITE_URL);
+  const devLogin = devLoginEnabled(config);
   const session = sessionMiddleware(db, cookies);
   const sameOrigin = sameOriginOnly(config.SITE_URL);
 
@@ -62,7 +64,7 @@ export function createApp({
       c.header('Cache-Control', 'no-store');
     })
     .route('/', rankingRoutes(ranking, saves))
-    .route('/', meRoutes({ db, cookies, loginAvailable: oidc !== null, ranking }))
+    .route('/', meRoutes({ db, cookies, loginAvailable: oidc !== null, devLogin, ranking }))
     .route('/', playRoutes(plays, logics))
     .route('/', saveRoutes(saves, logics))
     .route('/', adminRoutes({ db, ranking }));
@@ -73,7 +75,7 @@ export function createApp({
       await next();
       c.header('Cache-Control', 'no-store');
     })
-    .route('/', authRoutes({ db, siteUrl: config.SITE_URL, cookies, oidc }));
+    .route('/', authRoutes({ db, siteUrl: config.SITE_URL, cookies, oidc, devLogin }));
 
   const app = new Hono<AppEnv>().route('/', healthRoutes(db)).route('/api', api).route('/auth', auth);
 

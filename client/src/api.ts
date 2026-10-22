@@ -55,6 +55,8 @@ export async function fetchGamesSummary(): Promise<GameSummary[]> {
 export interface MeResponse {
   user: { nickname: string | null; isAdmin: boolean } | null;
   loginAvailable: boolean;
+  /** 개발용 테스트 로그인이 켜져 있는지 (개발 서버에서만) */
+  devLogin: boolean;
 }
 
 /** 내 로그인 상태를 불러온다 */
@@ -132,6 +134,12 @@ export async function adminResetNickname(userId: number): Promise<void> {
 export async function logout(): Promise<void> {
   const res = await client.auth.logout.$post();
   if (!res.ok) throw new ApiError(res.status);
+}
+
+/** 개발용 테스트 계정(테스트N)으로 로그인한다. 개발 서버에서만 켜져 있다. 근거: docs/design/261022-05-dev-login.md */
+export async function devLogin(account: number): Promise<void> {
+  const res = await client.auth['dev-login'].$post({ json: { account } });
+  if (!res.ok) throw await toApiError(res);
 }
 
 /** Google 로그인으로 보낸다. 로그인 뒤 지금 보던 주소로 돌아온다 */

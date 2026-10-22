@@ -1,5 +1,6 @@
 import { serve } from '@hono/node-server';
 import { createApp } from './app';
+import { DEV_ACCOUNTS, devLoginEnabled } from './auth/dev-login';
 import { purgeExpiredSessions } from './auth/session';
 import { loadConfig, loadEnvFile } from './config';
 import { createDb, type Db } from './db';
@@ -36,6 +37,7 @@ function main(): void {
     console.log(
       `[magpie] API 서버 시작 http://127.0.0.1:${info.port} (version ${VERSION}, db ${config.DB_NAME}, 로그인 ${loginReady ? '켜짐' : '꺼짐'})`,
     );
+    if (devLoginEnabled(config)) console.log(`[auth] 개발용 테스트 로그인 켜짐 (테스트1~${DEV_ACCOUNTS})`);
   });
 
   // 정리는 시작할 때 한 번, 그 뒤 하루에 한 번 한다

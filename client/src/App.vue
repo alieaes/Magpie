@@ -3,6 +3,7 @@ import { onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import TopBar from './components/TopBar.vue';
 import AccountDeleteDialog from './components/AccountDeleteDialog.vue';
+import LoginDialog from './components/LoginDialog.vue';
 import NicknameDialog from './components/NicknameDialog.vue';
 import { useAuthStore } from './stores/auth';
 
@@ -42,6 +43,7 @@ onMounted(() => {
   <TopBar />
   <p v-if="notice" class="notice" role="status">{{ notice }}</p>
   <RouterView />
+  <LoginDialog v-if="auth.devLogin" />
   <NicknameDialog />
   <AccountDeleteDialog />
 </template>

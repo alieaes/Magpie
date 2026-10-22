@@ -67,6 +67,7 @@ pnpm 워크스페이스. TypeScript 6.0.3 고정 (vue-tsc가 TypeScript 7을 아
 | `SITE_URL` | `http://localhost:5480` | `BASE_URL`이 아니다 (Vitest가 `BASE_URL`을 미리 채워서 충돌) |
 | `DB_HOST`, `DB_PORT`(3306), `DB_USER`, `DB_PASSWORD`, `DB_NAME` | | `DB_NAME`: 개발 `magpie-dev`, 운영 `magpie` |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | 없음 | 둘 다 있어야 로그인이 열린다. 비어 있으면 로그인만 막힌다. [auth.md](./auth.md) |
+| `DEV_LOGIN` | 없음 | 개발용 테스트 로그인. `-dev` DB + localhost 사이트면 저절로 켜지고, `0`이면 끈다. [auth.md](./auth.md) |
 
 빠지거나 잘못된 키가 있으면 서버가 키 이름을 알려주고 시작하지 않는다.
 

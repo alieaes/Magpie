@@ -19,6 +19,21 @@
 
 - `returnTo`는 `/`로 시작하는 우리 사이트 경로만 받는다(`//`, `/\`, `/auth/`로 시작하면 `/`).
 
+## 개발용 테스트 로그인
+
+설계: [261022-05-dev-login.md](../design/261022-05-dev-login.md)
+
+개발 PC에서 Google 없이 테스트 계정(테스트1~3, `DEV_LOGIN_ACCOUNTS`)으로 로그인한다. 저장·강화·판 제출·랭킹·닉네임·탈퇴·관리자 지정이 보통 계정과 똑같다.
+
+| 요청 | 하는 일 |
+|---|---|
+| `POST /auth/dev-login` `{ account: 1~3 }` | 테스트 계정(`google_sub = 'dev-login:<번호>'`)을 찾거나 만들고 세션 쿠키를 준다. `204`. 번호가 틀리면 `400 BAD_REQUEST`, 꺼져 있으면 `404 NOT_FOUND`(본문 검사보다 먼저). 요청 위조 방지(Origin)를 받는다 |
+| `GET /api/me` | `devLogin: boolean`으로 켜져 있는지 알려준다 |
+
+- **켜지는 조건**(`server/src/auth/dev-login.ts`의 `devLoginEnabled`, 모두): `DB_NAME`이 `-dev`로 끝남, `SITE_URL` 호스트가 `localhost`·`127.0.0.1`, `.env`의 `DEV_LOGIN`이 `0`이 아님. 켜지면 서버 시작 로그에 `[auth] 개발용 테스트 로그인 켜짐 (테스트1~3)`.
+- 처음 만들 때 닉네임을 `테스트N`으로 채운다. 이미 누가 쓰는 이름이면 비워 둔다(그러면 보통처럼 닉네임 창이 뜬다).
+- 화면: 개발 빌드(`import.meta.env.DEV`)이고 서버가 켜 두었을 때만, 로그인 입구(`auth.login()`: 상단 바 [로그인], 게임 안 로그인 버튼)가 **로그인 창**(`LoginDialog.vue`)을 연다 — [Google로 로그인](설정이 없으면 꺼짐), "개발용 테스트 계정" [테스트1] [테스트2] [테스트3], [닫기]. 테스트 계정으로 로그인하면 같은 주소를 다시 불러온다. 이때는 Google 설정이 없어도 상단 바 [로그인]이 켜진다. 운영 빌드에서는 창을 열지 않는다.
+
 ## 세션
 
 | 항목 | 값 |
@@ -44,7 +59,7 @@
 
 | 요청 | 응답 |
 |---|---|
-| `GET /api/me` | `{ user: { nickname, isAdmin } \| null, loginAvailable }`. 관리자는 [admin.md](./admin.md) |
+| `GET /api/me` | `{ user: { nickname, isAdmin } \| null, loginAvailable, devLogin }`. 관리자는 [admin.md](./admin.md), `devLogin`은 위 "개발용 테스트 로그인" |
 | `PUT /api/me/nickname` `{ nickname }` | `200 { nickname }`. 비로그인 `401`, 규칙 위반 `400 NICKNAME_LENGTH / NICKNAME_CHARS / NICKNAME_RESERVED`, 중복 `409 NICKNAME_TAKEN` |
 
 ## 화면

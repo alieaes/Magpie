@@ -19,15 +19,17 @@ export interface MeRouteDeps {
   db: Kysely<Database>;
   cookies: CookieSettings;
   loginAvailable: boolean;
+  /** 개발용 테스트 로그인이 켜져 있는지 */
+  devLogin: boolean;
   ranking: RankingService;
 }
 
 /** /api/me 라우트 */
-export function meRoutes({ db, cookies, loginAvailable, ranking }: MeRouteDeps) {
+export function meRoutes({ db, cookies, loginAvailable, devLogin, ranking }: MeRouteDeps) {
   return new Hono<AppEnv>()
     .get('/me', (c) => {
       const user = c.get('user');
-      return c.json({ user: user ? { nickname: user.nickname, isAdmin: user.isAdmin } : null, loginAvailable }, 200);
+      return c.json({ user: user ? { nickname: user.nickname, isAdmin: user.isAdmin } : null, loginAvailable, devLogin }, 200);
     })
     .put(
       '/me/nickname',

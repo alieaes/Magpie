@@ -79,8 +79,8 @@ describe('요청 위조 방지', () => {
 
 describe('GET /api/me', () => {
   it('비로그인이면 user는 null, 로그인 가능 여부를 알려준다', async () => {
-    expect(await (await makeApp(true).request('/api/me')).json()).toEqual({ user: null, loginAvailable: true });
-    expect(await (await makeApp(false).request('/api/me')).json()).toEqual({ user: null, loginAvailable: false });
+    expect(await (await makeApp(true).request('/api/me')).json()).toEqual({ user: null, loginAvailable: true, devLogin: true });
+    expect(await (await makeApp(false).request('/api/me')).json()).toEqual({ user: null, loginAvailable: false, devLogin: true });
   });
 
   it('비로그인이면 닉네임을 바꿀 수 없다', async () => {
