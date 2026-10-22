@@ -5,11 +5,14 @@
 import { gzipSync } from 'node:zlib';
 import type { Kysely } from 'kysely';
 import {
+  TICKS_PER_SECOND,
   findGame,
   hasDailyRanking,
   isGrowthLogic,
   randomSeed,
   type FinishPlayRequest,
+  type AdoptTrialRequest,
+  type AdoptTrialResponse,
   type FinishPlayResponse,
   type GameId,
   type PlayRejectReason,
@@ -39,6 +42,8 @@ export interface PlayService {
   start(userId: number, gameId: GameId): Promise<StartPlayResponse>;
   /** 끝난 판을 검사하고 저장한다 */
   finish(userId: number, playId: number, submission: FinishPlayRequest): Promise<FinishOutcome>;
+  /** 로그인 전에 체험한 하루를 기록이 없는 계정의 첫 하루로 이어받는다. 랭킹에는 넣지 않는다 */
+  adoptTrial(userId: number, gameId: GameId, trial: AdoptTrialRequest): Promise<AdoptTrialResponse>;
 }
 
 export interface PlayServiceOptions {
@@ -178,6 +183,43 @@ export function createPlayService(
       const response: FinishPlayResponse = { accepted: true, score: final.score, best, rank: await rankAfterPlay(game.id, userId) };
       if (save) response.save = save;
       return { kind: 'judged', response };
+    },
+
+    async adoptTrial(userId, gameId, trial) {
+      const logic = logics.find(gameId);
+      if (!logic || !isGrowthLogic(logic)) return { adopted: false, reason: 'bad_input' };
+      const at = now();
+      await ensureSave(db, userId, gameId, logic, at);
+      const save = await readSave(db, userId, gameId, logic);
+      if (!save || save.version !== 1) return { adopted: false, reason: 'has_record' };
+
+      // 서버가 연 판이 아니라 시작 시각이 없으므로 게임 시간만큼 앞선 시각으로 두어 시간 검사를 통과시킨다
+      const startedAt = new Date(at.getTime() - (trial.ticks / TICKS_PER_SECOND) * 1000);
+      const judgement = await judgePlay({ gameId, logic, seed: trial.seed, startedAt, finishedAt: at, submission: trial, runner, state: save.state });
+      if (!judgement.accepted) return { adopted: false, reason: judgement.reason };
+
+      const replayData = gzipSync(JSON.stringify(trial.inputs));
+      return inTransaction(db, async (trx): Promise<AdoptTrialResponse> => {
+        // 줄을 잠그고 버전을 다시 본다. 그사이 기록이 생겼으면 이어받지 않는다
+        if ((await readSaveVersion(trx, userId, gameId, true)) !== 1) return { adopted: false, reason: 'has_record' };
+        const inserted = await trx
+          .insertInto('plays')
+          .values({
+            user_id: userId,
+            game_id: gameId,
+            seed: trial.seed,
+            save_version: 1,
+            status: 'accepted',
+            score: judgement.score,
+            client_score: trial.score,
+            started_at: startedAt,
+            ended_at: at,
+          })
+          .executeTakeFirstOrThrow();
+        await trx.insertInto('play_replays').values({ play_id: Number(inserted.insertId), data: replayData }).execute();
+        await writeSave(trx, userId, gameId, 1, judgement.nextState, at);
+        return { adopted: true, save: { version: 2, state: judgement.nextState } };
+      });
     },
   };
 }

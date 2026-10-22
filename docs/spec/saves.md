@@ -14,8 +14,10 @@
 
 | 상태 | 할 수 있는 것 |
 |---|---|
-| 로그인 + 닉네임 | 저장, 이어하기, 랭킹 기록 |
+| 로그인 + 닉네임 | 저장, 이어하기, 랭킹 기록. 기록이 없는 계정이면 로그인 전에 체험한 하루를 첫 하루로 이어받는다(아래) |
 | 비로그인 · 닉네임 전 · 개발용 `?seed=` | 체험: 게임이 내놓은 시작 상태(`initialState`)로 하루를 해 볼 수 있다. 서버와 이야기하지 않고 아무것도 저장하지 않는다 |
+
+체험한 하루 이어받기 ([261022-16](../design/261022-16-trial-day-adopt.md)): 체험 창구가 하루가 끝나면 `{ seed, inputs, ticks, score }`를 `localStorage`(`magpie.trialDay.<gameId>`)에 적는다(개발용 `?seed=` 제외, 다시 체험하면 덮어쓴다). 로그인 뒤 저장 창구의 `load()`가 저장 버전이 1이면 `POST /api/plays/adopt-trial`로 올려 새 저장을 받고, 서버가 판정하거나 버전이 1이 아니면 적어 둔 하루를 지운다(연결 실패·5xx면 남긴다). 이어받은 하루는 가게 상태만 이어지고 랭킹에는 들어가지 않는다([plays.md](./plays.md)).
 
 ## 게임 로직 규격 (`shared/src/game-logic.ts`의 `GrowthLogic`)
 
@@ -91,9 +93,9 @@
 
 | 함수 | 저장(`saved`) | 체험(`trial`) |
 |---|---|---|
-| `load()` | 보내지 못한 하루가 있으면 먼저 보낸 뒤 `GET /api/saves/:gameId` | 시작 상태(버전 0) |
+| `load()` | 보내지 못한 하루가 있으면 먼저 보낸 뒤 `GET /api/saves/:gameId`, 기록이 없으면 체험한 하루 이어받기 | 시작 상태(버전 0) |
 | `startDay()` | `POST /api/plays` → `{ seed }` | 무작위 시드(또는 `?seed=`) |
-| `finishDay(result)` | `POST /api/plays/:id/finish` 응답 그대로. 보내지 못하면 예외 | 저장 없이 통과 응답 |
+| `finishDay(result)` | `POST /api/plays/:id/finish` 응답 그대로. 보내지 못하면 예외 | 서버에 안 보내고 통과 응답(하루 기록은 `localStorage`에 적어 둔다) |
 | `act(action)` | `{ ok: true, save }` / `{ ok: false, reason, save? }`(`conflict`면 최신 저장) | `{ ok: false, reason: 'trial' }` |
 | `requestLogin()` | 비로그인이면 Google 로그인, 닉네임 전이면 닉네임 창 | 같음 |
 

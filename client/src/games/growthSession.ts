@@ -5,9 +5,10 @@
 
 import { randomSeed, type FinishPlayRequest, type GameId } from '@magpie/shared';
 import type { GrowthSession } from '@magpie/shared/game-module';
-import { ApiError, fetchSave, finishPlay, sendSaveAction, startPlay } from '../api';
+import { ApiError, adoptTrialDay, fetchSave, finishPlay, sendSaveAction, startPlay } from '../api';
 
 const PENDING_PREFIX = 'magpie.pendingDay.';
+const TRIAL_PREFIX = 'magpie.trialDay.';
 
 /** 보내지 못한 하루. 다음에 가게를 열 때 판이 아직 열려 있으면 다시 보낸다 */
 interface PendingDay {
@@ -35,6 +36,34 @@ function writePending(gameId: GameId, pending: PendingDay | null): void {
     else localStorage.removeItem(PENDING_PREFIX + gameId);
   } catch {
     // 저장 실패는 무시한다. 다시 보내기는 화면이 열려 있는 동안만 된다
+  }
+}
+
+/** 체험으로 한 하루. 로그인하면 이 계정의 첫 하루로 이어받는다 */
+interface TrialDay extends FinishPlayRequest {
+  seed: string;
+}
+
+/** 체험한 하루를 읽는다. 없거나 모양이 틀리면 null */
+function readTrialDay(gameId: GameId): TrialDay | null {
+  try {
+    const text = localStorage.getItem(TRIAL_PREFIX + gameId);
+    if (!text) return null;
+    const value = JSON.parse(text) as Partial<TrialDay>;
+    if (typeof value.seed !== 'string' || typeof value.ticks !== 'number' || typeof value.score !== 'number' || !Array.isArray(value.inputs)) return null;
+    return value as TrialDay;
+  } catch {
+    return null;
+  }
+}
+
+/** 체험한 하루를 적거나(null이면) 지운다. 로그인은 페이지를 새로 띄우므로 메모리가 아니라 저장소에 둔다 */
+function writeTrialDay(gameId: GameId, day: TrialDay | null): void {
+  try {
+    if (day) localStorage.setItem(TRIAL_PREFIX + gameId, JSON.stringify(day));
+    else localStorage.removeItem(TRIAL_PREFIX + gameId);
+  } catch {
+    // 저장소를 못 쓰면 체험 이어받기만 안 된다
   }
 }
 
@@ -66,7 +95,22 @@ export function createSavedSession(gameId: GameId, requestLogin: () => void): Gr
 
     async load() {
       await flushPending();
-      const save = await fetchSave(gameId);
+      let save = await fetchSave(gameId);
+      // 기록이 없는 계정이면 로그인 전에 체험한 하루를 첫 하루로 이어받는다
+      const trial = readTrialDay(gameId);
+      if (trial) {
+        try {
+          if (save.version === 1) {
+            const adopted = await adoptTrialDay({ gameId, ...trial });
+            if (adopted.adopted) save = adopted.save;
+          }
+          writeTrialDay(gameId, null);
+        } catch (err) {
+          // 서버가 판정한 오류면 버리고, 연결 실패·5xx면 남겨 다음에 다시 시도한다
+          if (isSettled(err)) writeTrialDay(gameId, null);
+          else console.warn('[growth] 체험한 하루를 이어받지 못했다', err);
+        }
+      }
       version = save.version;
       return save;
     },
@@ -107,18 +151,27 @@ export function createSavedSession(gameId: GameId, requestLogin: () => void): Gr
 
 /** 체험 창구를 만든다. 서버와 이야기하지 않는다. fixedSeed는 개발 중 ?seed=로 같은 하루를 다시 띄울 때 */
 export function createTrialSession(
+  gameId: GameId,
   initialState: unknown,
   requestLogin: () => void,
   fixedSeed: string | null = null,
   trialHint?: string,
 ): GrowthSession {
   const save = { version: 0, state: initialState };
+  let seed = '';
   return {
     mode: 'trial',
     ...(trialHint ? { trialHint } : {}),
     load: async () => save,
-    startDay: async () => ({ seed: fixedSeed ?? randomSeed() }),
-    finishDay: async (result) => ({ accepted: true, score: result.score, best: { today: false, allTime: false }, rank: { today: null } }),
+    startDay: async () => {
+      seed = fixedSeed ?? randomSeed();
+      return { seed };
+    },
+    finishDay: async (result) => {
+      // 개발용 고정 시드 체험은 이어받지 않는다
+      if (!fixedSeed) writeTrialDay(gameId, { seed, inputs: result.inputs, ticks: result.ticks, score: result.score });
+      return { accepted: true, score: result.score, best: { today: false, allTime: false }, rank: { today: null } };
+    },
     act: async () => ({ ok: false, reason: 'trial' }),
     requestLogin,
   };

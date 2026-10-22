@@ -68,7 +68,7 @@ async function mount(): Promise<void> {
     if (fixedSeed.value) console.info(`[growth] 체험 · 시드 고정(개발용): ${fixedSeed.value}`);
     const session = canSave.value
       ? createSavedSession(props.game.id, requestLogin)
-      : createTrialSession(module.initialState(), requestLogin, fixedSeed.value, trialHint.value);
+      : createTrialSession(props.game.id, module.initialState(), requestLogin, fixedSeed.value, trialHint.value);
     const save = await session.load();
     if (seq !== mountSeq || !host.value) return;
     const created = await module.mount(host.value, {

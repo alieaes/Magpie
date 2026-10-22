@@ -32,6 +32,14 @@ const FinishBody = z.object({
   score: z.int().min(-INT32_MAX).max(INT32_MAX),
 });
 
+// 체험 하루 본문. 시드는 클라이언트가 만든 문자열이라 길이만 막는다
+const AdoptBody = StartBody.extend({
+  seed: z.string().min(1).max(64),
+  inputs: z.array(z.unknown()),
+  ticks: z.int().min(0),
+  score: z.int().min(-INT32_MAX).max(INT32_MAX),
+});
+
 /** /api/plays 라우트 */
 export function playRoutes(plays: PlayService, logics: LogicRegistry = defaultLogics) {
   const startLimiter = new RateLimiter(START_LIMIT, START_WINDOW_MS);
@@ -48,6 +56,25 @@ export function playRoutes(plays: PlayService, logics: LogicRegistry = defaultLo
       }
       return c.json(await plays.start(user.id, gameId), 200);
     })
+    .post(
+      '/plays/adopt-trial',
+      bodyLimit({
+        maxSize: FINISH_MAX_BYTES,
+        onError: (c) => jsonError(c, 413, 'TOO_LARGE', '기록이 너무 큽니다.'),
+      }),
+      zValidator('json', AdoptBody, rejectInvalid),
+      async (c) => {
+        const user = c.get('user');
+        if (!user) return jsonError(c, 401, 'UNAUTHORIZED', '로그인이 필요해요.');
+        if (!user.nickname) return jsonError(c, 403, 'NICKNAME_REQUIRED', '닉네임을 정하면 기록이 남아요.');
+        const { gameId, ...trial } = c.req.valid('json');
+        if (!logics.isRecordable(gameId)) return jsonError(c, 400, 'BAD_REQUEST', '기록할 수 없는 게임입니다.');
+        if (!startLimiter.hit(String(user.id))) {
+          return jsonError(c, 429, 'TOO_MANY_REQUESTS', '너무 자주 보냈어요. 잠시 뒤 다시 해 주세요.');
+        }
+        return c.json(await plays.adoptTrial(user.id, gameId, { gameId, ...trial }), 200);
+      },
+    )
     .post(
       '/plays/:id/finish',
       bodyLimit({

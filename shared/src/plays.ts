@@ -28,6 +28,17 @@ export interface FinishPlayRequest {
   score: number;
 }
 
+/** POST /api/plays/adopt-trial 본문: 로그인 전에 체험한 하루. 시드는 체험 때 클라이언트가 정한 것이다 */
+export interface AdoptTrialRequest extends FinishPlayRequest {
+  gameId: string;
+  seed: string;
+}
+
+/** POST /api/plays/adopt-trial 응답. 이어받았으면 새 저장, 아니면 사유(has_record = 이미 기록이 있음) */
+export type AdoptTrialResponse =
+  | { adopted: true; save: SaveSnapshot }
+  | { adopted: false; reason: 'has_record' | 'bad_input' | 'mismatch' | 'time' };
+
 /** POST /api/plays/:id/finish 응답 */
 export type FinishPlayResponse =
   | {

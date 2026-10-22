@@ -4,6 +4,8 @@ import { hc } from 'hono/client';
 import type { AppType } from '@magpie/server';
 import type {
   FinishPlayRequest,
+  AdoptTrialRequest,
+  AdoptTrialResponse,
   FinishPlayResponse,
   GameId,
   GameSummary,
@@ -83,6 +85,13 @@ export async function startPlay(gameId: GameId): Promise<StartPlayResponse> {
 /** 끝난 판을 보낸다. 서버가 다시 계산해 통과·거절을 알려준다 */
 export async function finishPlay(playId: number, body: FinishPlayRequest): Promise<FinishPlayResponse> {
   const res = await client.api.plays[':id'].finish.$post({ param: { id: String(playId) }, json: body });
+  if (!res.ok) throw await toApiError(res);
+  return res.json();
+}
+
+/** 로그인 전에 체험한 하루를 기록 없는 계정의 첫 하루로 이어받게 한다. 이어받지 못하면 사유가 온다 */
+export async function adoptTrialDay(body: AdoptTrialRequest): Promise<AdoptTrialResponse> {
+  const res = await client.api.plays['adopt-trial'].$post({ json: body });
   if (!res.ok) throw await toApiError(res);
   return res.json();
 }

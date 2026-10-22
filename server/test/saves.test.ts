@@ -317,4 +317,31 @@ describe.skipIf(!canRunDb)('성장형 저장 (개발 DB)', () => {
       expect((await growthRanking(ctx)).entries).toMatchObject([{ rank: 1, score: 3 }]);
     });
   });
+  it('체험한 하루 이어받기: 기록 없는 계정이면 첫 하루로 저장하되 랭킹에는 넣지 않는다', async () => {
+    await withTestApp(async (ctx) => {
+      const body = (inputs: TestShopInput[], score: number) => ({ gameId: GAME, seed: 'trial-seed', inputs, ticks: inputs.at(-1)?.t ?? 0, score });
+      expect((await ctx.post('/api/plays/adopt-trial', body(dayInputs([3, 4, 5]), 12))).status).toBe(401);
+      expect((await ctx.post('/api/plays/adopt-trial', body(dayInputs([3]), 3), (await ctx.login({ nickname: null })).cookie)).status).toBe(403);
+
+      const user = await ctx.login();
+      // 조작된 점수·입력은 이어받지 않고 저장도 그대로
+      let res = await ctx.post('/api/plays/adopt-trial', body(dayInputs([3, 4, 5]), 999), user.cookie);
+      expect(await res.json()).toEqual({ adopted: false, reason: 'mismatch' });
+      res = await ctx.post('/api/plays/adopt-trial', body([{ t: 60, earn: 99 }], 99), user.cookie);
+      expect(await res.json()).toEqual({ adopted: false, reason: 'bad_input' });
+      expect((await load(ctx, user)).version).toBe(1);
+
+      res = await ctx.post('/api/plays/adopt-trial', body(dayInputs([3, 4, 5]), 12), user.cookie);
+      const expected = { version: 2, state: { v: 1, day: 2, money: 12, level: 0 } };
+      expect(await res.json()).toEqual({ adopted: true, save: expected });
+      expect(await load(ctx, user)).toEqual(expected);
+      expect(await ctx.trx.selectFrom('best_alltime').select('play_id').where('user_id', '=', user.id).execute()).toEqual([]);
+      expect(await ctx.trx.selectFrom('plays').select(['status', 'score']).where('user_id', '=', user.id).execute()).toEqual([{ status: 'accepted', score: 12 }]);
+
+      // 이미 기록이 있으면 두 번째는 이어받지 않는다
+      res = await ctx.post('/api/plays/adopt-trial', body(dayInputs([3]), 3), user.cookie);
+      expect(await res.json()).toEqual({ adopted: false, reason: 'has_record' });
+      expect((await load(ctx, user)).version).toBe(2);
+    });
+  });
 });

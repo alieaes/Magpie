@@ -63,6 +63,9 @@
 |---|---|---|
 | `POST /api/plays` | `{ "gameId" }` | `200 { playId, seed }`(성장형은 `saveVersion` 추가). 비로그인 `401 UNAUTHORIZED`, 닉네임 전 `403 NICKNAME_REQUIRED`, 없는·기록할 수 없는 게임 `400 BAD_REQUEST`, 유저당 분당 20회 초과 `429 TOO_MANY_REQUESTS` |
 | `POST /api/plays/:id/finish` | `{ inputs: [], ticks, score }` | `200 { accepted: true, score, best: { today, allTime }, rank: { today } }`(성장형은 `rank: { today: null, allTime }`, 새 저장 `save` 추가) 또는 `200 { accepted: false, reason }` |
+| `POST /api/plays/adopt-trial` | `{ gameId, seed, inputs, ticks, score }` | 성장형만. 로그인 전에 체험한 하루를 이어받는다. `200 { adopted: true, save }` 또는 `{ adopted: false, reason }`(`has_record`·`bad_input`·`mismatch`·`time`). 비로그인 401, 닉네임 전 403, 시작과 같은 분당 횟수 제한 |
+
+`adopt-trial`: 저장이 시작 상태 그대로(버전 1)일 때만 받는다. 클라이언트가 정한 시드로 시작 상태에서 하루를 다시 돌려 점수를 확인하고(경과 시간 검사는 게임 시간만큼 흐른 것으로 친다), 판(통과)·입력 기록을 남기고 저장을 다음 날로 바꾼다(버전 2). 시드를 클라이언트가 정하므로 **최고 기록(랭킹)은 갱신하지 않는다**.
 
 `finish`의 오류(판을 건드리지 않는다):
 
