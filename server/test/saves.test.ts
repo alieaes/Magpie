@@ -1,12 +1,12 @@
 // 성장형 게임 저장 통합 테스트. 개발 DB(-dev)의 되돌림 트랜잭션 안에서 시험용 가게 로직(growth-fixture)으로
 // 저장 불러오기, 가게 행동, 하루 끝 검증과 저장 갱신, stale_save, 일시정지 시간 검사, 로비 진행 상황,
-// 총합 랭킹 제외와 전체 랭킹만 있는 것(일간 없음)을 본다.
+// 총합 랭킹 제외와 전체 랭킹만 있는 것(일간 없음), 관리자 게임 랭킹 초기화를 본다.
 
 import { describe, expect, it } from 'vitest';
 import type { FinishPlayResponse, GameSummary, RankingResponse, SaveSnapshot, StartPlayResponse } from '@magpie/shared';
 import { defaultLogics } from '../src/plays/logics';
 import { TEST_DAY_TICKS, upgradeCost, type TestShopInput, type TestShopState } from './growth-fixture';
-import { GROWTH_TEST_GAME, canRunDb, playAppleGreedy, withTestApp, type TestApp, type TestUser } from './helpers';
+import { GROWTH_TEST_GAME, canRunDb, parseDetail, playAppleGreedy, withTestApp, type TestApp, type TestUser } from './helpers';
 
 const GAME = GROWTH_TEST_GAME;
 
@@ -36,6 +36,11 @@ async function finishDay(ctx: TestApp, user: TestUser, play: StartPlayResponse, 
   const res = await ctx.post(`/api/plays/${play.playId}/finish`, { inputs, ticks, score }, user.cookie);
   expect(res.status).toBe(200);
   return (await res.json()) as FinishPlayResponse;
+}
+
+/** 시험 가게의 전체 랭킹을 받는다 */
+async function growthRanking(ctx: TestApp): Promise<RankingResponse> {
+  return (await (await ctx.get(`/api/rankings?target=${GAME}&limit=100`)).json()) as RankingResponse;
 }
 
 describe.skipIf(!canRunDb)('성장형 저장 (개발 DB)', () => {
@@ -255,6 +260,61 @@ describe.skipIf(!canRunDb)('성장형 저장 (개발 DB)', () => {
       expect(await ctx.trx.selectFrom('save_actions').select('id').where('user_id', '=', user.id).execute()).toEqual([]);
       // 다른 유저의 저장은 그대로
       expect((await load(ctx, other)).version).toBe(3);
+    });
+  });
+
+  // 게임 랭킹 초기화(관리자)는 그 게임의 전체 랭킹 줄을 통째로 지운다. 같은 게임의 기록을 쓰는 다른 파일과 병렬로 돌면
+  // 되돌림 트랜잭션끼리 잠금이 엇갈려 교착이 나므로, 성장형 시험 게임을 쓰는 이 파일에 모아 차례로 돌린다
+  it('게임 랭킹 초기화: 관리자만, 없는 게임 404, 미니게임 400, 비어 있으면 409', async () => {
+    await withTestApp(async (ctx) => {
+      const path = `/api/admin/games/${GAME}/reset-ranking`;
+      expect((await ctx.post(path)).status).toBe(401);
+      expect((await ctx.post(path, undefined, (await ctx.login()).cookie)).status).toBe(403);
+
+      const admin = await ctx.login({ admin: true });
+      expect((await ctx.post('/api/admin/games/nope/reset-ranking', undefined, admin.cookie)).status).toBe(404);
+      expect((await ctx.post('/api/admin/games/apple-ten/reset-ranking', undefined, admin.cookie)).status).toBe(400);
+      await ctx.trx.deleteFrom('best_alltime').where('game_id', '=', GAME).execute();
+      expect((await ctx.post(path, undefined, admin.cookie)).status).toBe(409);
+    });
+  });
+
+  it('게임 랭킹 초기화: 전체 랭킹만 비우고 저장·판 기록·다른 게임은 그대로, 작업 기록을 남긴다. 다음 하루부터 다시 쌓인다', async () => {
+    await withTestApp(async (ctx) => {
+      await ctx.trx.deleteFrom('best_alltime').where('game_id', '=', GAME).execute();
+      const admin = await ctx.login({ admin: true });
+      const grower = await ctx.login();
+      const other = await ctx.login();
+      const day = await finishDay(ctx, grower, await startDay(ctx, grower), dayInputs([8]), 8);
+      await finishDay(ctx, other, await startDay(ctx, other), dayInputs([5]), 5);
+      const apple = (await (await ctx.post('/api/plays', { gameId: 'apple-ten' }, grower.cookie)).json()) as StartPlayResponse;
+      const { inputs, score } = playAppleGreedy(apple.seed, 3);
+      const ticks = inputs.at(-1)!.t + 30;
+      ctx.advance((ticks / 60) * 1000 + 500);
+      expect(await (await ctx.post(`/api/plays/${apple.playId}/finish`, { inputs, ticks, score }, grower.cookie)).json()).toMatchObject({ accepted: true });
+      expect((await growthRanking(ctx)).participants).toBe(2);
+
+      expect((await ctx.post(`/api/admin/games/${GAME}/reset-ranking`, undefined, admin.cookie)).status).toBe(204);
+      expect(await growthRanking(ctx)).toMatchObject({ participants: 0, entries: [] });
+
+      // 가게 저장·판 기록·사과게임 기록은 그대로
+      expect((await load(ctx, grower)).version).toBe(day.accepted ? day.save?.version : undefined);
+      const plays = await ctx.trx.selectFrom('plays').select('status').where('user_id', '=', grower.id).where('game_id', '=', GAME).execute();
+      expect(plays).toEqual([{ status: 'accepted' }]);
+      expect(await ctx.trx.selectFrom('best_alltime').select('game_id').where('user_id', '=', grower.id).execute()).toEqual([{ game_id: 'apple-ten' }]);
+
+      const log = await ctx.trx
+        .selectFrom('admin_actions')
+        .select(['action', 'target_user_id', 'play_id', 'detail'])
+        .where('admin_user_id', '=', admin.id)
+        .executeTakeFirstOrThrow();
+      expect(log).toMatchObject({ action: 'reset_ranking', target_user_id: null, play_id: null });
+      expect(parseDetail(log.detail)).toEqual({ gameId: GAME, removed: 2 });
+
+      // 초기화 뒤 끝낸 하루는 예전 최고(8)보다 낮아도 새 랭킹의 1위로 들어간다
+      const next = await finishDay(ctx, grower, await startDay(ctx, grower), dayInputs([3]), 3);
+      expect(next).toMatchObject({ best: { allTime: true }, rank: { allTime: 1 } });
+      expect((await growthRanking(ctx)).entries).toMatchObject([{ rank: 1, score: 3 }]);
     });
   });
 });

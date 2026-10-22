@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { RankingResponse, StartPlayResponse } from '@magpie/shared';
-import { canRunDb, playAppleGreedy, withTestApp, type TestApp, type TestUser } from './helpers';
+import { canRunDb, parseDetail, playAppleGreedy, withTestApp, type TestApp, type TestUser } from './helpers';
 
 /** 사과게임 한 판을 통과시키고 판 번호를 돌려준다 */
 async function acceptedPlay(app: TestApp, user: TestUser, moves: number): Promise<number> {
@@ -13,11 +13,6 @@ async function acceptedPlay(app: TestApp, user: TestUser, moves: number): Promis
   const res = await app.post(`/api/plays/${play.playId}/finish`, { inputs, ticks, score }, user.cookie);
   expect(await res.json()).toMatchObject({ accepted: true });
   return play.playId;
-}
-
-/** 작업 기록의 detail을 객체로 읽는다. 드라이버가 이미 풀었으면 그대로 */
-function parseDetail(detail: unknown): unknown {
-  return typeof detail === 'string' ? JSON.parse(detail) : detail;
 }
 
 /** 사과게임 일간 랭킹을 받는다 */

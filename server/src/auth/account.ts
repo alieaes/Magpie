@@ -6,9 +6,8 @@
 import { sql, type Kysely } from 'kysely';
 import { inTransaction } from '../db';
 import type { Database } from '../db/types';
-
-// 한 번에 지울 기본 키 개수. 판이 아주 많은 유저도 쿼리 하나가 너무 커지지 않게 나눈다
-const CHUNK = 500;
+// 판이 아주 많은 유저도 쿼리 하나가 너무 커지지 않게 기본 키를 나눠 지운다
+import { chunks } from '../lib/chunks';
 
 /**
  * 유저를 지운다. 한 트랜잭션에서 최고 기록, 판과 입력 기록, 성장형 게임 저장과 가게 행동 기록, 세션, 유저 줄을 지운다.
@@ -80,11 +79,4 @@ export async function deleteAccount(db: Kysely<Database>, userId: number): Promi
 
     await trx.deleteFrom('users').where('id', '=', userId).execute();
   });
-}
-
-/** 배열을 CHUNK개씩 나눈다 */
-function chunks<T>(items: readonly T[]): T[][] {
-  const out: T[][] = [];
-  for (let i = 0; i < items.length; i += CHUNK) out.push(items.slice(i, i + CHUNK));
-  return out;
 }

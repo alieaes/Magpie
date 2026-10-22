@@ -118,6 +118,11 @@ export function withTestApp(fn: (app: TestApp) => Promise<void>, { logics = test
   });
 }
 
+/** 관리자 작업 기록의 detail을 객체로 읽는다. 드라이버가 이미 풀었으면 그대로 */
+export function parseDetail(detail: unknown): unknown {
+  return typeof detail === 'string' ? JSON.parse(detail) : detail;
+}
+
 /** 사과게임 판에서 합이 10인 사각형을 하나 찾는다 (작은 것부터). 없으면 null */
 function findMatch(board: Uint8Array): CellRect | null {
   for (let h = 1; h <= ROWS; h += 1) {

@@ -2,6 +2,7 @@
 // 랭킹 전체 페이지. 고른 대상·기간은 주소 쿼리(?target=&period=)에 남긴다.
 // 대상 탭은 분류(미니게임·게임)로 묶고, 게임 분류는 일간이 없어 기간 전환을 숨긴다. 근거: docs/design/261022-07-game-categories.md §4
 // 관리자에게는 줄마다 관리 메뉴(기록 삭제·닉네임 초기화)가 생긴다. 근거: docs/design/261008-02-admin.md §5
+// 게임 분류 탭에서는 [랭킹 초기화] 버튼도 생긴다. 근거: docs/design/261022-08-game-ranking-reset.md §3
 import { computed, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { PhClock } from '@phosphor-icons/vue';
@@ -14,7 +15,7 @@ import {
   type RankingPeriod,
   type RankingTarget,
 } from '@magpie/shared';
-import { ApiError, adminRemovePlay, adminResetNickname, fetchRanking } from '../api';
+import { ApiError, adminRemovePlay, adminResetNickname, adminResetRanking, fetchRanking } from '../api';
 import { useAsyncData } from '../composables/useAsyncData';
 import { useAuthStore } from '../stores/auth';
 import { useCountdown } from '../composables/useCountdown';
@@ -59,13 +60,23 @@ const unit = computed(() => scoreUnit(target.value));
 /** 게임 탭의 설명 한 줄 (성장형 게임은 점수가 무엇인지 알려 준다) */
 const gameNote = computed(() => (target.value === 'total' ? null : (findGame(target.value)?.rankingNote ?? null)));
 
-/** 확인을 기다리는 관리 작업 */
-const pending = ref<{ kind: 'removePlay' | 'resetNickname'; entry: RankingEntry } | null>(null);
+/** 확인을 기다리는 관리 작업. 게임 랭킹 초기화는 게임 분류 탭에서만 (docs/design/261022-08-game-ranking-reset.md §3) */
+type PendingAction =
+  | { kind: 'removePlay' | 'resetNickname'; entry: RankingEntry }
+  | { kind: 'resetRanking'; target: RankingTarget; participants: number };
+const pending = ref<PendingAction | null>(null);
 const acting = ref(false);
 const actionError = ref('');
 const confirmCopy = computed(() => {
   const p = pending.value;
   if (!p) return { title: '', message: '', confirm: '' };
+  if (p.kind === 'resetRanking') {
+    return {
+      title: '랭킹 초기화',
+      message: `${targetLabel(p.target)} 랭킹을 초기화할까요? ${formatNumber(p.participants)}명의 기록이 지워지고, 가게 저장은 그대로예요. 되돌릴 수 없어요.`,
+      confirm: '초기화',
+    };
+  }
   const name = p.entry.nickname;
   if (p.kind === 'removePlay') {
     const record = `${targetLabel(target.value)} ${formatNumber(p.entry.score)}${unit.value}`;
@@ -84,6 +95,12 @@ function ask(kind: 'removePlay' | 'resetNickname', entry: RankingEntry): void {
   pending.value = { kind, entry };
 }
 
+/** 게임 랭킹 초기화의 확인 창을 연다. 참여자 수는 지금 보이는 값 */
+function askResetRanking(): void {
+  actionError.value = '';
+  pending.value = { kind: 'resetRanking', target: target.value, participants: data.value?.participants ?? 0 };
+}
+
 /** 확인한 관리 작업을 서버에 보내고 랭킹을 다시 불러온다 */
 async function runAction(): Promise<void> {
   const p = pending.value;
@@ -91,7 +108,8 @@ async function runAction(): Promise<void> {
   acting.value = true;
   actionError.value = '';
   try {
-    if (p.kind === 'removePlay') await adminRemovePlay(p.entry.playId!);
+    if (p.kind === 'resetRanking') await adminResetRanking(p.target);
+    else if (p.kind === 'removePlay') await adminRemovePlay(p.entry.playId!);
     else await adminResetNickname(p.entry.userId!);
     pending.value = null;
     void reload();
@@ -120,6 +138,15 @@ async function runAction(): Promise<void> {
       </p>
       <p v-else-if="!daily" class="meta">전체 기간 · 매일 초기화되지 않아요</p>
       <p v-else-if="shownPeriod === 'alltime'" class="meta">전체 기간</p>
+      <button
+        v-if="auth.isAdmin && !daily"
+        type="button"
+        class="reset-button"
+        :disabled="!data || data.participants === 0"
+        @click="askResetRanking"
+      >
+        랭킹 초기화
+      </button>
     </div>
 
     <p v-if="target === 'total'" class="note">
@@ -204,6 +231,29 @@ async function runAction(): Promise<void> {
   gap: 6px;
   font-size: 13px;
   color: var(--text-2);
+}
+
+/* 관리자 전용. 시간 줄 오른쪽 끝에 작게 */
+.reset-button {
+  height: 32px;
+  margin-left: auto;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  color: #d9564a;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.reset-button:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+
+.reset-button:disabled {
+  color: var(--text-3);
+  cursor: default;
 }
 
 .note {

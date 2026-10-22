@@ -130,6 +130,12 @@ export async function adminResetNickname(userId: number): Promise<void> {
   if (!res.ok) throw await toApiError(res);
 }
 
+/** 관리자: "게임" 분류 게임의 전체 랭킹을 비운다. 근거: docs/design/261022-08-game-ranking-reset.md */
+export async function adminResetRanking(gameId: string): Promise<void> {
+  const res = await client.api.admin.games[':gameId']['reset-ranking'].$post({ param: { gameId } });
+  if (!res.ok) throw await toApiError(res);
+}
+
 /** 로그아웃한다 */
 export async function logout(): Promise<void> {
   const res = await client.auth.logout.$post();

@@ -1,12 +1,16 @@
-// 관리자 기능: 기록 삭제, 닉네임 초기화. 한 일은 모두 admin_actions에 남긴다.
-// 근거: docs/design/261008-02-admin.md
+// 관리자 기능: 기록 삭제, 닉네임 초기화, 게임 랭킹 초기화. 한 일은 모두 admin_actions에 남긴다.
+// 근거: docs/design/261008-02-admin.md, docs/design/261022-08-game-ranking-reset.md
 
 import { sql, type Kysely } from 'kysely';
+import { findGame, isGrowthGame } from '@magpie/shared';
 import { inTransaction } from '../db';
 import type { AdminActionKind, Database } from '../db/types';
+import { chunks } from '../lib/chunks';
 
 export type RemovePlayResult = 'removed' | 'not_found' | 'not_accepted';
 export type ResetNicknameResult = 'reset' | 'not_found' | 'already_empty';
+/** not_resettable = 미니게임(일간이 매일 새로 시작하고 역대는 쌓이는 것이 규칙이라 대상이 아니다) */
+export type ResetRankingResult = 'reset' | 'not_found' | 'not_resettable' | 'empty';
 
 /**
  * 기록 삭제: 통과한 판을 거절(admin)로 바꾸고, 그 판을 가리키는 일간·역대 최고 기록 줄을 지운다.
@@ -67,12 +71,36 @@ export async function resetNickname(db: Kysely<Database>, adminId: number, userI
   });
 }
 
+/**
+ * 게임 랭킹 초기화: "게임" 분류(성장형) 게임의 전체 랭킹(best_alltime) 줄을 모두 지운다.
+ * 판 기록·가게 저장은 그대로라 가게는 이어서 하고, 그 뒤 끝나는 하루부터 다시 쌓인다.
+ * 지운 줄은 판 기록(통과한 판 중 초기화 시각 전 유저별 최고)으로 다시 만들 수 있어 작업 기록에는 줄 수만 남긴다.
+ */
+export async function resetGameRanking(db: Kysely<Database>, adminId: number, gameId: string): Promise<ResetRankingResult> {
+  const game = findGame(gameId);
+  if (!game) return 'not_found';
+  if (!isGrowthGame(game)) return 'not_resettable';
+  return inTransaction(db, async (trx) => {
+    // 순위 색인(game_id, score)으로 그 게임의 줄을 잠그고 읽은 뒤 기본 키로 지운다(틈 잠금을 피한다).
+    // 잠그기 전에 끝난 하루는 같이 지워지고, 그 뒤에 끝난 하루는 새 랭킹의 첫 기록이 된다
+    const userIds = (await trx.selectFrom('best_alltime').select('user_id').where('game_id', '=', game.id).forUpdate().execute()).map((r) =>
+      Number(r.user_id),
+    );
+    if (userIds.length === 0) return 'empty';
+    for (const part of chunks(userIds)) {
+      await trx.deleteFrom('best_alltime').where('game_id', '=', game.id).where('user_id', 'in', part).execute();
+    }
+    await logAction(trx, adminId, 'reset_ranking', null, null, { gameId: game.id, removed: userIds.length });
+    return 'reset';
+  });
+}
+
 /** 관리자 작업 한 줄을 남긴다. detail에는 처리 전 값을 둔다 */
 async function logAction(
   trx: Kysely<Database>,
   adminId: number,
   action: AdminActionKind,
-  targetUserId: number,
+  targetUserId: number | null,
   playId: number | null,
   detail: Record<string, unknown>,
 ): Promise<void> {

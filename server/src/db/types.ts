@@ -68,10 +68,10 @@ export interface BestAlltimeTable {
   play_id: number;
 }
 
-/** 관리자 작업 종류 */
-export type AdminActionKind = 'remove_play' | 'reset_nickname';
+/** 관리자 작업 종류. reset_ranking은 008_admin_reset_ranking.sql */
+export type AdminActionKind = 'remove_play' | 'reset_nickname' | 'reset_ranking';
 
-/** 006_users_role.sql. 대상 유저·판에 외래 키가 없다(탈퇴해도 기록은 남는다) */
+/** 006_users_role.sql. 대상 유저·판에 외래 키가 없다(탈퇴해도 기록은 남는다). 게임 랭킹 초기화는 대상 유저·판이 없다 */
 export interface AdminActionsTable {
   id: Generated<number>;
   created_at: ColumnType<Date, Date | undefined, never>;
