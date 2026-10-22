@@ -13,12 +13,15 @@ import {
   applyInput,
   createDay,
   initialShopState,
+  sellArg,
   settleDay,
+  tapArg,
   type DayOutcome,
   type DaySim,
   type DayStats,
   type FishInput,
   type InputResult,
+  type Menu,
   type ShopState,
   type UpgradeKey,
 } from '../logic/rules';
@@ -52,6 +55,8 @@ interface DayRun {
   paused: boolean;
   ended: boolean;
   view: DayView | null;
+  /** 고른 반죽 (배치를 바꿔 장사 화면을 다시 그려도 유지) */
+  batter: Menu;
 }
 
 /** 정산 중인 하루 */
@@ -223,13 +228,22 @@ export class FishBunScene extends Phaser.Scene {
       case 'day': {
         const run = this.run;
         if (!run) return this.show('shop');
-        run.view = new DayView(this, this.layout, palette, this.opts.sfx, run.sim, {
-          tap: (i) => this.tapMold(i),
-          pump: (on) => this.setPump(on),
-          sell: (seat, extra) => this.sell(seat, extra),
-          trash: () => void this.act(OP.trash, 0),
-          pause: () => this.pauseDay(),
-        });
+        run.view = new DayView(
+          this,
+          this.layout,
+          palette,
+          this.opts.sfx,
+          run.sim,
+          {
+            tap: (i, menu) => this.tapMold(i, menu),
+            pump: (on) => this.setPump(on),
+            sell: (seat, extra, menu) => this.sell(seat, extra, menu),
+            trash: () => void this.act(OP.trash, 0),
+            pause: () => this.pauseDay(),
+            batter: (menu) => (run.batter = menu),
+          },
+          run.batter,
+        );
         break;
       }
     }
@@ -280,7 +294,7 @@ export class FishBunScene extends Phaser.Scene {
     try {
       const { seed } = await this.opts.session.startDay();
       const sim = createDay(this.save.state, seed, true);
-      this.run = { seed, sim, inputs: [], elapsed: 0, paused: false, ended: false, view: null };
+      this.run = { seed, sim, inputs: [], elapsed: 0, paused: false, ended: false, view: null, batter: 0 };
       this.starting = false;
       this.opts.onDayActive?.(true);
       this.show('day');
@@ -301,9 +315,10 @@ export class FishBunScene extends Phaser.Scene {
     return result;
   }
 
-  /** 빵틀 누름 */
-  private tapMold(index: number): boolean {
-    const result = this.act(OP.tap, index);
+  /** 빵틀 누름. 빈 틀이면 고른 반죽(menu)을 붓고, 굽는 틀이면 빵틀 번호만 보낸다 */
+  private tapMold(index: number, menu: Menu): boolean {
+    const mold = this.run?.sim.molds[index];
+    const result = this.act(OP.tap, mold?.phase === 'empty' ? tapArg(index, menu) : index);
     if (result && !result.ok && result.reason !== 'too_fast') this.run?.view?.deniedMold(index, result.reason);
     return result?.ok ?? false;
   }
@@ -315,9 +330,9 @@ export class FishBunScene extends Phaser.Scene {
     this.act(OP.pump, on ? 1 : 0);
   }
 
-  /** 판매 */
-  private sell(seat: number, extra: boolean): void {
-    const result = this.act(OP.sell, seat * 2 + (extra ? 1 : 0));
+  /** 판매: menu 빵을 준다 */
+  private sell(seat: number, extra: boolean, menu: Menu): void {
+    const result = this.act(OP.sell, sellArg(seat, extra, menu));
     if (result && !result.ok) this.opts.sfx.deny();
   }
 

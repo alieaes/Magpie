@@ -9,17 +9,19 @@ import { AVERAGE, SKILLED, playDay, playDays, type DayLog } from './bot';
 function print(title: string, logs: DayLog[]): void {
   const rows = logs.map(
     (l) =>
-      `${String(l.day).padStart(3)}일 수익 ${String(l.profit).padStart(6)} 돈 ${String(l.money).padStart(7)} 평판 ${String(l.reputation).padStart(5)}(Lv${levelOf(l.reputation)}) 빵틀 ${String(l.molds).padStart(2)} 손님 ${l.served}/${l.customers} 떠남 ${l.left} 황금 ${l.golden} ${l.bought.join(',')}`,
+      `${String(l.day).padStart(3)}일 수익 ${String(l.profit).padStart(6)} 돈 ${String(l.money).padStart(7)} 평판 ${String(l.reputation).padStart(5)}(Lv${levelOf(l.reputation)}) 빵틀 ${String(l.molds).padStart(2)} 손님 ${l.served}/${l.customers} 떠남 ${l.left} 황금 ${l.golden} 메뉴 ${l.soldBy.join('/')} ${l.bought.join(',')}`,
   );
   console.log(`--- ${title}\n${rows.join('\n')}`);
 }
 
 describe('흉내 플레이어', () => {
   it('화면처럼 진행한 하루와 다시 돌린 하루가 같다', () => {
-    for (const seed of ['bot-a', 'bot-b', 'bot-c']) {
-      const { inputs, sim } = playDay(initialShopState(), seed, SKILLED);
+    // 팥만 열린 가게와 세 메뉴가 다 열린 가게(평판 Lv5)
+    const shops = [initialShopState(), { ...initialShopState(), reputation: 280 }];
+    for (const [seed, shop] of shops.flatMap((s) => ['bot-a', 'bot-b', 'bot-c'].map((seed) => [seed, s] as const))) {
+      const { inputs, sim } = playDay(shop, seed, SKILLED);
       const live = settleDay(sim);
-      const replayed = replayDay(seed, inputs, initialShopState());
+      const replayed = replayDay(seed, inputs, shop);
       expect(replayed.ok).toBe(true);
       if (!replayed.ok) return;
       expect(replayed.score).toBe(live.score);
@@ -37,6 +39,12 @@ describe('흉내 플레이어', () => {
     const twelve = logs.findIndex((l) => l.molds >= 12);
     expect(twelve).toBeGreaterThan(4);
     expect(twelve).toBeLessThanOrEqual(13);
+    // 메뉴 늘리기(설계 261022-02 §6): 슈크림·피자가 열리면 팔리고, 피자가 열린 뒤 하루 수익이 오른다
+    expect(logs.some((l) => l.soldBy[1]! > 0)).toBe(true);
+    expect(logs.some((l) => l.soldBy[2]! > 0)).toBe(true);
+    const pizzaDay = logs.findIndex((l) => l.soldBy[2]! > 0);
+    const avg = (ls: DayLog[]) => ls.reduce((s, l) => s + l.profit, 0) / ls.length;
+    expect(avg(logs.slice(pizzaDay, pizzaDay + 5))).toBeGreaterThan(avg(logs.slice(Math.max(0, pizzaDay - 5), pizzaDay)));
   });
 
   it('잘하는 실력은 보통보다 더 번다', () => {

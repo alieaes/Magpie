@@ -205,6 +205,16 @@ export class Button extends Phaser.GameObjects.Container {
     return this.enabled;
   }
 
+  /** 모양을 바꾼다 (고른 반죽 표시 등) */
+  setStyle(style: ButtonStyle): this {
+    if (this.opts.style === style) return this;
+    this.opts.style = style;
+    this.label.setColor(hex(this.textColor()));
+    this.sub?.setColor(hex(this.subColor()));
+    this.draw();
+    return this;
+  }
+
   /** 글자를 바꾼다. 같으면 다시 그리지 않는다 */
   setText(label: string, sub?: string): this {
     if (this.label.text !== label) this.label.setText(label);

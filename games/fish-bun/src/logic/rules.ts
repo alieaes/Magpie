@@ -1,5 +1,6 @@
 // 하루 장사 시뮬레이션: 굽기·화력·손님·판매·마감·정산. 화면(scene)과 서버(replayDay)가 같은 코드로 하루를 진행한다.
 // 정수 연산, 시드 난수, 60틱 고정 간격만 쓴다 (CLAUDE.md §4-3). 근거: docs/design/261021-01-fish-bun.md §2~§4, §6
+// 메뉴(팥·슈크림·피자): docs/design/261022-02-fish-bun-menu.md
 //
 // 진행 규칙: 입력은 그 틱을 진행하기 전에 적용한다. 다시 돌릴 때는 입력의 틱까지 진행한 뒤 입력을 적용하고,
 // 입력이 끝나면 마감(DAY_TICKS)까지 진행해 정산한다. 화면도 지금 틱(sim.tick)에 입력을 적용하고 그 틱을 기록한다.
@@ -17,9 +18,11 @@ import {
   shelfCapacity,
   type ShopState,
 } from './growth';
+import { MENUS, openMenus, type Menu } from './menus';
 
 export * from './customers';
 export * from './growth';
+export * from './menus';
 
 /** 하루 길이: 3분 */
 export const DAY_TICKS = 10_800;
@@ -28,8 +31,6 @@ export const TICKS_PER_GAME_MINUTE = 15;
 export const OPEN_MINUTE = 10 * 60;
 /** 마감 30초 전(21:30)부터 새 손님이 오지 않는다 */
 export const LAST_ARRIVAL_TICK = DAY_TICKS - 30 * 60;
-/** 반죽 한 번 재료비 */
-export const DOUGH_COST = 50;
 /** 하루를 시작할 때 돈이 이보다 적으면 이만큼 채운다 */
 export const SUBSIDY_FLOOR = 500;
 /** 카운터 자리 */
@@ -47,10 +48,7 @@ const FIRST_ARRIVAL: readonly [number, number] = [120, 240];
 export const HEAT_MAX = 6000;
 export const HEAT_START = 3000;
 export const HEAT_RISE = 40;
-/** 익힘 구간. 매 틱 굽는 속도(cookSpeed)만큼 오른다. 화력 50%면 덜 익음 0~4초, 알맞음 4~6.5초 */
-export const DONE_AT = 26_400;
-export const BURN_AT = 42_900;
-/** 황금 후보가 반짝이는 길이 (화력 50%에서 0.6초) */
+/** 황금 후보가 반짝이는 길이 (화력 50%에서 0.6초). 익힘 값은 매 틱 굽는 속도(cookSpeed)만큼 오르고, 구간은 메뉴마다 다르다(MENUS) */
 export const GOLD_WINDOW = 3_960;
 /** 하루 점수의 이론상 최고값 (넉넉한 상한) */
 export const MAX_SCORE = 100_000_000;
@@ -58,8 +56,29 @@ export const MAX_SCORE = 100_000_000;
 /** 입력 동작 번호 */
 export const OP = { tap: 0, pump: 1, sell: 2, trash: 3 } as const;
 
-/** 입력 한 개: [틱, 동작, 값]. tap = 빵틀 번호, pump = 1(누름)/0(뗌), sell = 자리 × 2 + 덤(1), trash = 0 */
+/**
+ * 입력 한 개: [틱, 동작, 값].
+ * - tap = 빵틀 번호 + 16 × 메뉴. 메뉴는 빈 틀에 부을 때만 쓰고(팥 0), 뒤집기·꺼내기는 빵틀 번호만
+ * - pump = 1(누름)/0(뗌)
+ * - sell = 8 × 메뉴 + 자리 × 2 + 덤(1). 팥은 메뉴를 넣기 전 값과 같다
+ * - trash = 0
+ */
 export type FishInput = [t: number, op: number, arg: number];
+
+/** tap 값에서 메뉴를 나누는 단위 (빵틀은 12칸까지) */
+export const TAP_MENU_UNIT = 16;
+/** sell 값에서 메뉴를 나누는 단위 (자리 × 2 + 덤은 6 미만) */
+export const SELL_MENU_UNIT = 8;
+
+/** 붓기 입력 값 */
+export function tapArg(mold: number, menu: Menu = 0): number {
+  return mold + TAP_MENU_UNIT * menu;
+}
+
+/** 판매 입력 값 */
+export function sellArg(seat: number, extra: boolean, menu: Menu = 0): number {
+  return SELL_MENU_UNIT * menu + seat * 2 + (extra ? 1 : 0);
+}
 
 export type MoldPhase = 'empty' | 'bottom' | 'top';
 
@@ -68,6 +87,8 @@ export interface Mold {
   phase: MoldPhase;
   bottom: number;
   top: number;
+  /** 부은 반죽(메뉴). 빈 틀이면 마지막으로 구운 메뉴 */
+  menu: Menu;
   /** 황금 후보인지 (부을 때 정한다) */
   candidate: boolean;
   /** 마지막으로 누른 틱 */
@@ -81,6 +102,8 @@ export interface Customer {
   /** 온 순서 */
   id: number;
   kind: CustomerKind;
+  /** 주문한 메뉴 */
+  menu: Menu;
   order: number;
   patience: number;
   waited: number;
@@ -94,6 +117,8 @@ export type DayEvent =
       type: 'sale';
       seat: number;
       customer: Customer;
+      /** 준 빵의 메뉴. 주문한 메뉴와 다르면 불만 */
+      menu: Menu;
       given: Quality[];
       extra: boolean;
       result: SaleResult;
@@ -117,6 +142,8 @@ export interface DayStats {
   pours: number;
   /** 판 개수 (덤 포함) */
   sold: number;
+  /** 메뉴별로 판 개수 (덤 포함). MENUS 순서 */
+  soldBy: number[];
   /** 꺼낸 황금붕어빵 */
   golden: number;
   served: Record<SaleResult, number>;
@@ -135,10 +162,16 @@ export interface DayStats {
   customers: number;
 }
 
-/** 강화로 정해지는 그날의 값 */
+/** 강화와 평판 레벨로 정해지는 그날의 값. 메뉴별 값은 MENUS 순서 */
 export interface DayParams {
-  price: number;
-  burnAt: number;
+  /** 그날 열린 메뉴 수 (팥부터) */
+  menus: number;
+  /** 메뉴별 빵 값 (알맞음) */
+  prices: readonly number[];
+  /** 메뉴별 알맞음 시작 익힘 값 */
+  doneAt: readonly number[];
+  /** 메뉴별 타기 시작하는 익힘 값 (빵틀 길들이기 포함) */
+  burnAt: readonly number[];
   heatFall: number;
   goldChance: number;
   shelfCap: number;
@@ -158,7 +191,8 @@ export interface DaySim {
   heat: number;
   pumping: boolean;
   molds: Mold[];
-  shelf: Quality[];
+  /** 진열대: 메뉴마다 꺼낸 순서대로. 판매는 그 메뉴의 앞쪽부터 나간다 */
+  shelves: Quality[][];
   seats: (Customer | null)[];
   nextArrival: number;
   nextId: number;
@@ -179,19 +213,20 @@ export function cookSpeed(heat: number): number {
 }
 
 /** 익힘 값의 단계 */
-export function sideStage(points: number, burnAt: number): SideStage {
-  return points < DONE_AT ? 'raw' : points < burnAt ? 'good' : 'burnt';
+export function sideStage(points: number, doneAt: number, burnAt: number): SideStage {
+  return points < doneAt ? 'raw' : points < burnAt ? 'good' : 'burnt';
 }
 
 /** 윗면이 타기 시작하는 익힘 값. 황금 후보는 반짝임이 끝나면 바로 탄다 */
 export function topBurnAt(mold: Mold, params: DayParams): number {
-  return mold.candidate ? DONE_AT + GOLD_WINDOW : params.burnAt;
+  return mold.candidate ? params.doneAt[mold.menu]! + GOLD_WINDOW : params.burnAt[mold.menu]!;
 }
 
 /** 지금 꺼내면 나올 품질: 두 면 중 나쁜 쪽, 둘 다 알맞고 황금 후보면 황금 */
 export function takeQuality(mold: Mold, params: DayParams): Quality {
-  const bottom = sideStage(mold.bottom, params.burnAt);
-  const top = sideStage(mold.top, topBurnAt(mold, params));
+  const doneAt = params.doneAt[mold.menu]!;
+  const bottom = sideStage(mold.bottom, doneAt, params.burnAt[mold.menu]!);
+  const top = sideStage(mold.top, doneAt, topBurnAt(mold, params));
   if (bottom === 'burnt' || top === 'burnt') return 'burnt';
   if (bottom === 'raw' || top === 'raw') return 'raw';
   return mold.candidate ? 'golden' : 'good';
@@ -202,9 +237,14 @@ export function gameMinute(tick: number): number {
   return OPEN_MINUTE + Math.floor(tick / TICKS_PER_GAME_MINUTE);
 }
 
+/** 진열대 빵 수 (메뉴 합) */
+export function shelfCount(sim: DaySim): number {
+  return sim.shelves.reduce((sum, list) => sum + list.length, 0);
+}
+
 /** 빈 빵틀 */
 function emptyMold(): Mold {
-  return { phase: 'empty', bottom: 0, top: 0, candidate: false, lastTap: -MIN_TAP_GAP };
+  return { phase: 'empty', bottom: 0, top: 0, menu: 0, candidate: false, lastTap: -MIN_TAP_GAP };
 }
 
 /** 빈 하루 기록 */
@@ -214,6 +254,7 @@ function emptyStats(subsidy: number): DayStats {
     doughCost: 0,
     pours: 0,
     sold: 0,
+    soldBy: MENUS.map(() => 0),
     golden: 0,
     served: { best: 0, good: 0, meh: 0, bad: 0 },
     left: 0,
@@ -232,13 +273,16 @@ export function createDay(state: ShopState, seed: string, withEvents = false): D
   const base: ShopState = { ...state, money: state.money + subsidy };
   const u = state.upgrades;
   const customersRng = new SeededRandom(`${seed}#customers`);
+  const repLevel = levelOf(state.reputation);
   return {
     seed,
     base,
-    repLevel: levelOf(state.reputation),
+    repLevel,
     params: {
-      price: breadPrice(u.recipe),
-      burnAt: BURN_AT + burnBonus(u.seasoning),
+      menus: openMenus(repLevel),
+      prices: MENUS.map((_, m) => breadPrice(m, u.recipe)),
+      doneAt: MENUS.map((m) => m.doneAt),
+      burnAt: MENUS.map((m) => m.burnAt + burnBonus(u.seasoning)),
       heatFall: heatFall(u.burner),
       goldChance: goldenChance(u.golden),
       shelfCap: shelfCapacity(u.shelf),
@@ -249,7 +293,7 @@ export function createDay(state: ShopState, seed: string, withEvents = false): D
     heat: HEAT_START,
     pumping: false,
     molds: Array.from({ length: moldCount(u.molds) }, emptyMold),
-    shelf: [],
+    shelves: MENUS.map(() => []),
     seats: Array.from({ length: COUNTER_SEATS }, () => null),
     nextArrival: customersRng.int(FIRST_ARRIVAL[0], FIRST_ARRIVAL[1]),
     nextId: 1,
@@ -291,16 +335,18 @@ export function advance(sim: DaySim): void {
   const speed = cookSpeed(sim.heat);
 
   sim.molds.forEach((mold, i) => {
+    const doneAt = params.doneAt[mold.menu]!;
     if (mold.phase === 'bottom') {
-      const before = sideStage(mold.bottom, params.burnAt);
+      const burnAt = params.burnAt[mold.menu]!;
+      const before = sideStage(mold.bottom, doneAt, burnAt);
       mold.bottom += speed;
-      const after = sideStage(mold.bottom, params.burnAt);
+      const after = sideStage(mold.bottom, doneAt, burnAt);
       if (after !== before) emit(sim, { type: 'stage', mold: i, side: 'bottom', stage: after });
     } else if (mold.phase === 'top') {
       const limit = topBurnAt(mold, params);
-      const before = sideStage(mold.top, limit);
+      const before = sideStage(mold.top, doneAt, limit);
       mold.top += speed;
-      const after = sideStage(mold.top, limit);
+      const after = sideStage(mold.top, doneAt, limit);
       if (after !== before) {
         emit(sim, mold.candidate && after === 'good' ? { type: 'shine', mold: i } : { type: 'stage', mold: i, side: 'top', stage: after });
       }
@@ -317,8 +363,8 @@ export function advance(sim: DaySim): void {
     const seat = sim.seats.indexOf(null);
     if (seat >= 0) {
       // 뽑는 순서(손님 → 다음 간격)를 바꾸면 저장된 하루의 재계산이 달라진다
-      const { kind, order } = drawCustomer(sim.customersRng, sim.repLevel);
-      const customer: Customer = { id: sim.nextId, kind, order, patience: KINDS[kind].patience, waited: 0 };
+      const { kind, menu, order } = drawCustomer(sim.customersRng, sim.repLevel, params.menus);
+      const customer: Customer = { id: sim.nextId, kind, menu, order, patience: KINDS[kind].patience, waited: 0 };
       sim.nextId += 1;
       sim.seats[seat] = customer;
       sim.stats.customers += 1;
@@ -334,7 +380,7 @@ export function advance(sim: DaySim): void {
 /** 마감: 남은 손님은 그냥 떠나고, 진열대·빵틀에 남은 빵은 폐기한다 */
 function close(sim: DaySim): void {
   sim.seats.forEach((_, seat) => leave(sim, seat, 'closing'));
-  sim.stats.wasted = sim.shelf.length + sim.molds.filter((m) => m.phase !== 'empty').length;
+  sim.stats.wasted = shelfCount(sim) + sim.molds.filter((m) => m.phase !== 'empty').length;
   sim.pumping = false;
   sim.closed = true;
   emit(sim, { type: 'closed' });
@@ -350,8 +396,11 @@ export function applyInput(sim: DaySim, op: number, arg: number): InputResult {
       if ((arg !== 0 && arg !== 1) || (arg === 1) === sim.pumping) return { ok: false, reason: 'bad_pump' };
       sim.pumping = arg === 1;
       return { ok: true };
-    case OP.sell:
-      return sell(sim, arg >> 1, (arg & 1) === 1);
+    case OP.sell: {
+      const menu = Math.floor(arg / SELL_MENU_UNIT);
+      const rest = arg % SELL_MENU_UNIT;
+      return sell(sim, rest >> 1, (rest & 1) === 1, menu);
+    }
     case OP.trash:
       return trash(sim);
     default:
@@ -359,40 +408,48 @@ export function applyInput(sim: DaySim, op: number, arg: number): InputResult {
   }
 }
 
-/** 빵틀 탭: 빈 틀이면 붓기, 아랫면 굽는 중이면 뒤집기, 윗면 굽는 중이면 꺼내기 */
-function tap(sim: DaySim, index: number): InputResult {
+/** 빵틀 탭: 빈 틀이면 붓기(값의 메뉴로), 아랫면 굽는 중이면 뒤집기, 윗면 굽는 중이면 꺼내기 */
+function tap(sim: DaySim, arg: number): InputResult {
+  const index = arg % TAP_MENU_UNIT;
+  const menu = Math.floor(arg / TAP_MENU_UNIT);
   const mold = sim.molds[index];
   if (!mold) return { ok: false, reason: 'bad_mold' };
+  if (menu >= MENUS.length || (menu > 0 && mold.phase !== 'empty')) return { ok: false, reason: 'bad_menu' };
   if (sim.tick - mold.lastTap < MIN_TAP_GAP) return { ok: false, reason: 'too_fast' };
   if (mold.phase === 'empty') {
-    if (sim.money < DOUGH_COST) return { ok: false, reason: 'no_money' };
-    sim.money -= DOUGH_COST;
-    sim.stats.doughCost += DOUGH_COST;
+    if (menu >= sim.params.menus) return { ok: false, reason: 'locked_menu' };
+    const cost = MENUS[menu]!.cost;
+    if (sim.money < cost) return { ok: false, reason: 'no_money' };
+    sim.money -= cost;
+    sim.stats.doughCost += cost;
     sim.stats.pours += 1;
     mold.phase = 'bottom';
     mold.bottom = 0;
     mold.top = 0;
+    mold.menu = menu;
     mold.candidate = sim.goldRng.int(0, 999) < sim.params.goldChance;
   } else if (mold.phase === 'bottom') {
     mold.phase = 'top';
   } else {
-    if (sim.shelf.length >= sim.params.shelfCap) return { ok: false, reason: 'shelf_full' };
+    if (shelfCount(sim) >= sim.params.shelfCap) return { ok: false, reason: 'shelf_full' };
     const quality = takeQuality(mold, sim.params);
-    sim.shelf.push(quality);
+    sim.shelves[mold.menu]!.push(quality);
     if (quality === 'golden') sim.stats.golden += 1;
-    Object.assign(mold, emptyMold());
+    // 빈 틀도 마지막 메뉴를 기억한다(화면이 꺼낸 빵을 진열대로 날린다)
+    Object.assign(mold, { ...emptyMold(), menu: mold.menu });
   }
   mold.lastTap = sim.tick;
   return { ok: true };
 }
 
-/** 이 자리 손님에게 팔면 받을 돈과 결과. 화면이 버튼에 미리 보여 주는 데도 쓴다 */
-export function quoteSale(sim: DaySim, customer: Customer, extra: boolean, combo = sim.combo) {
+/** 이 자리 손님에게 menu 빵을 팔면 받을 돈과 결과. 주문과 다른 메뉴면 불만. 화면이 버튼에 미리 보여 주는 데도 쓴다 */
+export function quoteSale(sim: DaySim, customer: Customer, extra: boolean, combo = sim.combo, menu: Menu = customer.menu) {
   const count = customer.order + (extra ? 1 : 0);
-  const given = sim.shelf.slice(0, count);
-  const result = judgeSale(customer.kind, given, extra);
+  const given = (sim.shelves[menu] ?? []).slice(0, count);
+  const result = menu === customer.menu ? judgeSale(customer.kind, given, extra) : 'bad';
+  const price = sim.params.prices[menu] ?? 0;
   // 덤으로 준 빵(마지막 한 개)은 값을 받지 않는다
-  const base = given.slice(0, customer.order).reduce((sum, q) => sum + Math.floor((sim.params.price * valueTenths(q, customer.kind)) / 10), 0);
+  const base = given.slice(0, customer.order).reduce((sum, q) => sum + Math.floor((price * valueTenths(q, customer.kind)) / 10), 0);
   const allGood = given.every((q) => q === 'good' || q === 'golden');
   const paid = result === 'bad' ? Math.floor(base / 2) : base;
   const tip = result === 'best' || (result !== 'bad' && customer.kind === 'elder' && allGood) ? Math.floor(base / 5) : 0;
@@ -402,26 +459,28 @@ export function quoteSale(sim: DaySim, customer: Customer, extra: boolean, combo
   return { given, result, paid, tip, bonus, combo: nextCombo };
 }
 
-/** 판매: 진열대 앞에서부터 주문 개수(덤이면 +1)만큼 준다 */
-function sell(sim: DaySim, seat: number, extra: boolean): InputResult {
+/** 판매: 진열대의 menu 빵을 앞에서부터 주문 개수(덤이면 +1)만큼 준다 */
+function sell(sim: DaySim, seat: number, extra: boolean, menu: Menu): InputResult {
+  if (menu >= MENUS.length) return { ok: false, reason: 'bad_menu' };
   const customer = sim.seats[seat];
   if (!customer) return { ok: false, reason: 'no_customer' };
   const count = customer.order + (extra ? 1 : 0);
-  if (sim.shelf.length < count) return { ok: false, reason: 'no_stock' };
+  if (sim.shelves[menu]!.length < count) return { ok: false, reason: 'no_stock' };
 
   // 바쁜 직장인: 먼저 온 직장인이 기다리는데 나중에 온 손님에게 팔면 떠난다(불만)
   sim.seats.forEach((other, s) => {
     if (other && s !== seat && other.kind === 'office' && other.id < customer.id) leave(sim, s, 'overtaken');
   });
 
-  const quote = quoteSale(sim, customer, extra);
-  sim.shelf.splice(0, count);
+  const quote = quoteSale(sim, customer, extra, sim.combo, menu);
+  sim.shelves[menu]!.splice(0, count);
   sim.combo = quote.combo;
   sim.stats.maxCombo = Math.max(sim.stats.maxCombo, sim.combo);
   const total = quote.paid + quote.tip + quote.bonus;
   sim.money += total;
   sim.stats.revenue += total;
   sim.stats.sold += count;
+  sim.stats.soldBy[menu]! += count;
   sim.stats.served[quote.result] += 1;
   const rep = reputationChange(quote.result, customer.kind);
   sim.stats.repChange += rep;
@@ -431,6 +490,7 @@ function sell(sim: DaySim, seat: number, extra: boolean): InputResult {
     type: 'sale',
     seat,
     customer,
+    menu,
     given: quote.given,
     extra,
     result: quote.result,
@@ -443,11 +503,13 @@ function sell(sim: DaySim, seat: number, extra: boolean): InputResult {
   return { ok: true };
 }
 
-/** 진열대의 탄 빵을 모두 버린다 */
+/** 진열대의 탄 빵을 메뉴 상관없이 모두 버린다 */
 function trash(sim: DaySim): InputResult {
-  const kept = sim.shelf.filter((q) => q !== 'burnt');
-  sim.stats.trashed += sim.shelf.length - kept.length;
-  sim.shelf = kept;
+  sim.shelves = sim.shelves.map((list) => {
+    const kept = list.filter((q) => q !== 'burnt');
+    sim.stats.trashed += list.length - kept.length;
+    return kept;
+  });
   return { ok: true };
 }
 

@@ -3,6 +3,7 @@
 
 import type { SeededRandom } from '@magpie/shared';
 import { signFactor } from './growth';
+import { drawMenu, type Menu } from './menus';
 
 /** 빵 품질. 두 면 중 나쁜 쪽으로 정하고, 황금은 반짝일 때 꺼낸 황금 후보 */
 export type Quality = 'golden' | 'good' | 'raw' | 'burnt';
@@ -59,8 +60,11 @@ export function drawGap(rng: SeededRandom, repLevel: number, signLevel: number):
   return Math.max(60, Math.floor((rng.int(min, max) * signFactor(signLevel)) / 100));
 }
 
-/** 다음 손님의 종류와 주문 개수를 뽑는다. 뽑는 순서(종류 → 개수)를 바꾸면 저장된 하루의 재계산이 달라진다 */
-export function drawCustomer(rng: SeededRandom, repLevel: number): { kind: CustomerKind; order: number } {
+/**
+ * 다음 손님의 종류·주문 메뉴·개수를 뽑는다. 뽑는 순서(종류 → 메뉴 → 개수)를 바꾸면 저장된 하루의 재계산이 달라진다.
+ * 메뉴는 열린 메뉴가 둘 이상일 때만 뽑는다(drawMenu)
+ */
+export function drawCustomer(rng: SeededRandom, repLevel: number, openMenus: number): { kind: CustomerKind; menu: Menu; order: number } {
   const { weights } = arrivalRow(repLevel);
   let roll = rng.int(0, 99);
   let kind: CustomerKind = 'regular';
@@ -71,8 +75,9 @@ export function drawCustomer(rng: SeededRandom, repLevel: number): { kind: Custo
     }
     roll -= weights[i]!;
   }
+  const menu = drawMenu(rng, openMenus);
   const [min, max] = KINDS[kind].order;
-  return { kind, order: rng.int(min, max) };
+  return { kind, menu, order: rng.int(min, max) };
 }
 
 /** 빵 값 배율(십분율): 황금 3, 알맞음 1, 덜 익음 0.5, 탐 0.3. 먹방 크리에이터는 품질을 따지지 않는다(황금은 그대로) */

@@ -3,8 +3,8 @@
 
 import Phaser from 'phaser';
 import {
+  MENUS,
   UPGRADE_KEYS,
-  breadPrice,
   canUpgrade,
   goldenChance,
   heatFall,
@@ -12,6 +12,7 @@ import {
   moldCount,
   nextLevelAt,
   levelFloor,
+  recipeBonus,
   shelfCapacity,
   signFactor,
   upgradeCost,
@@ -46,7 +47,7 @@ const UPGRADE_INFO: Record<UpgradeKey, { name: string; label: string; value(leve
     texScale: 70 / BUN_W,
   },
   burner: { name: '화구', label: '초당 화력 감소', value: (l) => (heatFall(l) === 0 ? '없음' : `${heatFall(l)}%`), tex: TEX.icon('flame'), texScale: 0.9 },
-  recipe: { name: '반죽 레시피', label: '빵 값', value: (l) => won(breadPrice(l)), tex: TEX.batter('good'), texScale: 70 / BUN_W },
+  recipe: { name: '반죽 레시피', label: '모든 빵 값', value: (l) => `+${won(recipeBonus(l))}`, tex: TEX.batter('good'), texScale: 70 / BUN_W },
   golden: { name: '황금 비법', label: '황금 확률', value: (l) => `${goldenChance(l) / 10}%`, tex: TEX.fish('golden'), texScale: 70 / BUN_W },
   shelf: { name: '진열대', label: '진열대', value: (l) => `${shelfCapacity(l)}개`, tex: TEX.shelf('good'), texScale: 64 / SHELF_W },
   sign: { name: '간판', label: '손님 간격', value: (l) => `${signFactor(l)}%`, tex: TEX.icon('store'), texScale: 0.9 },
@@ -54,6 +55,9 @@ const UPGRADE_INFO: Record<UpgradeKey, { name: string; label: string; value(leve
 
 /** 평판 레벨에 새로 오는 손님 */
 const NEW_CUSTOMER: Record<number, string> = { 2: '바쁜 직장인', 3: '단골 어르신', 4: '먹방 크리에이터', 5: '리뷰어' };
+
+/** 평판 레벨에 열리는 메뉴 (MENUS의 열리는 레벨) */
+const NEW_MENU: Record<number, string> = Object.fromEntries(MENUS.filter((m) => m.unlock > 1).map((m) => [m.unlock, `${m.name} 붕어빵`]));
 
 /** 판 거절 사유의 안내 */
 export const REJECT_TEXT: Record<string, string> = {
@@ -366,6 +370,10 @@ export function buildSettleScreen(o: SettleScreenOptions): Phaser.GameObjects.Co
     `손님 ${num(served + stats.left)}명 · 최고 ${stats.served.best} · 만족 ${stats.served.good} · 아쉬움 ${stats.served.meh} · 불만 ${stats.served.bad} · 떠남 ${stats.left}`,
     `최대 콤보 ${stats.maxCombo} · 황금붕어빵 ${stats.golden}개${wasteParts.length ? ` · ${wasteParts.join(' · ')}` : ''}`,
   ];
+  // 팥 말고 다른 메뉴도 팔았으면 메뉴별 판 개수
+  if (stats.soldBy.some((n, m) => m > 0 && n > 0)) {
+    lines.push(`판 빵 ${MENUS.map((m, i) => `${m.name} ${stats.soldBy[i] ?? 0}개`).join(' · ')}`);
+  }
   for (const text of lines) {
     root.add(scene.add.text(left, y, text, { ...textStyle(22, p.text, '600'), wordWrap: { width: right - left } }).setOrigin(0, 0.5));
     y += portrait ? 64 : 44;
@@ -377,6 +385,7 @@ export function buildSettleScreen(o: SettleScreenOptions): Phaser.GameObjects.Co
   if (levelAfter > levelBefore) {
     const news: string[] = [];
     for (let l = levelBefore + 1; l <= levelAfter; l += 1) {
+      if (NEW_MENU[l]) news.push(`새 메뉴: ${NEW_MENU[l]}`);
       if (NEW_CUSTOMER[l]) news.push(`새 손님: ${NEW_CUSTOMER[l]}`);
       if (l === 2) news.push('새 강화: 빵틀 9칸');
       if (l === 4) news.push('새 강화: 빵틀 12칸');

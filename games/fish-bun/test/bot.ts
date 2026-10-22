@@ -3,8 +3,7 @@
 import { SeededRandom } from '@magpie/shared';
 import {
   DAY_TICKS,
-  DONE_AT,
-  DOUGH_COST,
+  MENUS,
   OP,
   UPGRADE_KEYS,
   advance,
@@ -12,7 +11,10 @@ import {
   applyShopAction,
   canUpgrade,
   createDay,
+  sellArg,
   settleDay,
+  shelfCount,
+  tapArg,
   topBurnAt,
   type DaySim,
   type FishInput,
@@ -51,12 +53,14 @@ export function playDay(state: ShopState, seed: string, skill: BotSkill, botSeed
     return result.ok;
   };
 
-  /** 이 면을 언제 넘길지 정한다: 알맞음 구간의 앞쪽 1/3 + 오차 */
-  const aimFor = (limit: number, golden: boolean): number => {
+  /** 이 면을 언제 넘길지 정한다: 알맞음 구간(doneAt~limit)의 앞쪽 1/3 + 오차 */
+  const aimFor = (doneAt: number, limit: number, golden: boolean): number => {
     const speed = 110;
-    if (golden) return rng.int(0, 99) < skill.goldenHit ? DONE_AT + rng.int(0, 2) * speed : DONE_AT + rng.int(0, 120) * speed;
-    return DONE_AT + Math.floor((limit - DONE_AT) / 3) + rng.int(-skill.timingError, skill.timingError) * speed;
+    if (golden) return rng.int(0, 99) < skill.goldenHit ? doneAt + rng.int(0, 2) * speed : doneAt + rng.int(0, 120) * speed;
+    return doneAt + Math.floor((limit - doneAt) / 3) + rng.int(-skill.timingError, skill.timingError) * speed;
   };
+  /** 손님이 없어도 메뉴마다 미리 구워 두는 개수 */
+  const buffer = [4, 2, 2];
 
   while (!sim.closed) {
     if (sim.tick % skill.reaction === 0) {
@@ -66,32 +70,47 @@ export function playDay(state: ShopState, seed: string, skill: BotSkill, botSeed
 
       // 탄 빵: 어르신이 있거나 진열대가 거의 차면 버린다
       const elderWaiting = sim.seats.some((c) => c?.kind === 'elder');
-      if (sim.shelf.includes('burnt') && (elderWaiting || sim.shelf.length >= sim.params.shelfCap - 1)) act(OP.trash, 0);
+      const hasBurnt = sim.shelves.some((list) => list.includes('burnt'));
+      if (hasBurnt && (elderWaiting || shelfCount(sim) >= sim.params.shelfCap - 1)) act(OP.trash, 0);
 
       // 판매: 온 순서대로
       const order = sim.seats
         .map((c, seat) => ({ c, seat }))
         .filter((x): x is { c: NonNullable<typeof x.c>; seat: number } => x.c !== null)
         .sort((a, b) => a.c.id - b.c.id);
+      // 메뉴마다 먼저 온 손님부터 판다. 못 판 손님이 바쁜 직장인이면 그 뒤로는 팔지 않는다(먼저 안 주면 떠나서)
+      const blocked = new Set<number>();
       for (const { c, seat } of order) {
-        if (sim.shelf.length < c.order) break;
+        const stock = sim.shelves[c.menu]!.length;
+        if (blocked.has(c.menu)) continue;
+        if (stock < c.order) {
+          if (c.kind === 'office') break;
+          blocked.add(c.menu);
+          continue;
+        }
         const wantsExtra = c.kind === 'kid' || rng.int(0, 99) < skill.extraRate;
-        const extra = wantsExtra && sim.shelf.length >= c.order + 1;
-        act(OP.sell, seat * 2 + (extra ? 1 : 0));
+        const extra = wantsExtra && stock >= c.order + 1;
+        act(OP.sell, sellArg(seat, extra, c.menu));
       }
 
-      // 빵틀
-      const demand = sim.seats.reduce((sum, c) => sum + (c ? c.order + 1 : 0), 0) + 4;
-      let baking = sim.molds.filter((m) => m.phase !== 'empty').length;
+      // 빵틀: 메뉴마다 (기다리는 주문 + 미리 구울 개수) − (진열대 + 굽는 중)이 가장 모자란 메뉴를 붓는다
+      const short = MENUS.map((_, m) => {
+        if (m >= sim.params.menus) return -Infinity;
+        const need = sim.seats.reduce((sum, c) => sum + (c && c.menu === m ? c.order + 1 : 0), 0) + buffer[m]!;
+        const baking = sim.molds.filter((mold) => mold.phase !== 'empty' && mold.menu === m).length;
+        return need - sim.shelves[m]!.length - baking;
+      });
       sim.molds.forEach((mold, i) => {
         if (mold.phase !== phases[i]) {
           phases[i] = mold.phase;
-          if (mold.phase === 'bottom') aims[i] = aimFor(sim.params.burnAt, false);
-          if (mold.phase === 'top') aims[i] = aimFor(topBurnAt(mold, sim.params), mold.candidate);
+          const doneAt = sim.params.doneAt[mold.menu]!;
+          if (mold.phase === 'bottom') aims[i] = aimFor(doneAt, sim.params.burnAt[mold.menu]!, false);
+          if (mold.phase === 'top') aims[i] = aimFor(doneAt, topBurnAt(mold, sim.params), mold.candidate);
         }
         if (mold.phase === 'empty') {
           const late = sim.tick > DAY_TICKS - 900;
-          if (!late && sim.money >= DOUGH_COST && sim.shelf.length + baking < demand && act(OP.tap, i)) baking += 1;
+          const menu = short.indexOf(Math.max(...short));
+          if (!late && short[menu]! > 0 && sim.money >= MENUS[menu]!.cost && act(OP.tap, tapArg(i, menu))) short[menu]! -= 1;
         } else if (mold.phase === 'bottom' && mold.bottom >= aims[i]!) act(OP.tap, i);
         else if (mold.phase === 'top' && mold.top >= aims[i]!) act(OP.tap, i);
       });
@@ -129,6 +148,8 @@ export interface DayLog {
   served: number;
   left: number;
   golden: number;
+  /** 메뉴별 판 개수 */
+  soldBy: number[];
   bought: string[];
 }
 
@@ -152,6 +173,7 @@ export function playDays(days: number, skill: BotSkill, seedPrefix: string): Day
       served: s.served.best + s.served.good + s.served.meh + s.served.bad,
       left: s.left,
       golden: s.golden,
+      soldBy: s.soldBy,
       bought: after.bought,
     });
     state = after.state;

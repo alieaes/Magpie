@@ -32,10 +32,27 @@ export interface DayGeometry {
   combo: Rect;
   /** 가로 배치만: 오늘 매출·손님 같은 작은 기록 */
   info: Rect | null;
+  /** 반죽 고르기 버튼 줄 (메뉴가 둘 이상 열린 날만, 빵틀 판 위쪽) */
+  batter: Rect | null;
 }
 
-/** 장사 화면 배치 */
-export function dayGeometry(layout: Layout): DayGeometry {
+/** 반죽 고르기 줄의 높이 */
+const BATTER_H = 72;
+
+/** 장사 화면 배치. 메뉴가 둘 이상 열린 날은 빵틀 판 위쪽을 반죽 고르기 줄로 쓴다 */
+export function dayGeometry(layout: Layout, menus = 1): DayGeometry {
+  const g = baseGeometry(layout);
+  if (menus <= 1) return g;
+  const { grill } = g;
+  return {
+    ...g,
+    batter: { x: grill.x, y: grill.y, w: grill.w, h: BATTER_H },
+    grill: { x: grill.x, y: grill.y + BATTER_H + 12, w: grill.w, h: grill.h - BATTER_H - 12 },
+  };
+}
+
+/** 메뉴가 하나일 때의 배치 */
+function baseGeometry(layout: Layout): DayGeometry {
   if (layout === 'portrait') {
     return {
       hud: { x: 0, y: 0, w: 720, h: 100 },
@@ -47,6 +64,7 @@ export function dayGeometry(layout: Layout): DayGeometry {
       gauge: { x: 230, y: 1258, w: 310, h: 130 },
       combo: { x: 554, y: 1258, w: 146, h: 130 },
       info: null,
+      batter: null,
     };
   }
   return {
@@ -59,6 +77,7 @@ export function dayGeometry(layout: Layout): DayGeometry {
     shelf: { x: 788, y: 686, w: 604, h: 120 },
     trash: { x: 1404, y: 686, w: 132, h: 120 },
     info: { x: 788, y: 822, w: 748, h: 162 },
+    batter: null,
   };
 }
 

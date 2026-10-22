@@ -3,7 +3,7 @@
 // 원작 그림은 쓰지 않는다(CLAUDE.md §4-3). 이모지 대신 직접 그린 그림만 쓴다.
 // 근거: docs/design/261021-01-fish-bun.md §5-3, docs/design/261022-01-fish-bun-pixel-art.md §1-1
 
-import type { Quality, SideStage } from '../logic/rules';
+import { MENUS, type Quality, type SideStage } from '../logic/rules';
 import { PEOPLE_FACES, PEOPLE_KINDS, PEOPLE_VARIANTS, personSvg, type Face } from './people';
 import { DOT, PIXEL_ART } from './style';
 
@@ -11,7 +11,26 @@ import { DOT, PIXEL_ART } from './style';
 export type TextureSet = Map<string, HTMLCanvasElement>;
 
 /** 아이콘 이름 */
-export type IconName = 'pause' | 'trash' | 'clock' | 'plusOne' | 'noBurnt' | 'camera' | 'star' | 'heart' | 'flame' | 'store' | 'back';
+export type IconName =
+  | 'pause'
+  | 'trash'
+  | 'clock'
+  | 'plusOne'
+  | 'noBurnt'
+  | 'camera'
+  | 'star'
+  | 'heart'
+  | 'flame'
+  | 'store'
+  | 'back'
+  | 'menuBean'
+  | 'menuCream'
+  | 'menuPizza';
+
+const ICON_NAMES: readonly IconName[] = ['pause', 'trash', 'clock', 'plusOne', 'noBurnt', 'camera', 'star', 'heart', 'flame', 'store', 'back', 'menuBean', 'menuCream', 'menuPizza'];
+
+/** 메뉴 표시 아이콘 (MENUS 순서: 팥 콩, 슈크림 크림 방울, 피자 조각) */
+export const MENU_ICON: readonly IconName[] = ['menuBean', 'menuCream', 'menuPizza'];
 
 /** 그림 크기 (캔버스 픽셀) */
 export const MOLD_W = 210;
@@ -29,7 +48,7 @@ export const ICON = 64;
 /** 텍스처 이름 */
 export const TEX = {
   mold: 'fb-mold',
-  batter: (s: SideStage) => `fb-batter-${s}`,
+  batter: (s: SideStage, menu = 0) => `fb-batter-${menu}-${s}`,
   fish: (s: 'raw' | 'good' | 'burnt' | 'golden') => `fb-fish-${s}`,
   candidate: (s: 'raw' | 'good' | 'burnt') => `fb-cand-${s}`,
   shelf: (q: Quality) => `fb-shelf-${q}`,
@@ -225,17 +244,36 @@ function fishSvg(stage: 'raw' | 'good' | 'burnt' | 'golden', candidate: boolean)
     ${burntMarks}${shine}`;
 }
 
-/** 빵틀에 부은 반죽 (위에서 본 모습). 아랫면 익힘에 따라 가장자리 색이 바뀐다 */
-function batterSvg(stage: SideStage): string {
+/** 반죽 가운데 속 덩어리 모양 */
+const BLOB = 'M78 52 C86 40 116 38 128 50 C138 60 128 76 106 78 C86 80 70 66 78 52 Z';
+
+/** 반죽 위에 올린 속 (위에서 본 모습). 팥은 검붉은 팥소, 슈크림은 노란 크림, 피자는 빨간 소스와 치즈·피망 */
+function fillingSvg(menu: number, id: string): string {
+  if (menu === 1) {
+    return `<defs><radialGradient id="${id}" cx="0.4" cy="0.35" r="0.7"><stop offset="0" stop-color="#ffd84a"/><stop offset="1" stop-color="#e0961a"/></radialGradient></defs>
+      <path d="${BLOB}" fill="url(#${id})" stroke="#b8700c" stroke-width="3"/>
+      <path d="M88 54 C96 46 110 46 118 52 C112 58 100 60 94 56" fill="none" stroke="#fff3b0" stroke-width="4" stroke-linecap="round" opacity="0.9"/>`;
+  }
+  if (menu === 2) {
+    return `<defs><radialGradient id="${id}" cx="0.4" cy="0.35" r="0.7"><stop offset="0" stop-color="#e8573a"/><stop offset="1" stop-color="#9e2416"/></radialGradient></defs>
+      <path d="${BLOB}" fill="url(#${id})"/>
+      <circle cx="92" cy="54" r="7" fill="#ffe08a"/><circle cx="116" cy="62" r="6" fill="#ffe08a"/><circle cx="104" cy="70" r="5" fill="#ffe08a"/>
+      <rect x="104" y="48" width="12" height="6" rx="3" fill="#3f9b45"/><rect x="86" y="66" width="10" height="5" rx="2.5" fill="#3f9b45"/>`;
+  }
+  return `<defs><radialGradient id="${id}" cx="0.4" cy="0.35" r="0.7"><stop offset="0" stop-color="#9a4136"/><stop offset="1" stop-color="#4f1a17"/></radialGradient></defs>
+    <path d="${BLOB}" fill="url(#${id})"/>
+    <path d="M90 50 C98 45 110 45 116 50" fill="none" stroke="#e08f86" stroke-width="3" stroke-linecap="round" opacity="0.6"/>`;
+}
+
+/** 빵틀에 부은 반죽 (위에서 본 모습). 아랫면 익힘에 따라 가장자리 색이 바뀌고, 가운데에 메뉴의 속이 보인다 */
+function batterSvg(stage: SideStage, menu: number): string {
   const edge = stage === 'raw' ? '#ead396' : stage === 'good' ? '#d68f38' : '#4a2c16';
   const middle = stage === 'burnt' ? '#b78a5a' : '#fbefcf';
   return `<defs>
       <radialGradient id="b${stage}" cx="0.45" cy="0.45" r="0.62"><stop offset="0.45" stop-color="${middle}"/><stop offset="1" stop-color="${edge}"/></radialGradient>
-      <radialGradient id="bean${stage}" cx="0.4" cy="0.35" r="0.7"><stop offset="0" stop-color="#9a4136"/><stop offset="1" stop-color="#4f1a17"/></radialGradient>
     </defs>
     <path d="${FISH}" fill="url(#b${stage})" stroke="${edge}" stroke-width="4" stroke-linejoin="round"/>
-    <path d="M78 52 C86 40 116 38 128 50 C138 60 128 76 106 78 C86 80 70 66 78 52 Z" fill="url(#bean${stage})"/>
-    <path d="M90 50 C98 45 110 45 116 50" fill="none" stroke="#e08f86" stroke-width="3" stroke-linecap="round" opacity="0.6"/>
+    ${fillingSvg(menu, `fill${menu}${stage}`)}
     <circle cx="58" cy="44" r="4" fill="#ffffff" opacity="0.5"/><circle cx="150" cy="72" r="3" fill="#ffffff" opacity="0.4"/>
     ${stage === 'burnt' ? `<path d="${FISH}" fill="#1a0e05" opacity="0.25"/>` : ''}`;
 }
@@ -331,6 +369,16 @@ function iconSvg(name: IconName): string {
       return `<path d="M8 26 l6 -14 h36 l6 14 Z" fill="#e5414a"/><rect x="12" y="26" width="40" height="28" fill="#f3e3c3" stroke="#8a5a26" stroke-width="3"/><rect x="26" y="36" width="12" height="18" fill="#8a5a26"/>`;
     case 'back':
       return `<path d="M38 14 L20 32 L38 50" fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>`;
+    case 'menuBean':
+      return `<ellipse cx="32" cy="34" rx="22" ry="17" fill="#7a2a24" stroke="#3d100d" stroke-width="4" transform="rotate(-20 32 34)"/>
+        <path d="M20 30 C26 24 36 22 44 26" fill="none" stroke="#f3d6cf" stroke-width="4" stroke-linecap="round"/>`;
+    case 'menuCream':
+      return `<path d="M32 6 C40 18 52 28 52 40 C52 52 42 58 32 58 C22 58 12 52 12 40 C12 28 24 18 32 6 Z" fill="#ffd54a" stroke="#b77f0c" stroke-width="4" stroke-linejoin="round"/>
+        <path d="M22 40 C22 32 26 28 30 26" fill="none" stroke="#fff7cf" stroke-width="5" stroke-linecap="round"/>`;
+    case 'menuPizza':
+      return `<path d="M8 14 Q32 4 56 14 L32 60 Z" fill="#ffd66b" stroke="#a8650c" stroke-width="4" stroke-linejoin="round"/>
+        <path d="M8 14 Q32 4 56 14" fill="none" stroke="#c9852b" stroke-width="8" stroke-linecap="round"/>
+        <circle cx="26" cy="24" r="5" fill="#d8452c"/><circle cx="38" cy="28" r="5" fill="#d8452c"/><circle cx="32" cy="42" r="4" fill="#d8452c"/>`;
   }
 }
 
@@ -389,7 +437,9 @@ export async function buildTextures(iconColor: string): Promise<TextureSet> {
     );
 
   bake(TEX.mold, moldSvg(), MOLD_W, MOLD_H);
-  for (const s of ['raw', 'good', 'burnt'] as const) bake(TEX.batter(s), batterSvg(s), BUN_W, BUN_H);
+  for (let menu = 0; menu < MENUS.length; menu += 1) {
+    for (const s of ['raw', 'good', 'burnt'] as const) bake(TEX.batter(s, menu), batterSvg(s, menu), BUN_W, BUN_H);
+  }
   for (const s of ['raw', 'good', 'burnt', 'golden'] as const) bake(TEX.fish(s), fishSvg(s, false), BUN_W, BUN_H);
   for (const s of ['raw', 'good', 'burnt'] as const) bake(TEX.candidate(s), fishSvg(s, true), BUN_W, BUN_H);
   for (const q of ['golden', 'good', 'raw', 'burnt'] as const) bake(TEX.shelf(q), shelfSvg(q), SHELF_W, SHELF_H, 3);
@@ -397,7 +447,7 @@ export async function buildTextures(iconColor: string): Promise<TextureSet> {
   bake(TEX.pumpHandle, pumpHandleSvg(), 100, 60);
   bake(TEX.coin, coinSvg(), ICON, ICON, 3);
   bake(TEX.magpie, magpieSvg(), 128, 96, 3);
-  for (const name of ['pause', 'trash', 'clock', 'plusOne', 'noBurnt', 'camera', 'star', 'heart', 'flame', 'store', 'back'] as const) {
+  for (const name of ICON_NAMES) {
     bake(TEX.icon(name), iconSvg(name).replaceAll('currentColor', iconColor), ICON, ICON, 3);
   }
   for (const kind of PEOPLE_KINDS) {

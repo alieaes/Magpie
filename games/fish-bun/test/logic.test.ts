@@ -8,7 +8,9 @@ import {
   GOLD_WINDOW,
   HEAT_RISE,
   HEAT_START,
+  KINDS,
   LAST_ARRIVAL_TICK,
+  MENUS,
   MIN_TAP_GAP,
   OP,
   advance,
@@ -16,13 +18,18 @@ import {
   applyShopAction,
   burnBonus,
   createDay,
+  drawCustomer,
   fishBunLogic,
   goldenChance,
   initialShopState,
   judgeSale,
   levelOf,
+  openMenus,
   replayDay,
+  sellArg,
   settleDay,
+  shelfCount,
+  tapArg,
   type Customer,
   type DaySim,
   type FishInput,
@@ -47,7 +54,7 @@ function must(sim: DaySim, op: number, arg: number): void {
 
 /** 카운터에 손님을 바로 앉힌다 */
 function seat(sim: DaySim, index: number, customer: Partial<Customer>): Customer {
-  const c: Customer = { id: 100 + index, kind: 'regular', order: 1, patience: 1200, waited: 0, ...customer };
+  const c: Customer = { id: 100 + index, kind: 'regular', menu: 0, order: 1, patience: 1200, waited: 0, ...customer };
   sim.seats[index] = c;
   return c;
 }
@@ -83,7 +90,7 @@ describe('굽기', () => {
     must(sim, OP.tap, 0);
     run(sim, topTicks);
     must(sim, OP.tap, 0);
-    return sim.shelf[0];
+    return sim.shelves[0]![0];
   }
 
   it('붓기 → 뒤집기 → 꺼내기, 두 면 중 나쁜 쪽이 품질이다', () => {
@@ -120,7 +127,7 @@ describe('굽기', () => {
 
   it('진열대가 가득 차면 꺼낼 수 없다', () => {
     const sim = createDay(steadyShop(), plainSeed());
-    sim.shelf = Array.from({ length: 12 }, () => 'good' as const);
+    sim.shelves[0] = Array.from({ length: 12 }, () => 'good' as const);
     must(sim, OP.tap, 0);
     run(sim, 10);
     must(sim, OP.tap, 0);
@@ -192,9 +199,9 @@ describe('손님과 판매', () => {
     const sim = createDay(initialShopState(), 'sell');
     expect(applyInput(sim, OP.sell, 0)).toEqual({ ok: false, reason: 'no_customer' });
     seat(sim, 1, { order: 2 });
-    sim.shelf = ['good'];
+    sim.shelves[0] = ['good'];
     expect(applyInput(sim, OP.sell, 1 * 2)).toEqual({ ok: false, reason: 'no_stock' });
-    sim.shelf = ['good', 'good'];
+    sim.shelves[0] = ['good', 'good'];
     expect(applyInput(sim, OP.sell, 1 * 2 + 1)).toEqual({ ok: false, reason: 'no_stock' });
   });
 
@@ -202,7 +209,7 @@ describe('손님과 판매', () => {
     const sim = createDay(initialShopState(), 'money');
     const startMoney = sim.money;
     seat(sim, 0, { order: 2 });
-    sim.shelf = ['good', 'raw'];
+    sim.shelves[0] = ['good', 'raw'];
     must(sim, OP.sell, 0);
     // 120 + 60, 점수 −1 → 아쉬움
     expect(sim.money - startMoney).toBe(180);
@@ -210,7 +217,7 @@ describe('손님과 판매', () => {
     expect(sim.combo).toBe(0);
 
     seat(sim, 1, { order: 1 });
-    sim.shelf = ['good', 'good'];
+    sim.shelves[0] = ['good', 'good'];
     must(sim, OP.sell, 1 * 2 + 1);
     // 덤 → 만족, 콤보 1: 120 + 10%
     expect(sim.money - startMoney).toBe(180 + 132);
@@ -218,7 +225,7 @@ describe('손님과 판매', () => {
     expect(sim.stats.sold).toBe(4);
 
     seat(sim, 2, { order: 1 });
-    sim.shelf = ['golden', 'good'];
+    sim.shelves[0] = ['golden', 'good'];
     must(sim, OP.sell, 2 * 2 + 1);
     // 황금 360 + 최고 팁 72 = 432, 콤보 2 → +20%
     expect(sim.money - startMoney).toBe(180 + 132 + 432 + 86);
@@ -239,12 +246,12 @@ describe('손님과 판매', () => {
     const sim = createDay(initialShopState(), 'angry');
     const startMoney = sim.money;
     seat(sim, 0, { order: 2 });
-    sim.shelf = ['burnt', 'burnt'];
+    sim.shelves[0] = ['burnt', 'burnt'];
     must(sim, OP.sell, 0);
     expect(sim.money - startMoney).toBe(Math.floor((36 + 36) / 2));
     expect(sim.stats.repChange).toBe(-3);
     seat(sim, 1, { kind: 'reviewer', order: 1 });
-    sim.shelf = ['good'];
+    sim.shelves[0] = ['good'];
     must(sim, OP.sell, 2);
     expect(sim.stats.repChange).toBe(-3 + 6);
   });
@@ -253,7 +260,7 @@ describe('손님과 판매', () => {
     const sim = createDay(initialShopState(), 'office');
     seat(sim, 0, { id: 1, kind: 'office', order: 1 });
     seat(sim, 1, { id: 2, kind: 'regular', order: 1 });
-    sim.shelf = ['good', 'good'];
+    sim.shelves[0] = ['good', 'good'];
     must(sim, OP.sell, 1 * 2);
     expect(sim.seats[0]).toBeNull();
     expect(sim.stats.left).toBe(1);
@@ -261,16 +268,16 @@ describe('손님과 판매', () => {
     // 먼저 온 손님에게 파는 것은 괜찮다
     seat(sim, 0, { id: 3, kind: 'regular', order: 1 });
     seat(sim, 1, { id: 4, kind: 'office', order: 1 });
-    sim.shelf = ['good'];
+    sim.shelves[0] = ['good'];
     must(sim, OP.sell, 0);
     expect(sim.seats[1]).not.toBeNull();
   });
 
   it('탄 빵 버리기', () => {
     const sim = createDay(initialShopState(), 'trash');
-    sim.shelf = ['good', 'burnt', 'raw', 'burnt'];
+    sim.shelves[0] = ['good', 'burnt', 'raw', 'burnt'];
     must(sim, OP.trash, 0);
-    expect(sim.shelf).toEqual(['good', 'raw']);
+    expect(sim.shelves[0]).toEqual(['good', 'raw']);
     expect(sim.stats.trashed).toBe(2);
   });
 });
@@ -280,7 +287,7 @@ describe('마감과 정산', () => {
     const sim = createDay(initialShopState(), 'close');
     run(sim, DAY_TICKS - 1);
     seat(sim, 2, {});
-    sim.shelf = ['good', 'good'];
+    sim.shelves[0] = ['good', 'good'];
     sim.molds[0]!.phase = 'bottom';
     const rep = sim.stats.repChange;
     run(sim, 1);
@@ -313,6 +320,139 @@ describe('마감과 정산', () => {
     expect(levelOf(85)).toBe(3);
     expect(outcome.nextState.reputation).toBe(80);
     expect(outcome.nextState.stats.bestProfit).toBe(0);
+  });
+});
+
+describe('메뉴 (팥·슈크림·피자)', () => {
+  /** 평판 Lv5(피자까지 열림)이고 화력이 50%에 머무는 가게 */
+  const allMenus = () => steadyShop({ reputation: 280 });
+
+  /** menu 반죽을 0번 빵틀에 붓고 bottomTicks 뒤 뒤집고 topTicks 뒤 꺼낸 품질 */
+  function bakeMenu(menu: number, bottomTicks: number, topTicks: number, seed = plainSeed()) {
+    const sim = createDay(allMenus(), seed);
+    must(sim, OP.tap, tapArg(0, menu));
+    run(sim, bottomTicks);
+    must(sim, OP.tap, 0);
+    run(sim, topTicks);
+    must(sim, OP.tap, 0);
+    return sim.shelves[menu]![0];
+  }
+
+  it('메뉴는 평판 레벨로 열린다: 슈크림 Lv3, 피자 Lv5', () => {
+    expect([1, 2, 3, 4, 5, 9].map(openMenus)).toEqual([1, 1, 2, 2, 3, 3]);
+    expect(createDay(initialShopState(), 'm').params.menus).toBe(1);
+    expect(createDay(steadyShop({ reputation: 80 }), 'm').params.menus).toBe(2);
+    expect(createDay(allMenus(), 'm').params.menus).toBe(3);
+  });
+
+  it('메뉴별 익힘 구간: 슈크림은 빨리 익고 빨리 타고, 피자는 오래 익는다', () => {
+    // 화력 50%(속도 110): 슈크림 알맞음 210~330틱, 피자 300~480틱
+    expect([MENUS[1]!.doneAt / 110, MENUS[1]!.burnAt / 110]).toEqual([210, 330]);
+    expect([MENUS[2]!.doneAt / 110, MENUS[2]!.burnAt / 110]).toEqual([300, 480]);
+    expect(bakeMenu(1, 210, 210)).toBe('good');
+    expect(bakeMenu(1, 209, 210)).toBe('raw');
+    expect(bakeMenu(1, 330, 210)).toBe('burnt');
+    expect(bakeMenu(1, 329, 329)).toBe('good');
+    expect(bakeMenu(2, 300, 300)).toBe('good');
+    expect(bakeMenu(2, 299, 300)).toBe('raw');
+    expect(bakeMenu(2, 479, 479)).toBe('good');
+    expect(bakeMenu(2, 300, 480)).toBe('burnt');
+  });
+
+  it('황금 후보의 반짝임은 그 메뉴가 알맞음에 들어설 때 시작한다', () => {
+    const seed = goldenSeed();
+    expect(bakeMenu(1, 210, 210, seed)).toBe('golden');
+    expect(bakeMenu(1, 210, 245, seed)).toBe('golden');
+    expect(bakeMenu(1, 210, 246, seed)).toBe('burnt');
+    expect(bakeMenu(2, 300, 299, seed)).toBe('raw');
+    expect(bakeMenu(2, 300, 300, seed)).toBe('golden');
+  });
+
+  it('메뉴별 재료비와 빵 값 (반죽 레시피는 모든 메뉴에 더한다)', () => {
+    const sim = createDay(allMenus(), plainSeed());
+    const start = sim.money;
+    must(sim, OP.tap, tapArg(0, 1));
+    must(sim, OP.tap, tapArg(1, 2));
+    expect(start - sim.money).toBe(70 + 90);
+    expect(sim.stats.doughCost).toBe(160);
+    expect(sim.params.prices).toEqual([120, 160, 200]);
+    const rich = createDay(steadyShop({ reputation: 280, upgrades: { ...initialShopState().upgrades, burner: 5, recipe: 1 } }), 'p');
+    expect(rich.params.prices).toEqual([140, 180, 220]);
+  });
+
+  it('열리지 않은 메뉴는 부을 수 없고, 없는 메뉴나 굽는 틀에 메뉴를 붙인 값은 실패', () => {
+    const sim = createDay(steadyShop({ reputation: 80 }), plainSeed());
+    expect(applyInput(sim, OP.tap, tapArg(0, 2))).toEqual({ ok: false, reason: 'locked_menu' });
+    must(sim, OP.tap, tapArg(0, 1));
+    expect(sim.molds[0]!.menu).toBe(1);
+    run(sim, MIN_TAP_GAP);
+    expect(applyInput(sim, OP.tap, tapArg(0, 1))).toEqual({ ok: false, reason: 'bad_menu' });
+    expect(applyInput(sim, OP.tap, tapArg(1, 3))).toEqual({ ok: false, reason: 'bad_menu' });
+    expect(applyInput(sim, OP.sell, sellArg(0, false, 3))).toEqual({ ok: false, reason: 'bad_menu' });
+  });
+
+  it('팥 입력 값은 메뉴를 넣기 전과 같다', () => {
+    expect(tapArg(5)).toBe(5);
+    expect([sellArg(0, false), sellArg(1, true), sellArg(2, false)]).toEqual([0, 3, 4]);
+    expect(sellArg(2, true, 1)).toBe(8 + 5);
+  });
+
+  it('판매는 주문한 메뉴의 진열대 앞쪽부터 나가고, 그 메뉴가 모자라면 no_stock', () => {
+    const sim = createDay(allMenus(), 'menu-sell');
+    seat(sim, 0, { menu: 1, order: 2 });
+    sim.shelves = [['good', 'good', 'good'], ['raw'], []];
+    expect(applyInput(sim, OP.sell, sellArg(0, false, 1))).toEqual({ ok: false, reason: 'no_stock' });
+    sim.shelves = [['good', 'good'], ['golden', 'raw', 'good'], []];
+    const start = sim.money;
+    must(sim, OP.sell, sellArg(0, false, 1));
+    expect(sim.shelves).toEqual([['good', 'good'], ['good'], []]);
+    // 황금 160 × 3 + 덜 익음 160 × 0.5, 점수 +1 → 만족(팁 없음)
+    expect(sim.money - start).toBe(480 + 80);
+    expect(sim.stats.soldBy).toEqual([0, 2, 0]);
+  });
+
+  it('주문과 다른 메뉴를 주면 불만: 절반만 내고 평판 −3, 콤보 0', () => {
+    const sim = createDay(allMenus(), 'wrong');
+    seat(sim, 0, { menu: 2, order: 1 });
+    sim.shelves = [['good'], [], ['good']];
+    sim.combo = 4;
+    const start = sim.money;
+    sim.events = [];
+    must(sim, OP.sell, sellArg(0, false, 0));
+    expect(sim.money - start).toBe(60);
+    expect(sim.stats.served.bad).toBe(1);
+    expect(sim.stats.repChange).toBe(-3);
+    expect(sim.combo).toBe(0);
+    expect(sim.events).toContainEqual(expect.objectContaining({ type: 'sale', menu: 0, result: 'bad' }));
+  });
+
+  it('탄 빵 버리기는 메뉴 상관없이, 마감 폐기는 메뉴를 합친 수', () => {
+    const sim = createDay(allMenus(), 'trash-menus');
+    sim.shelves = [['burnt', 'good'], ['burnt'], ['raw', 'burnt']];
+    must(sim, OP.trash, 0);
+    expect(sim.shelves).toEqual([['good'], [], ['raw']]);
+    expect(sim.stats.trashed).toBe(3);
+    expect(shelfCount(sim)).toBe(2);
+  });
+
+  it('손님은 열린 메뉴만 주문하고, 팥만 열린 날은 메뉴를 뽑지 않는다(난수 순서가 그대로)', () => {
+    const a = new SeededRandom('order-menu');
+    const b = new SeededRandom('order-menu');
+    const drawn = drawCustomer(a, 2, 1);
+    const kindRoll = b.int(0, 99);
+    expect(drawn.menu).toBe(0);
+    expect(kindRoll).toBeGreaterThanOrEqual(0);
+    const [min, max] = KINDS[drawn.kind].order;
+    expect(drawn.order).toBe(b.int(min, max));
+    expect(a.int(0, 999)).toBe(b.int(0, 999));
+
+    const sim = createDay(allMenus(), 'many-menus');
+    const seen = new Set<number>();
+    for (let i = 0; i < 400; i += 1) seen.add(drawCustomer(sim.customersRng, 5, 3).menu);
+    expect([...seen].sort()).toEqual([0, 1, 2]);
+    const two = new Set<number>();
+    for (let i = 0; i < 400; i += 1) two.add(drawCustomer(sim.customersRng, 3, 2).menu);
+    expect([...two].sort()).toEqual([0, 1]);
   });
 });
 
@@ -374,7 +514,7 @@ describe('강화', () => {
     const state = initialShopState();
     const up = createDay({ ...state, upgrades: { molds: 2, seasoning: 0, burner: 0, recipe: 2, golden: 5, shelf: 1, sign: 0 } }, 's');
     expect(up.molds).toHaveLength(12);
-    expect(up.params.price).toBe(160);
+    expect(up.params.prices).toEqual([160, 200, 240]);
     expect(up.params.goldChance).toBe(150);
     expect(up.params.shelfCap).toBe(16);
   });

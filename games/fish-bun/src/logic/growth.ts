@@ -1,6 +1,8 @@
 // 붕어빵 가게의 하루 사이에 남는 것: 저장 상태, 평판, 강화. 정수 연산만 쓴다.
 // 근거: docs/design/261021-03-fish-bun-growth.md
 
+import { MENUS, type Menu } from './menus';
+
 /** 강화 항목 */
 export type UpgradeKey = 'molds' | 'seasoning' | 'burner' | 'recipe' | 'golden' | 'shelf' | 'sign';
 
@@ -149,9 +151,14 @@ export function heatFall(level: number): number {
   return [8, 6, 5, 3, 2, 0][level] ?? 0;
 }
 
-/** 반죽 레시피: 빵 값(알맞음 기준) */
-export function breadPrice(level: number): number {
-  return 120 + 20 * level;
+/** 반죽 레시피: 단계마다 모든 메뉴의 빵 값에 더하는 값 */
+export function recipeBonus(level: number): number {
+  return 20 * level;
+}
+
+/** 메뉴의 빵 값(알맞음 기준) */
+export function breadPrice(menu: Menu, level: number): number {
+  return MENUS[menu]!.price + recipeBonus(level);
 }
 
 /** 황금 비법: 황금 후보 확률 (천분율) */

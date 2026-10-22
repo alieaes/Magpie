@@ -1,14 +1,14 @@
 // 장사 화면: 시계(HUD), 손님 카운터, 진열대, 빵틀, 펌프·화력, 콤보를 그리고 누름을 받는다.
 // 규칙 판정은 logic이 하고, 여기는 지금 상태(DaySim)를 그리고 사건(DayEvent)을 연출한다.
-// 근거: docs/design/261021-01-fish-bun.md §3~§5, docs/design/261021-02-fish-bun-customers.md §3-3
+// 근거: docs/design/261021-01-fish-bun.md §3~§5, docs/design/261021-02-fish-bun-customers.md §3-3, docs/design/261022-02-fish-bun-menu.md §2~§4
 
 import Phaser from 'phaser';
 import {
   DAY_TICKS,
-  DONE_AT,
   GOLD_WINDOW,
   HEAT_MAX,
   LAST_ARRIVAL_TICK,
+  MENUS,
   cookSpeed,
   gameMinute,
   levelOf,
@@ -17,10 +17,10 @@ import {
   type CustomerKind,
   type DayEvent,
   type DaySim,
+  type Menu,
   type MoldPhase,
-  type Quality,
 } from '../logic/rules';
-import { BUN_SCALE, BUN_W, MOLD_H, MOLD_W, PERSON_H, SHELF_H, SHELF_W, TEX, type IconName } from './art';
+import { BUN_SCALE, BUN_W, MENU_ICON, MOLD_H, MOLD_W, PERSON_H, SHELF_H, SHELF_W, TEX, type IconName } from './art';
 import { dayGeometry, inRect, moldCells, type DayGeometry, type Layout, type Rect } from './layout';
 import { pickLine, saleLineKey, type LineKey } from './lines';
 import type { Face } from './people';
@@ -30,12 +30,15 @@ import { Button, clockText, hex, mix, num, textStyle, titleStyle, won, type Scen
 
 /** 장사 화면이 장면에 알리는 누름 */
 export interface DayHandlers {
-  /** 빵틀을 눌렀다. 입력이 받아들여졌으면 true */
-  tap(index: number): boolean;
+  /** 빵틀을 눌렀다. 빈 틀이면 menu 반죽을 붓는다. 입력이 받아들여졌으면 true */
+  tap(index: number, menu: Menu): boolean;
   pump(on: boolean): void;
-  sell(seat: number, extra: boolean): void;
+  /** menu 빵을 판다 */
+  sell(seat: number, extra: boolean, menu: Menu): void;
   trash(): void;
   pause(): void;
+  /** 반죽을 골랐다 (배치를 바꿔 다시 그려도 유지하게 장면이 기억한다) */
+  batter(menu: Menu): void;
 }
 
 /** 손님 성격 표시 아이콘 */
@@ -50,6 +53,7 @@ const TRAIT_ICON: Partial<Record<CustomerKind, IconName>> = {
 /** 거절 사유의 짧은 안내 */
 const DENY_TEXT: Record<string, string> = {
   no_money: '반죽 살 돈이 모자라요',
+  locked_menu: '아직 열리지 않은 메뉴예요',
   shelf_full: '진열대가 가득 찼어요',
   no_stock: '빵이 모자라요',
 };
@@ -77,6 +81,8 @@ interface MoldView {
   a: Phaser.GameObjects.Image;
   b: Phaser.GameObjects.Image;
   glow: Phaser.GameObjects.Image;
+  /** 메뉴 표시 (빵틀 왼쪽 위. 뒤집은 붕어빵은 겉모습이 같아서 이것으로 구분한다) */
+  mark: Phaser.GameObjects.Image;
   phase: MoldPhase;
   puffAt: number;
 }
@@ -112,7 +118,16 @@ export class DayView {
   private progress!: Phaser.GameObjects.Graphics;
   private money!: Phaser.GameObjects.Text;
   private shownMoney = -1;
+  /** 그날 열린 메뉴 수. 둘 이상이면 반죽 고르기·메뉴 표시를 보여 준다 */
+  private readonly menus: number;
+  /** 지금 고른 반죽 */
+  private batter: Menu;
+  private readonly batterButtons: Button[] = [];
+  /** 진열대 빵 아이콘 (팥 → 슈크림 → 피자 순서로 모아 놓는다) */
   private shelfIcons: Phaser.GameObjects.Image[] = [];
+  private shelfMarks: Phaser.GameObjects.Image[] = [];
+  /** 진열대에서 메뉴마다 첫 아이콘의 순번 */
+  private shelfStart: number[] = [];
   private shelfSlots!: Phaser.GameObjects.Graphics;
   private shelfKey = '';
   private trashButton!: Button;
@@ -135,12 +150,14 @@ export class DayView {
   private wasPumping = false;
   private closingShown = false;
 
-  constructor(scene: Phaser.Scene, layout: Layout, palette: ScenePalette, sfx: Sfx, sim: DaySim, handlers: DayHandlers) {
+  constructor(scene: Phaser.Scene, layout: Layout, palette: ScenePalette, sfx: Sfx, sim: DaySim, handlers: DayHandlers, batter: Menu = 0) {
     this.scene = scene;
     this.palette = palette;
     this.sfx = sfx;
     this.handlers = handlers;
-    this.g = dayGeometry(layout);
+    this.menus = sim.params.menus;
+    this.batter = batter < this.menus ? batter : 0;
+    this.g = dayGeometry(layout, this.menus);
     this.root = scene.add.container(0, 0);
     this.backLayer = scene.add.container(0, 0);
     this.peopleLayer = scene.add.container(0, 0);
@@ -159,6 +176,7 @@ export class DayView {
     this.buildHud(sim);
     this.buildShelf();
     this.buildGrill(sim);
+    this.buildBatter();
     this.buildPump();
     this.buildParticles();
     sim.seats.forEach((customer, seat) => {
@@ -295,11 +313,49 @@ export class DayView {
       const bunScale = scale * BUN_SCALE;
       const a = this.scene.add.image(cx, cy - 2 * scale, TEX.batter('raw')).setScale(bunScale).setVisible(false);
       const b = this.scene.add.image(cx, cy - 2 * scale, TEX.batter('good')).setScale(bunScale).setVisible(false);
-      this.root.add([base, glow, a, b]);
-      this.molds.push({ cell, cx, cy, a, b, glow, phase: 'empty', puffAt: 0 });
+      const mark = this.scene.add
+        .image(cx - (MOLD_W / 2 - 20) * scale, cy - (MOLD_H / 2 - 18) * scale, TEX.icon(MENU_ICON[0]!))
+        .setScale(0.42 * scale)
+        .setVisible(false);
+      this.root.add([base, glow, a, b, mark]);
+      this.molds.push({ cell, cx, cy, a, b, glow, mark, phase: 'empty', puffAt: 0 });
     });
     // 지금 상태를 바로 맞춘다(배치를 바꿔 다시 그릴 때 등장 연출 없이)
     sim.molds.forEach((m, i) => (this.molds[i]!.phase = m.phase));
+  }
+
+  /** 반죽 고르기 버튼 (메뉴가 둘 이상 열린 날만). 고른 반죽이 빈 틀에 부어진다 */
+  private buildBatter(): void {
+    const area = this.g.batter;
+    if (!area) return;
+    const gap = 12;
+    const w = (area.w - gap * (this.menus - 1)) / this.menus;
+    for (let m = 0; m < this.menus; m += 1) {
+      const button = new Button(this.scene, {
+        x: area.x + m * (w + gap) + w / 2,
+        y: area.y + area.h / 2,
+        width: w,
+        height: area.h,
+        label: MENUS[m]!.name,
+        sub: `반죽 ${won(MENUS[m]!.cost)}`,
+        style: m === this.batter ? 'primary' : 'secondary',
+        palette: this.palette,
+        fontSize: 24,
+        onPress: () => this.selectBatter(m),
+      });
+      button.add(this.scene.add.image(-w / 2 + 36, 0, TEX.icon(MENU_ICON[m]!)).setScale(0.6));
+      this.batterButtons.push(button);
+      this.root.add(button);
+    }
+  }
+
+  /** 반죽을 고른다 */
+  private selectBatter(menu: Menu): void {
+    if (menu === this.batter) return;
+    this.batter = menu;
+    this.sfx.click();
+    this.batterButtons.forEach((b, m) => b.setStyle(m === menu ? 'primary' : 'secondary'));
+    this.handlers.batter(menu);
   }
 
   /** 펌프·화력 계기·콤보·(가로) 오늘 기록 */
@@ -389,13 +445,19 @@ export class DayView {
       bubbleBg.fillTriangle(-12, 48, 12, 48, 0, 64);
       bubbleBg.lineStyle(3, 0x3a2a1a, 0.18).strokeRoundedRect(-104, -50, 208, 100, 22);
     }
+    // 말풍선 윗줄: [성격 아이콘] [메뉴 아이콘] 개수. 메뉴가 하나뿐인 날은 메뉴 아이콘을 빼서 지금과 같다
     const trait = TRAIT_ICON[customer.kind];
-    const count = this.scene.add.text(trait ? 14 : 0, -18, `${customer.order}개`, textStyle(40, 0x3a2410, '900')).setOrigin(0.5);
+    const showMenu = this.menus > 1;
+    const countX = trait && showMenu ? 40 : trait || showMenu ? 18 : 0;
+    const count = this.scene.add.text(countX, -18, `${customer.order}개`, textStyle(40, 0x3a2410, '900')).setOrigin(0.5);
+    const menuName = showMenu ? MENUS[customer.menu]!.name : '';
     const line = this.scene.add
-      .text(0, 26, pickLine(customer.kind, 'order', customer.order), { ...textStyle(19, 0x5a4636, '700'), align: 'center', wordWrap: { width: 196 } })
+      .text(0, 26, pickLine(customer.kind, 'order', customer.order, menuName), { ...textStyle(19, 0x5a4636, '700'), align: 'center', wordWrap: { width: 196 } })
       .setOrigin(0.5);
     bubble.add([bubbleBg, count, line]);
-    if (trait) bubble.add(this.scene.add.image(-60, -18, TEX.icon(trait)).setScale(0.55));
+    // 메뉴 아이콘은 성격 아이콘보다 크게 해서 둘이 섞여 보이지 않게 한다
+    if (trait) bubble.add(this.scene.add.image(showMenu ? -80 : -60, -18, TEX.icon(trait)).setScale(showMenu ? 0.45 : 0.55));
+    if (showMenu) bubble.add(this.scene.add.image(trait ? -30 : -46, -18, TEX.icon(MENU_ICON[customer.menu]!)).setScale(0.8));
     const root = this.scene.add.container(x, 0, [person, bubble]);
     this.peopleLayer.add(root);
 
@@ -410,7 +472,7 @@ export class DayView {
       style: 'warm',
       palette: this.palette,
       fontSize: 24,
-      onPress: () => this.handlers.sell(seat, false),
+      onPress: () => this.handlers.sell(seat, false, customer.menu),
       onDenied: () => this.denied(x - 34, this.boardTop + 70, 'no_stock'),
     });
     const extra = new Button(this.scene, {
@@ -423,7 +485,7 @@ export class DayView {
       style: 'warm',
       palette: this.palette,
       fontSize: 26,
-      onPress: () => this.handlers.sell(seat, true),
+      onPress: () => this.handlers.sell(seat, true, customer.menu),
       onDenied: () => this.denied(x + 72, this.boardTop + 70, 'no_stock'),
     });
     this.uiLayer.add([patience, give, extra]);
@@ -535,9 +597,10 @@ export class DayView {
   private onSale(e: Extract<DayEvent, { type: 'sale' }>): void {
     const x = this.seatX[e.seat]!;
     const view = this.seats[e.seat];
-    // 진열대 앞쪽에서 손님에게 빵이 날아간다
+    // 진열대에서 그 메뉴의 앞쪽 빵이 손님에게 날아간다 (진열대 아이콘은 아직 팔기 전 모습이다)
+    const start = this.shelfStart[e.menu] ?? 0;
     e.given.forEach((q, i) => {
-      const from = this.shelfIcons[i];
+      const from = this.shelfIcons[start + i];
       const icon = this.scene.add.image(from?.x ?? this.g.shelf.x + 40, from?.y ?? this.g.shelf.y + 50, TEX.shelf(q)).setScale(from?.scale ?? 1);
       this.fx.add(icon);
       this.scene.tweens.add({
@@ -552,7 +615,9 @@ export class DayView {
       });
     });
     const face: Face = e.result === 'best' || e.result === 'good' ? 'happy' : e.result === 'bad' ? 'angry' : 'normal';
-    const line = pickLine(e.customer.kind, saleLineKey(e.customer.kind, e.result, e.given, e.extra), e.customer.order);
+    const wrongMenu = e.menu !== e.customer.menu;
+    const key = saleLineKey(e.customer.kind, e.result, e.given, e.extra, wrongMenu);
+    const line = pickLine(e.customer.kind, key, e.customer.order, MENUS[e.customer.menu]!.name);
     if (view) this.dismiss(e.seat, face, line, 900);
     const total = e.paid + e.tip + e.bonus;
     this.floatText(x, this.boardTop - 70, `+${won(total)}`, 0xf2b632, 34);
@@ -665,40 +730,49 @@ export class DayView {
     sim.molds.forEach((m, i) => {
       const v = this.molds[i];
       if (!v) return;
-      if (m.phase !== v.phase) this.onPhaseChange(v, v.phase, m.phase, sim);
+      if (m.phase !== v.phase) this.onPhaseChange(v, v.phase, m.phase, sim, m.menu);
       v.phase = m.phase;
       if (m.phase === 'empty') {
         v.a.setVisible(false);
         v.b.setVisible(false);
         v.glow.setVisible(false);
+        v.mark.setVisible(false);
         return;
       }
+      if (this.menus > 1) {
+        const markKey = TEX.icon(MENU_ICON[m.menu]!);
+        if (v.mark.texture.key !== markKey) v.mark.setTexture(markKey);
+        v.mark.setVisible(true);
+      }
+      // 메뉴마다 알맞음·탐 구간이 다르다
+      const doneAt = params.doneAt[m.menu]!;
+      const burnAt = params.burnAt[m.menu]!;
       let aKey: string;
       let bKey: string | null = null;
       let mixT = 0;
       let shining = false;
       let puff: 'steam' | 'smoke' | null = null;
       if (m.phase === 'bottom') {
-        if (m.bottom < DONE_AT) {
-          aKey = TEX.batter('raw');
-          bKey = TEX.batter('good');
-          mixT = m.bottom / DONE_AT;
-        } else if (m.bottom < params.burnAt) {
-          aKey = TEX.batter('good');
-          bKey = TEX.batter('burnt');
-          mixT = clamp01((m.bottom - DONE_AT) / (params.burnAt - DONE_AT)) ** 2;
+        if (m.bottom < doneAt) {
+          aKey = TEX.batter('raw', m.menu);
+          bKey = TEX.batter('good', m.menu);
+          mixT = m.bottom / doneAt;
+        } else if (m.bottom < burnAt) {
+          aKey = TEX.batter('good', m.menu);
+          bKey = TEX.batter('burnt', m.menu);
+          mixT = clamp01((m.bottom - doneAt) / (burnAt - doneAt)) ** 2;
           puff = 'steam';
         } else {
-          aKey = TEX.batter('burnt');
+          aKey = TEX.batter('burnt', m.menu);
           puff = 'smoke';
         }
       } else if (m.candidate) {
         // 황금 후보: 모양만 다르고 색은 보통 빵처럼 익다가, 반짝이는 동안에만 금색이 된다(미리 꺼내지 않게)
-        const limit = DONE_AT + GOLD_WINDOW;
-        if (m.top < DONE_AT) {
+        const limit = doneAt + GOLD_WINDOW;
+        if (m.top < doneAt) {
           aKey = TEX.candidate('raw');
           bKey = TEX.candidate('good');
-          mixT = m.top / DONE_AT;
+          mixT = m.top / doneAt;
         } else if (m.top < limit) {
           aKey = TEX.fish('golden');
           shining = true;
@@ -707,15 +781,14 @@ export class DayView {
           puff = 'smoke';
         }
       } else {
-        const burnAt = params.burnAt;
-        if (m.top < DONE_AT) {
+        if (m.top < doneAt) {
           aKey = TEX.fish('raw');
           bKey = TEX.fish('good');
-          mixT = m.top / DONE_AT;
+          mixT = m.top / doneAt;
         } else if (m.top < burnAt) {
           aKey = TEX.fish('good');
           bKey = TEX.fish('burnt');
-          mixT = clamp01((m.top - DONE_AT) / (burnAt - DONE_AT)) ** 2;
+          mixT = clamp01((m.top - doneAt) / (burnAt - doneAt)) ** 2;
           puff = 'steam';
         } else {
           aKey = TEX.fish('burnt');
@@ -737,8 +810,8 @@ export class DayView {
     });
   }
 
-  /** 빵틀 단계가 바뀔 때의 짧은 연출 (붓기·뒤집기·꺼내기) */
-  private onPhaseChange(v: MoldView, from: MoldPhase, to: MoldPhase, sim: DaySim): void {
+  /** 빵틀 단계가 바뀔 때의 짧은 연출 (붓기·뒤집기·꺼내기). menu는 그 틀의 반죽(꺼냈으면 방금 꺼낸 메뉴) */
+  private onPhaseChange(v: MoldView, from: MoldPhase, to: MoldPhase, sim: DaySim, menu: Menu): void {
     const scale = this.moldScale * BUN_SCALE;
     if (from === 'empty' && to === 'bottom') {
       this.sfx.pour();
@@ -751,11 +824,14 @@ export class DayView {
         this.scene.tweens.add({ targets: img, scaleY: scale, duration: 160, ease: 'Cubic.easeOut' });
       }
     } else if (from === 'top' && to === 'empty') {
-      const q = sim.shelf.at(-1) ?? 'good';
+      const list = sim.shelves[menu] ?? [];
+      const q = list.at(-1) ?? 'good';
       this.sfx.take(q === 'golden');
       const fly = this.scene.add.image(v.cx, v.cy, TEX.fish(q === 'golden' ? 'golden' : q)).setScale(scale);
       this.fx.add(fly);
-      const target = this.shelfSlot(sim.shelf.length - 1, sim.params.shelfCap);
+      // 진열대는 메뉴별로 모아 놓으므로, 앞 메뉴들의 빵 수만큼 뒤가 그 메뉴의 끝이다
+      const before = sim.shelves.slice(0, menu).reduce((sum, l) => sum + l.length, 0);
+      const target = this.shelfSlot(before + list.length - 1, sim.params.shelfCap);
       this.scene.tweens.add({
         targets: fly,
         x: target.x,
@@ -782,14 +858,15 @@ export class DayView {
     return { x: shelf.x + 16 + slotW * (c + 0.5), y: shelf.y + 10 + slotH * (r + 0.5), scale };
   }
 
-  /** 진열대: 바뀌었을 때만 아이콘을 다시 놓는다. 왼쪽이 먼저 나가는 빵 */
+  /** 진열대: 바뀌었을 때만 아이콘을 다시 놓는다. 메뉴별로 모아(팥 → 슈크림 → 피자) 놓고, 메뉴마다 왼쪽이 먼저 나가는 빵 */
   private renderShelf(sim: DaySim): void {
     const cap = sim.params.shelfCap;
-    const key = `${cap}|${sim.shelf.join(',')}`;
+    const key = `${cap}|${sim.shelves.map((l) => l.join(',')).join('/')}`;
     if (key === this.shelfKey) return;
     this.shelfKey = key;
-    for (const icon of this.shelfIcons) icon.destroy();
+    for (const icon of [...this.shelfIcons, ...this.shelfMarks]) icon.destroy();
     this.shelfIcons = [];
+    this.shelfMarks = [];
     const g = this.shelfSlots.clear();
     for (let i = 0; i < cap; i += 1) {
       const s = this.shelfSlot(i, cap);
@@ -798,13 +875,22 @@ export class DayView {
       if (PIXEL_ART) roundBox(g, s.x - sw / 2, s.y + 4 - sh / 2, sw, sh, 6, 0x9aa1ab, 0.35);
       else g.fillStyle(0x9aa1ab, 0.35).fillEllipse(s.x, s.y + 4, sw, sh);
     }
-    sim.shelf.forEach((q, i) => {
-      const s = this.shelfSlot(i, cap);
-      const icon = this.scene.add.image(s.x, s.y, TEX.shelf(q)).setScale(s.scale);
-      this.root.add(icon);
-      this.shelfIcons.push(icon);
+    this.shelfStart = [];
+    sim.shelves.forEach((list, menu) => {
+      this.shelfStart[menu] = this.shelfIcons.length;
+      for (const q of list) {
+        const s = this.shelfSlot(this.shelfIcons.length, cap);
+        const icon = this.scene.add.image(s.x, s.y, TEX.shelf(q)).setScale(s.scale);
+        this.root.add(icon);
+        this.shelfIcons.push(icon);
+        if (this.menus > 1) {
+          const mark = this.scene.add.image(s.x - SHELF_W * s.scale * 0.3, s.y - SHELF_H * s.scale * 0.3, TEX.icon(MENU_ICON[menu]!)).setScale(0.45 * s.scale);
+          this.root.add(mark);
+          this.shelfMarks.push(mark);
+        }
+      }
     });
-    this.trashButton.setEnabled(sim.shelf.includes('burnt'));
+    this.trashButton.setEnabled(sim.shelves.some((list) => list.includes('burnt')));
   }
 
   /** 손님: 기다림 막대, 버튼 상태, 오래 기다리면 대사 */
@@ -821,13 +907,18 @@ export class DayView {
         view.waitShown = true;
         this.say(view, pickLine(customer.kind, 'wait'));
       }
-      const enough = sim.shelf.length >= customer.order;
+      // 주문한 메뉴의 빵만 준다
+      const stock = sim.shelves[customer.menu]!.length;
+      const enough = stock >= customer.order;
       view.give.setEnabled(enough);
-      view.extra.setEnabled(sim.shelf.length >= customer.order + 1);
+      view.extra.setEnabled(stock >= customer.order + 1);
       if (enough) {
         const q = quoteSale(sim, customer, false);
         view.give.setText(`${customer.order}개 주기`, won(q.paid + q.tip + q.bonus));
-      } else view.give.setText(`${customer.order}개 주기`, `빵 ${customer.order - sim.shelf.length}개 부족`);
+      } else {
+        const what = this.menus > 1 ? MENUS[customer.menu]!.name : '빵';
+        view.give.setText(`${customer.order}개 주기`, `${what} ${customer.order - stock}개 부족`);
+      }
       view.extra.setPulse(customer.kind === 'kid' && view.extra.isEnabled());
     });
   }
@@ -886,7 +977,7 @@ export class DayView {
     if (i < 0) return;
     const phase = sim.molds[i]!.phase;
     this.swipe = { pointerId: p.id, phase, visited: new Set([i]) };
-    this.handlers.tap(i);
+    this.handlers.tap(i, this.batter);
   }
 
   /** 쓸어 넘기기: 처음 누른 칸과 같은 동작이 가능한 칸에만 한다 */
@@ -897,7 +988,7 @@ export class DayView {
     if (i < 0 || s.visited.has(i)) return;
     if (sim.molds[i]!.phase !== s.phase) return;
     s.visited.add(i);
-    this.handlers.tap(i);
+    this.handlers.tap(i, this.batter);
   }
 
   /** 누름 끝: 펌프를 누르던 손가락이면 펌프를 뗀다 */
