@@ -118,6 +118,7 @@ const fishBun: GrowthGameModule = {
       sfx,
       session: options.session,
       save: options.save,
+      ...(options.onSoundChange ? { onSoundChange: options.onSoundChange } : {}),
       // 하루를 열 때 그날 평판이 Lv4 이상이면 일본어 글꼴을 받아 둔다
       prepareDay: (reputation) => (levelOf(reputation) >= JAPANESE_LEVEL ? loadJapaneseFont() : Promise.resolve()),
       ...(options.onDayActive ? { onDayActive: options.onDayActive } : {}),

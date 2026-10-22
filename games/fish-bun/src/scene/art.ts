@@ -28,7 +28,8 @@ export type IconName =
   | 'menuPizza'
   | 'question'
   | 'globe'
-  | 'bolt';
+  | 'bolt'
+  | 'gear';
 
 const ICON_NAMES: readonly IconName[] = [
   'pause',
@@ -48,6 +49,7 @@ const ICON_NAMES: readonly IconName[] = [
   'question',
   'globe',
   'bolt',
+  'gear',
 ];
 
 /** 깨진 빵틀의 금 단계 (고칠수록 줄어든다) */
@@ -408,6 +410,8 @@ function iconSvg(name: IconName): string {
       return `<circle cx="32" cy="32" r="26" fill="#5ab4e8" stroke="#2a6f9e" stroke-width="4"/>
         <path d="M18 18 C26 22 28 30 22 36 C18 40 20 48 26 52 M40 10 C36 18 44 24 50 22 M44 40 C38 42 38 50 44 54" fill="none" stroke="#3fae6a" stroke-width="7" stroke-linecap="round"/>
         <path d="M6 32 h52 M32 6 C20 18 20 46 32 58 M32 6 C44 18 44 46 32 58" fill="none" stroke="#ffffff" stroke-width="2" opacity="0.6"/>`;
+    case 'gear':
+      return `<path fill-rule="evenodd" fill="currentColor" d="M28 6 h8 l2 8 l6 3 l7 -4 l6 6 l-4 7 l3 6 l8 2 v8 l-8 2 l-3 6 l4 7 l-6 6 l-7 -4 l-6 3 l-2 8 h-8 l-2 -8 l-6 -3 l-7 4 l-6 -6 l4 -7 l-3 -6 l-8 -2 v-8 l8 -2 l3 -6 l-4 -7 l6 -6 l7 4 l6 -3 Z M32 23 a9 9 0 1 0 0.01 0 Z"/>`;
     case 'bolt':
       return `<path d="M36 4 L12 36 H30 L24 60 L52 24 H34 Z" fill="#ffc83d" stroke="#b25d0c" stroke-width="4" stroke-linejoin="round"/>`;
     case 'menuPizza':

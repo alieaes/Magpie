@@ -1,5 +1,5 @@
 // 효과음. 녹음 파일 없이 Web Audio로 그 자리에서 합성한다(원작·상용 효과음을 가져오지 않는다).
-// 음소거·음량은 셸의 플레이 막대가 정한다(GrowthMountOptions.muted·volume, GrowthInstance.setMuted·setVolume).
+// 음소거·음량은 처음에 셸이 넘기고(GrowthMountOptions.muted·volume), 게임 안 설정(settings.ts)에서 바꾼다.
 // 근거: docs/design/261021-01-fish-bun.md §5-4
 
 const MASTER_GAIN = 0.8;
@@ -48,6 +48,16 @@ export class Sfx {
   setMuted(muted: boolean): void {
     this.muted = muted;
     this.applyLevel();
+  }
+
+  /** 소리가 꺼져 있는지 */
+  isMuted(): boolean {
+    return this.muted;
+  }
+
+  /** 지금 음량 (0~1) */
+  getVolume(): number {
+    return this.volume;
   }
 
   /** 음량을 바꾼다 (0~1) */

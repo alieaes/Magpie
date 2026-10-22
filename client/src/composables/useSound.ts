@@ -71,5 +71,13 @@ export function useSound() {
     store(MUTE_KEY, muted.value ? '1' : '0');
   }
 
-  return { muted, volume, attach, onVolume, toggleMuted };
+  /** 게임 안 설정에서 바꾼 값을 받아 저장한다(게임은 이미 그 값이라 다시 알리지 않는다). 음량은 0~1 */
+  function setFromGame(nextMuted: boolean, nextVolume: number): void {
+    muted.value = nextMuted;
+    volume.value = Math.round(Math.min(1, Math.max(0, nextVolume)) * 100);
+    store(VOLUME_KEY, String(volume.value));
+    store(MUTE_KEY, muted.value ? '1' : '0');
+  }
+
+  return { muted, volume, attach, onVolume, toggleMuted, setFromGame };
 }

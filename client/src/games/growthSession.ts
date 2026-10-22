@@ -106,10 +106,16 @@ export function createSavedSession(gameId: GameId, requestLogin: () => void): Gr
 }
 
 /** 체험 창구를 만든다. 서버와 이야기하지 않는다. fixedSeed는 개발 중 ?seed=로 같은 하루를 다시 띄울 때 */
-export function createTrialSession(initialState: unknown, requestLogin: () => void, fixedSeed: string | null = null): GrowthSession {
+export function createTrialSession(
+  initialState: unknown,
+  requestLogin: () => void,
+  fixedSeed: string | null = null,
+  trialHint?: string,
+): GrowthSession {
   const save = { version: 0, state: initialState };
   return {
     mode: 'trial',
+    ...(trialHint ? { trialHint } : {}),
     load: async () => save,
     startDay: async () => ({ seed: fixedSeed ?? randomSeed() }),
     finishDay: async (result) => ({ accepted: true, score: result.score, best: { today: false, allTime: false }, rank: { today: null } }),

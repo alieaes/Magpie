@@ -29,6 +29,7 @@ import type { TextureSet } from './art';
 import { DayView } from './DayView';
 import { canvasSize, type Layout } from './layout';
 import { REJECT_TEXT, buildSettleScreen, buildShopScreen, buildUpgradeScreen, type SettleStatus } from './screens';
+import { buildSettingsPanel, buildSoundControls } from './settings';
 import type { Sfx } from './sound';
 import { framedBox, roundBox } from './style';
 import { Button, textStyle, titleStyle, type ScenePalette } from './ui';
@@ -41,6 +42,8 @@ export interface FishBunSceneOptions {
   session: GrowthSession;
   save: SaveSnapshot;
   onDayActive?(active: boolean): void;
+  /** 게임 안 설정에서 소리를 바꿨다 (셸이 저장한다) */
+  onSoundChange?(muted: boolean, volume: number): void;
   /** 하루를 열기 전에 그날 평판에 필요한 것(일본어 글꼴 등)을 받아 둔다 */
   prepareDay?(reputation: number): Promise<void>;
 }
@@ -91,6 +94,8 @@ export class FishBunScene extends Phaser.Scene {
   private buying: UpgradeKey | null = null;
   private trialUsed = false;
   private pauseLayer: Phaser.GameObjects.Container | null = null;
+  /** 가게 화면의 설정 창 */
+  private settingsLayer: Phaser.GameObjects.Container | null = null;
   private toastText: Phaser.GameObjects.Container | null = null;
 
   constructor(opts: FishBunSceneOptions) {
@@ -174,6 +179,7 @@ export class FishBunScene extends Phaser.Scene {
     if (this.run) this.run.view = null;
     this.pauseLayer?.destroy();
     this.pauseLayer = null;
+    this.closeSettings();
     const { palette } = this.opts;
     const trial = this.opts.session.mode === 'trial';
     switch (screen) {
@@ -186,7 +192,9 @@ export class FishBunScene extends Phaser.Scene {
           trial,
           trialUsed: this.trialUsed,
           starting: this.starting,
+          trialHint: this.opts.session.trialHint ?? '로그인하면 가게가 저장돼요',
           onStart: () => void this.startDay(),
+          onSettings: () => this.click(() => this.openSettings()),
           onUpgrades: () => this.click(() => this.show('upgrades')),
           onLogin: () => this.opts.session.requestLogin(),
           onRetryTrial: () => this.click(() => this.retryTrial()),
@@ -270,6 +278,23 @@ export class FishBunScene extends Phaser.Scene {
     this.trialUsed = false;
     this.settlement = null;
     this.show('shop');
+  }
+
+  /** 소리 설정을 바꿨다: 셸에 알려 저장하게 한다 */
+  private soundChanged(muted: boolean, volume: number): void {
+    this.opts.onSoundChange?.(muted, volume);
+  }
+
+  /** 설정 창을 연다 (가게 화면) */
+  private openSettings(): void {
+    this.closeSettings();
+    this.settingsLayer = buildSettingsPanel(this, this.opts.palette, this.opts.sfx, (m, v) => this.soundChanged(m, v), () => this.closeSettings());
+  }
+
+  /** 설정 창을 닫는다 */
+  private closeSettings(): void {
+    this.settingsLayer?.destroy();
+    this.settingsLayer = null;
   }
 
   /** 화면 위쪽에 잠깐 뜨는 안내 */
@@ -356,17 +381,20 @@ export class FishBunScene extends Phaser.Scene {
     const p = this.opts.palette;
     const dim = this.add.rectangle(0, 0, width, height, 0x000000, 0.55).setOrigin(0).setInteractive();
     const cw = Math.min(560, width - 80);
-    const card = framedBox(this.add.graphics(), width / 2 - cw / 2, height / 2 - 230, cw, 460, 28, p.surface, p.border);
-    const title = this.add.text(width / 2, height / 2 - 160, '잠깐 쉬는 중', titleStyle(40, p.textStrong)).setOrigin(0.5);
+    // 소리 줄(설정)이 들어가 카드가 길다. 셸 머리줄이 없어서 장사 중 소리는 여기서 바꾼다
+    const top = height / 2 - 320;
+    const card = framedBox(this.add.graphics(), width / 2 - cw / 2, top, cw, 640, 28, p.surface, p.border);
+    const title = this.add.text(width / 2, top + 70, '잠깐 쉬는 중', titleStyle(40, p.textStrong)).setOrigin(0.5);
     const note = this.add
-      .text(width / 2, height / 2 - 92, '멈춘 동안은 시간이 흐르지 않아요.\n그만두면 오늘 장사는 저장되지 않아요.', {
+      .text(width / 2, top + 140, '멈춘 동안은 시간이 흐르지 않아요.\n그만두면 오늘 장사는 저장되지 않아요.', {
         ...textStyle(22, p.text2, '600'),
         align: 'center',
       })
       .setOrigin(0.5);
-    const resume = new Button(this, { x: width / 2, y: height / 2 + 20, width: cw - 80, height: 96, label: '계속하기', style: 'primary', palette: p, fontSize: 32, onPress: () => this.resumeDay() });
-    const quit = new Button(this, { x: width / 2, y: height / 2 + 140, width: cw - 80, height: 84, label: '오늘 장사 그만두기', style: 'secondary', palette: p, fontSize: 26, onPress: () => this.quitDay() });
-    this.pauseLayer = this.add.container(0, 0, [dim, card, title, note, resume, quit]).setDepth(150);
+    const sound = buildSoundControls(this, { x: width / 2, y: top + 230, width: cw - 80, palette: p, sfx: this.opts.sfx, onChange: (m, v) => this.soundChanged(m, v) });
+    const resume = new Button(this, { x: width / 2, y: top + 430, width: cw - 80, height: 96, label: '계속하기', style: 'primary', palette: p, fontSize: 32, onPress: () => this.resumeDay() });
+    const quit = new Button(this, { x: width / 2, y: top + 548, width: cw - 80, height: 84, label: '오늘 장사 그만두기', style: 'secondary', palette: p, fontSize: 26, onPress: () => this.quitDay() });
+    this.pauseLayer = this.add.container(0, 0, [dim, card, title, note, sound, resume, quit]).setDepth(150);
   }
 
   /** 계속하기 */

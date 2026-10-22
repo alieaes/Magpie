@@ -1,11 +1,12 @@
 <script setup lang="ts">
-// 성장형 게임 화면 (/play/:gameId 중 kind가 growth인 게임). 가게·하루 장사·정산 화면은 게임이 그리고,
-// 셸은 저장 창구(GrowthSession), 소리, "나가기"만 맡는다. 로그인 + 닉네임이면 서버에 저장하고, 아니면 체험.
-// 근거: docs/design/261021-04-game-save.md §3, §6
+// 성장형 게임 화면 (/play/:gameId 중 kind가 growth인 게임). 가게·하루 장사·정산 화면과 소리 설정은 게임이 그리고,
+// 셸은 저장 창구(GrowthSession), 소리 값 저장, 장사 중 나가기 확인만 맡는다. 로그인 + 닉네임이면 서버에 저장하고, 아니면 체험.
+// 몰입을 위해 머리줄 없이 상단 바 아래 전체를 게임 영역으로 쓴다. 나가기는 상단 바로 한다.
+// 근거: docs/design/261021-04-game-save.md §3, §6, docs/design/261022-14-growth-play-immersive.md
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
 import { storeToRefs } from 'pinia';
-import { PhArrowClockwise, PhSignOut, PhSpeakerHigh, PhSpeakerSlash } from '@phosphor-icons/vue';
+import { PhArrowClockwise } from '@phosphor-icons/vue';
 import type { Game } from '@magpie/shared';
 import type { GrowthInstance } from '@magpie/shared/game-module';
 import { ApiError } from '../api';
@@ -36,8 +37,8 @@ let instance: GrowthInstance | null = null;
 /** 띄우는 중에 다시 띄우면 먼저 것은 버린다 */
 let mountSeq = 0;
 
-// 소리 끄기·음량 (브라우저에 저장, 미니게임과 같은 값)
-const { muted, volume, attach: attachSound, onVolume, toggleMuted } = useSound();
+// 소리 끄기·음량 (브라우저에 저장, 미니게임과 같은 값). 바꾸는 곳은 게임 안 설정이다
+const { muted, volume, setFromGame } = useSound();
 
 /** 개발 중에는 ?seed=로 같은 하루를 다시 띄울 수 있다. 이때는 체험이다 */
 const fixedSeed = computed(() => {
@@ -46,13 +47,8 @@ const fixedSeed = computed(() => {
 });
 /** 서버에 저장할 수 있는지: 로그인 + 닉네임 */
 const canSave = computed(() => Boolean(user.value?.nickname) && fixedSeed.value === null);
-/** 머리줄의 체험 안내. 저장하는 중이면 없다 */
-const modeNote = computed(() => {
-  if (!auth.loaded || canSave.value) return '';
-  if (fixedSeed.value) return '체험 · 시드 고정(개발용)';
-  if (!user.value) return '체험 · 로그인하면 가게가 저장돼요';
-  return '체험 · 닉네임을 정하면 가게가 저장돼요';
-});
+/** 게임 안에 보일 체험 안내: 로그인 전이면 로그인, 닉네임 전이면 닉네임 */
+const trialHint = computed(() => (user.value ? '닉네임을 정하면 가게가 저장돼요' : '로그인하면 가게가 저장돼요'));
 
 /** 체험 화면의 "로그인" 버튼. 비로그인이면 Google 로그인, 닉네임 전이면 닉네임 창 */
 function requestLogin(): void {
@@ -69,9 +65,10 @@ async function mount(): Promise<void> {
   try {
     const module = await loadGameModule(props.game.id);
     if (module.kind !== 'growth') throw new Error(`성장형 게임이 아니다: ${props.game.id}`);
+    if (fixedSeed.value) console.info(`[growth] 체험 · 시드 고정(개발용): ${fixedSeed.value}`);
     const session = canSave.value
       ? createSavedSession(props.game.id, requestLogin)
-      : createTrialSession(module.initialState(), requestLogin, fixedSeed.value);
+      : createTrialSession(module.initialState(), requestLogin, fixedSeed.value, trialHint.value);
     const save = await session.load();
     if (seq !== mountSeq || !host.value) return;
     const created = await module.mount(host.value, {
@@ -80,13 +77,13 @@ async function mount(): Promise<void> {
       muted: muted.value,
       volume: volume.value / 100,
       onDayActive: (active) => (dayActive.value = active),
+      onSoundChange: setFromGame,
     });
     if (seq !== mountSeq) {
       created.destroy();
       return;
     }
     instance = created;
-    attachSound(created);
     phase.value = 'ready';
   } catch (err) {
     if (seq !== mountSeq) return;
@@ -102,12 +99,6 @@ async function mount(): Promise<void> {
 function destroyGame(): void {
   instance?.destroy();
   instance = null;
-  attachSound(null);
-}
-
-/** "나가기" 버튼. 장사 중이면 이동 가드가 한 번 묻는다 */
-function leave(): void {
-  void router.push('/');
 }
 
 /** 묻는 창에서 "나가기" */
@@ -123,7 +114,7 @@ function cancelLeave(): void {
   leaveTarget = null;
 }
 
-// 장사 중에 다른 페이지로 가면 그날이 사라지므로 한 번 묻는다
+// 장사 중에 다른 페이지로 가면(상단 바·뒤로 가기) 그날이 사라지므로 한 번 묻는다
 onBeforeRouteLeave((to) => {
   if (!dayActive.value || leaveConfirmed) return true;
   leaveTarget = to.fullPath;
@@ -155,29 +146,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <main class="play">
-    <header class="head">
-      <h1 class="title">{{ game.name }}</h1>
-      <p v-if="modeNote" class="mode">{{ modeNote }}</p>
-
-      <button
-        type="button"
-        class="ghost-button icon-only"
-        :aria-label="muted ? '소리 켜기' : '소리 끄기'"
-        :aria-pressed="muted"
-        @click="toggleMuted"
-      >
-        <PhSpeakerSlash v-if="muted" :size="18" weight="bold" />
-        <PhSpeakerHigh v-else :size="18" weight="bold" />
-      </button>
-      <input v-model.number="volume" type="range" min="0" max="100" step="5" class="volume" aria-label="음량" @input="onVolume" />
-
-      <button type="button" class="ghost-button" @click="leave">
-        <PhSignOut :size="16" weight="bold" />
-        나가기
-      </button>
-    </header>
-
+  <main class="growth-play">
     <div class="stage" :class="`is-${game.orientation}`">
       <div ref="host" class="host" />
 
@@ -209,44 +178,17 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.play {
+/* 루트 클래스 이름은 PlayPage의 .play와 겹치지 않게 한다(부모 scoped 스타일이 자식 루트에도 붙는다) */
+.growth-play {
   max-width: var(--content-width);
   margin: 0 auto;
-  padding: 16px 20px 24px;
-}
-
-.head {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  min-height: 48px;
-  margin-bottom: 12px;
-}
-
-.title {
-  font-size: 20px;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  color: var(--text-strong);
-  white-space: nowrap;
-}
-
-.mode {
-  flex: 1;
-  min-width: 0;
-  font-size: 13px;
-  color: var(--text-2);
-}
-
-/* 안내가 없으면 소리 버튼부터 오른쪽으로 민다 */
-.title + .ghost-button.icon-only {
-  margin-left: auto;
+  padding: 16px 20px;
 }
 
 .stage {
   position: relative;
-  /* 상단 바·머리줄·여백을 뺀 나머지 화면을 게임 영역으로 쓴다 */
-  height: calc(100dvh - var(--topbar-height) - 100px);
+  /* 머리줄 없이 상단 바 아래 높이 전체를 게임 영역으로 쓴다(위아래 여백만 뺀다) */
+  height: calc(100dvh - var(--topbar-height) - 32px);
   min-height: 320px;
   border-radius: var(--radius-card);
   touch-action: none;
@@ -292,90 +234,40 @@ onBeforeUnmount(() => {
   color: var(--text-2);
 }
 
-.primary-button,
-.ghost-button {
+.primary-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
   height: 40px;
   padding: 0 18px;
+  border: 0;
   border-radius: var(--radius-control);
+  background: var(--button-bg);
+  color: var(--button-text);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
   transition: background-color 150ms ease, transform 100ms ease;
 }
 
-.primary-button {
-  border: 0;
-  background: var(--button-bg);
-  color: var(--button-text);
-}
-
 .primary-button:hover {
   background: var(--button-bg-hover);
 }
 
-.ghost-button {
-  height: 34px;
-  padding: 0 12px;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text-strong);
-  font-size: 13px;
-}
-
-.ghost-button:hover {
-  background: var(--surface-hover);
-}
-
-.primary-button:active,
-.ghost-button:active {
+.primary-button:active {
   transform: scale(0.98);
 }
 
-.ghost-button.icon-only {
-  width: 34px;
-  padding: 0;
-}
-
-.volume {
-  width: 84px;
-  accent-color: var(--accent);
-  cursor: pointer;
-}
-
+/* 폰: 상단 바 아래 전체, 좌우 끝까지. 아래는 아이폰 홈 바 영역만 비운다 */
 @media (max-width: 639px) {
-  .play {
-    padding: 10px 10px 12px;
-  }
-
-  .head {
-    flex-wrap: wrap;
-    gap: 8px 12px;
-    margin-bottom: 8px;
-  }
-
-  .title {
-    font-size: 17px;
-  }
-
-  .mode {
-    order: 3;
-    flex-basis: 100%;
-  }
-
-  .ghost-button.icon-only {
-    margin-left: auto;
-  }
-
-  .volume {
-    width: 64px;
+  .growth-play {
+    padding: 0 0 env(safe-area-inset-bottom);
   }
 
   .stage {
-    height: calc(100dvh - var(--topbar-height) - 110px);
+    height: calc(100dvh - var(--topbar-height) - env(safe-area-inset-bottom));
+    border-radius: 0;
   }
 }
 </style>

@@ -72,6 +72,8 @@ export interface GrowthSession {
   act(action: unknown): Promise<GrowthActResult>;
   /** 체험 화면의 "로그인" 버튼. 로그인하고 이 페이지로 돌아온다 */
   requestLogin(): void;
+  /** 체험일 때 게임 안에 보일 안내("로그인하면 가게가 저장돼요" 등). 셸이 로그인·닉네임 상태로 정한다 */
+  trialHint?: string;
 }
 
 export interface GrowthMountOptions {
@@ -84,6 +86,8 @@ export interface GrowthMountOptions {
   volume?: number;
   /** 하루 장사 중인지 알린다. 장사 중에 "나가기"를 누르면 셸이 한 번 묻는다 */
   onDayActive?(active: boolean): void;
+  /** 게임 안 설정에서 소리를 바꿨다. 셸이 브라우저에 저장해 다음에도·미니게임에서도 쓴다 (음량 0~1). 근거: docs/design/261022-14-growth-play-immersive.md */
+  onSoundChange?(muted: boolean, volume: number): void;
 }
 
 /** 띄운 성장형 게임 하나. 판을 끝내는 버튼이 없다(셸의 "나가기"는 게임을 내린다) */

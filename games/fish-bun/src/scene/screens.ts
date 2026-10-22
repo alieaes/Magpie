@@ -168,10 +168,14 @@ export interface ShopScreenOptions {
   /** 체험 하루를 이미 했는지 */
   trialUsed: boolean;
   starting: boolean;
+  /** 체험 안내 문구 ("로그인하면 가게가 저장돼요" 등, 셸이 정한다) */
+  trialHint: string;
   onStart(): void;
   onUpgrades(): void;
   onLogin(): void;
   onRetryTrial(): void;
+  /** 오른쪽 위 톱니: 설정 창(소리) */
+  onSettings(): void;
 }
 
 /** 가게 화면: 몇 일째, 돈, 평판, [장사 시작] [가게 꾸리기] */
@@ -182,6 +186,12 @@ export function buildShopScreen(o: ShopScreenOptions): Phaser.GameObjects.Contai
   const portrait = o.layout === 'portrait';
   const art: Rect = portrait ? { x: 0, y: 0, w: width, h: 700 } : { x: 0, y: 0, w: 900, h: height };
   root.add(storefront(scene, art));
+  // 오른쪽 위 톱니: 설정 창(소리). 셸 머리줄이 없어서 소리는 여기서 바꾼다 (docs/design/261022-14-growth-play-immersive.md)
+  root.add(
+    new Button(scene, { x: width - 56, y: 56, width: 76, height: 76, label: '', style: 'secondary', palette: p, onPress: o.onSettings }).add(
+      scene.add.image(0, 0, TEX.icon('gear')).setScale(0.7),
+    ),
+  );
 
   // 가로 배치는 카드 높이를 내용에 맞추고, 카드와 아래 버튼 묶음(약 300)을 세로 가운데에 둔다
   const card: Rect = portrait
@@ -241,7 +251,7 @@ export function buildShopScreen(o: ShopScreenOptions): Phaser.GameObjects.Contai
   root.add(new Button(scene, { x: bx, y: by + 124, width: bw, height: 84, label: '가게 꾸리기', style: 'secondary', palette: p, fontSize: 30, onPress: o.onUpgrades }));
   if (o.trial) {
     const note = scene.add
-      .text(bx, by + 210, '체험 중 · 로그인하면 가게가 저장돼요', textStyle(22, p.text2, '700'))
+      .text(bx, by + 210, `체험 중 · ${o.trialHint}`, textStyle(22, p.text2, '700'))
       .setOrigin(0.5)
       .setInteractive({ useHandCursor: true });
     note.on(Phaser.Input.Events.POINTER_DOWN, o.onLogin);

@@ -79,10 +79,14 @@
 ## 셸 (`client`)
 
 - `/play/:gameId`에서 게임의 `kind`가 `growth`면 `client/src/pages/GrowthPlayView.vue`가 맡는다. 셸의 시작·결과 화면과 시간·점수 막대가 없다.
-  - 머리줄: 게임 이름, 체험 안내("체험 · 로그인하면 가게가 저장돼요" / "체험 · 닉네임을 정하면 가게가 저장돼요"), 소리 버튼·음량, "나가기".
+  - **게임 화면 (몰입, [261022-14](../design/261022-14-growth-play-immersive.md))**: 머리줄이 없다(게임 이름·소리·나가기 없음). 상단 바 아래 높이 전체가 게임 영역이다 — PC는 위아래 16px 여백, 너비는 콘텐츠 폭(1200px) 안. 폰(640px 미만)은 좌우 끝까지, 아래는 홈 바 영역(`safe-area-inset-bottom`)만 비운다.
+  - 나가기는 상단 바(로고·메인·랭킹)나 뒤로 가기로 한다. 소리 설정·체험 안내는 게임이 그린다.
+  - 루트 클래스는 `.growth-play`다. 부모(`PlayPage.vue`)의 scoped 스타일이 자식 루트에도 붙으므로 `.play`와 겹치지 않게 한다.
   - 로그인 상태를 받은 뒤 가게를 띄우고, 저장할 수 있는지가 바뀌면(로그인·닉네임) 다시 띄운다. 불러오다 실패하면 "가게를 불러오지 못했어요" + 다시 시도.
   - 게임이 `onDayActive(true)`로 장사 중이라고 알리면, 다른 페이지로 갈 때 "장사를 그만둘까요?"를 묻는다. 탭을 닫거나 새로 고치면 브라우저가 묻는다(`beforeunload`).
-- 셸과 게임의 약속(`@magpie/shared/game-module`): `GrowthGameModule { kind: 'growth', initialState(), mount(parent, { session, save, muted?, volume?, onDayActive? }) }` → `GrowthInstance { setMuted?, setVolume?, destroy }`.
+- 셸과 게임의 약속(`@magpie/shared/game-module`): `GrowthGameModule { kind: 'growth', initialState(), mount(parent, { session, save, muted?, volume?, onDayActive?, onSoundChange? }) }` → `GrowthInstance { setMuted?, setVolume?, destroy }`.
+  - 성장형 게임은 소리 설정을 게임 안에 둔다. 바꾸면 `onSoundChange(muted, volume)`로 알리고, 셸이 `useSound().setFromGame`으로 저장한다.
+  - 체험 세션은 `trialHint`(비로그인 "로그인하면 가게가 저장돼요", 닉네임 전 "닉네임을 정하면 가게가 저장돼요")를 준다. 게임이 체험 안내에 쓴다. 개발용 `?seed=`는 콘솔에 한 줄 남긴다.
 - `GrowthSession`(`client/src/games/growthSession.ts`): 게임은 서버 주소를 모르고 이것으로만 이야기한다.
 
 | 함수 | 저장(`saved`) | 체험(`trial`) |
@@ -95,7 +99,7 @@
 
 - 창구가 저장 버전을 기억해 가게 행동에 붙인다(불러오기·하루 시작·하루 끝·행동 결과로 갱신).
 - 하루를 보내기 전에 기록을 `localStorage`(`magpie.pendingDay.<gameId>`)에 적고, 서버가 판정하면(통과·거절·4xx) 지운다. 연결 실패·5xx면 남겨 두고 다음 `load()` 때 다시 보낸다.
-- 소리 설정은 미니게임과 같은 값을 쓴다(`client/src/composables/useSound.ts`, `magpie.muted`, `magpie.volume`).
+- 소리 설정은 미니게임과 같은 값을 쓴다(`client/src/composables/useSound.ts`, `magpie.muted`, `magpie.volume`). 처음 값은 셸이 `muted`·`volume`으로 넘기고, 바꾸는 곳은 게임 안 설정이다.
 
 ## 로비·랭킹
 
