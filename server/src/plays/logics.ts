@@ -5,11 +5,13 @@ import { findGame, isGrowthLogic, type AnyGameLogic, type GameId, type GrowthLog
 import { appleTenLogic } from '@magpie/game-apple-ten/logic';
 import { fishBunLogic } from '@magpie/game-fish-bun/logic';
 import { luckyScratchLogic } from '@magpie/game-lucky-scratch/logic';
+import { snackBarLogic } from '@magpie/game-snack-bar/logic';
 
 const LOGICS: Partial<Record<GameId, AnyGameLogic>> = {
   'apple-ten': appleTenLogic,
   'lucky-scratch': luckyScratchLogic,
   'fish-bun': fishBunLogic,
+  'snack-bar': snackBarLogic,
 };
 
 /** 게임 id로 로직을 찾고, 기록할 수 있는 게임인지 본다. 테스트는 시험용 로직을 끼운 등록부를 만들어 쓴다 */

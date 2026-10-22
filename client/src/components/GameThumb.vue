@@ -61,6 +61,38 @@ const scratchCells = Array.from({ length: 9 }, (_, i) => ({
       <path class="spark" d="M112 22 l3 -7 l3 7 l7 3 l-7 3 l-3 7 l-3 -7 l-7 -3 Z" />
     </template>
 
+    <!-- 분식집: 빨간 두건을 쓴 사장이 김이 나는 떡볶이 그릇을 들고 있고, 옆에 김밥 두 알 -->
+    <template v-else-if="gameId === 'snack-bar'">
+      <rect class="bg-rose" width="240" height="180" />
+      <rect class="chef-shirt" x="78" y="112" width="84" height="80" rx="26" />
+      <rect class="chef-apron" x="94" y="124" width="52" height="64" rx="8" />
+      <circle class="chef-face" cx="120" cy="74" r="32" />
+      <path class="chef-hair" d="M88 70 C88 44 104 38 120 38 C136 38 152 44 152 70 C146 58 136 56 120 56 C104 56 94 58 88 70 Z" />
+      <path class="chef-band" d="M88 58 C100 50 140 50 152 58 L152 66 C140 59 100 59 88 66 Z" />
+      <path class="chef-band" d="M150 60 l14 -8 l2 12 Z" />
+      <circle class="chef-eye" cx="108" cy="80" r="3.6" />
+      <circle class="chef-eye" cx="132" cy="80" r="3.6" />
+      <ellipse class="chef-cheek" cx="100" cy="90" rx="5" ry="3" />
+      <ellipse class="chef-cheek" cx="140" cy="90" rx="5" ry="3" />
+      <path class="chef-mouth" d="M114 92 q6 6 12 0" />
+      <path class="steam" d="M104 104 q-6 -8 0 -16 M120 100 q-6 -8 0 -16 M136 104 q-6 -8 0 -16" />
+      <ellipse class="bowl-sauce" cx="120" cy="122" rx="40" ry="11" />
+      <rect class="tteok" x="98" y="114" width="14" height="6" rx="3" />
+      <rect class="tteok" x="118" y="118" width="14" height="6" rx="3" />
+      <rect class="tteok" x="128" y="112" width="12" height="6" rx="3" transform="rotate(-18 134 115)" />
+      <path class="eomuk" d="M104 124 l8 -8 l4 9 Z" />
+      <path class="bowl" d="M78 122 C80 146 100 156 120 156 C140 156 160 146 162 122 Z" />
+      <circle class="hand" cx="80" cy="132" r="9" />
+      <circle class="hand" cx="160" cy="132" r="9" />
+      <g v-for="(k, i) in [{ x: 36, y: 146 }, { x: 204, y: 150 }]" :key="i">
+        <circle class="kimbap-nori" :cx="k.x" :cy="k.y" r="16" />
+        <circle class="kimbap-rice" :cx="k.x" :cy="k.y" r="12" />
+        <circle class="kimbap-egg" :cx="k.x - 4" :cy="k.y - 2" r="3.6" />
+        <circle class="kimbap-veg" :cx="k.x + 4" :cy="k.y + 1" r="3.4" />
+        <circle class="kimbap-pink" :cx="k.x" :cy="k.y + 5" r="2.8" />
+      </g>
+    </template>
+
     <!-- 복권 긁기: 반쯤 긁힌 복권에 까치 3개가 드러나고, 옆에 동전이 있다 -->
     <template v-else-if="gameId === 'lucky-scratch'">
       <rect class="bg-purple" width="240" height="180" />
@@ -170,6 +202,27 @@ text {
 .bg-teal { fill: var(--tint-teal); }
 .bg-purple { fill: var(--tint-purple); }
 .bg-orange { fill: var(--tint-orange); }
+.bg-rose { fill: var(--tint-rose); }
+
+/* 분식집 */
+.chef-shirt { fill: #6cb4ac; }
+.chef-apron { fill: #fbf6ec; }
+.chef-face { fill: #f6d3b3; }
+.chef-hair { fill: #5a3a2a; }
+.chef-band { fill: #d9483b; }
+.chef-eye { fill: #2b2235; }
+.chef-cheek { fill: #f29aa2; opacity: 0.8; }
+.chef-mouth { fill: none; stroke: #7a2e34; stroke-width: 3; stroke-linecap: round; }
+.bowl { fill: #ffffff; stroke: #d6cfc4; stroke-width: 3; }
+.bowl-sauce { fill: #d9453a; }
+.tteok { fill: #fbf3e4; }
+.eomuk { fill: #f0bf63; }
+.hand { fill: #f6d3b3; }
+.kimbap-nori { fill: #26302a; }
+.kimbap-rice { fill: #fbfaf5; }
+.kimbap-egg { fill: #f2c94c; }
+.kimbap-veg { fill: #5e9b4f; }
+.kimbap-pink { fill: #e7849a; }
 
 /* 붕어빵 가게 */
 .iron-shadow { fill: #1b1d20; opacity: 0.25; }

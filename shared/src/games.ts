@@ -79,6 +79,18 @@ const GAME_DEFS = [
     rankingNote: '하루 장사로 가장 많이 번 날의 수익이에요.',
   },
   {
+    id: 'snack-bar',
+    name: '분식집',
+    tagline: '물 주고, 만들고, 나르고, 닦아라',
+    orientation: 'portrait',
+    scoreUnit: '원',
+    sort: 'desc',
+    status: 'playable',
+    kind: 'growth',
+    scoreLabel: '하루 수익',
+    rankingNote: '하루 장사로 가장 많이 번 날의 수익이에요.',
+  },
+  {
     id: 'fruit-merge',
     name: '과일 합치기',
     tagline: '같은 과일을 합쳐 수박을 만들어라',

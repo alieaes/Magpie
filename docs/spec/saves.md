@@ -1,7 +1,7 @@
 # 스펙: 성장형 게임 저장
 
 설계: [261021-04-game-save.md](../design/261021-04-game-save.md), 랭킹은 [261021-05-growth-ranking.md](../design/261021-05-growth-ranking.md).
-하루 단위로 저장하며 키우는 게임(`GameMeta.kind = 'growth'`)이 쓰는 저장·검증·셸 흐름. 지금 등록된 성장형 게임은 `fish-bun`(붕어빵 가게, [fish-bun.md](./fish-bun.md))이다.
+하루 단위로 저장하며 키우는 게임(`GameMeta.kind = 'growth'`)이 쓰는 저장·검증·셸 흐름. 지금 등록된 성장형 게임은 `fish-bun`(붕어빵 가게, [fish-bun.md](./fish-bun.md))과 `snack-bar`(분식집, [snack-bar.md](./snack-bar.md))다.
 
 ## 원칙
 

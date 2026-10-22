@@ -34,6 +34,7 @@
   --tint-teal: #e3f1f1;
   --tint-purple: #f0ebfa;
   --tint-orange: #fdeee1;
+  --tint-rose: #fbe8ee;
   --thumb-ink: #2f3437;
   --thumb-paper: #ffffff;
 
@@ -82,6 +83,7 @@
     --tint-teal: rgba(79, 184, 190, 0.12);
     --tint-purple: rgba(160, 120, 230, 0.13);
     --tint-orange: rgba(240, 150, 80, 0.13);
+    --tint-rose: rgba(232, 112, 150, 0.13);
     --thumb-ink: #e3e2df;
     --thumb-paper: #26272a;
 
