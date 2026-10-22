@@ -65,6 +65,9 @@ const NEW_CUSTOMER: Record<number, string> = {
 /** 평판 레벨에 열리는 메뉴 (MENUS의 열리는 레벨) */
 const NEW_MENU: Record<number, string> = Object.fromEntries(MENUS.filter((m) => m.unlock > 1).map((m) => [m.unlock, `${m.name} 붕어빵`]));
 
+/** 세로 배치 가게 화면: 가게 그림 아래 카드·버튼 묶음 높이 */
+const SHOP_PORTRAIT_BOTTOM = 700;
+
 /** 가로 배치 가게 화면: 상태 카드 높이(내용에 맞춤)와 그 아래 버튼 묶음 높이 */
 const SHOP_CARD_H = 340;
 const SHOP_BUTTONS_H = 300;
@@ -184,7 +187,8 @@ export function buildShopScreen(o: ShopScreenOptions): Phaser.GameObjects.Contai
   const { width, height } = scene.scale;
   const root = scene.add.container(0, 0);
   const portrait = o.layout === 'portrait';
-  const art: Rect = portrait ? { x: 0, y: 0, w: width, h: 700 } : { x: 0, y: 0, w: 900, h: height };
+  // 세로 배치: 아래 카드·버튼 묶음(700)을 빼고 남은 높이를 가게 그림이 받는다(화면 비율에 따라 1240~1640, 기준 1400이면 700)
+  const art: Rect = portrait ? { x: 0, y: 0, w: width, h: height - SHOP_PORTRAIT_BOTTOM } : { x: 0, y: 0, w: 900, h: height };
   root.add(storefront(scene, art));
   // 오른쪽 위 톱니: 설정 창(소리). 셸 머리줄이 없어서 소리는 여기서 바꾼다 (docs/design/261022-14-growth-play-immersive.md)
   root.add(
@@ -195,7 +199,7 @@ export function buildShopScreen(o: ShopScreenOptions): Phaser.GameObjects.Contai
 
   // 가로 배치는 카드 높이를 내용에 맞추고, 카드와 아래 버튼 묶음(약 300)을 세로 가운데에 둔다
   const card: Rect = portrait
-    ? { x: 24, y: 724, w: width - 48, h: 380 }
+    ? { x: 24, y: art.h + 24, w: width - 48, h: 380 }
     : { x: 940, y: Math.round((height - (SHOP_CARD_H + SHOP_BUTTONS_H)) / 2), w: 580, h: SHOP_CARD_H };
   root.add(panel(scene, card, p));
   const level = levelOf(state.reputation);
@@ -223,7 +227,7 @@ export function buildShopScreen(o: ShopScreenOptions): Phaser.GameObjects.Contai
 
   const bx = portrait ? width / 2 : card.x + card.w / 2;
   const bw = portrait ? width - 48 : card.w;
-  let by = portrait ? 1180 : card.y + card.h + 80;
+  let by = portrait ? height - 220 : card.y + card.h + 80;
   if (o.trial && o.trialUsed) {
     root.add(
       scene.add
@@ -363,7 +367,7 @@ export interface SettleScreenOptions {
 /** 정산 화면 */
 export function buildSettleScreen(o: SettleScreenOptions): Phaser.GameObjects.Container {
   const { scene, palette: p, stats, outcome } = o;
-  const { width } = scene.scale;
+  const { width, height } = scene.scale;
   const portrait = o.layout === 'portrait';
   const root = scene.add.container(0, 0);
   // 카드 높이는 내용을 다 놓은 뒤 정한다
@@ -465,5 +469,7 @@ export function buildSettleScreen(o: SettleScreenOptions): Phaser.GameObjects.Co
     next.setEnabled(s.kind !== 'saving');
     root.add([upgrades, next]);
   }
+  // 세로 배치는 높이가 화면 비율에 따라 달라지므로 카드·버튼 묶음을 세로 가운데에 둔다
+  if (portrait) root.setY(Math.max(0, Math.round((height - (by + 50 - card.y)) / 2) - card.y));
   return root;
 }

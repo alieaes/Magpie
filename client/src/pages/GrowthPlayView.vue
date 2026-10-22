@@ -201,6 +201,11 @@ onBeforeUnmount(() => {
   inset: 0;
 }
 
+/* 캔버스가 글자처럼 줄에 놓이면 아래에 몇 px 틈이 생겨 페이지가 넘친다 */
+.host :deep(canvas) {
+  display: block;
+}
+
 .overlay {
   position: absolute;
   inset: 0;

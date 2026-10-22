@@ -1,5 +1,6 @@
 // 화면 배치: 캔버스 크기와 장사 화면의 영역. 게임 영역이 세로로 길면 세로 배치(휴대폰), 아니면 가로 배치(PC).
 // 세로 배치는 손님을 위, 빵틀을 엄지가 닿는 아래, 펌프를 왼쪽 아래에 둔다. 근거: docs/design/261021-01-fish-bun.md §5-1
+// 세로 배치 높이는 화면 비율에 맞춰 1240~1640 사이로 정한다(폰에서 좌우가 비지 않게). 근거: docs/design/261022-13-play-fill-screen.md §2-2
 
 export type Layout = 'portrait' | 'landscape';
 
@@ -15,9 +16,20 @@ const SIZES: Record<Layout, { width: number; height: number }> = {
   landscape: { width: 1560, height: 1000 },
 };
 
-/** 배치에 맞는 캔버스 크기 */
-export function canvasSize(layout: Layout): { width: number; height: number } {
-  return SIZES[layout];
+/** 세로 배치 높이 범위. 기준(1400)일 때 배치가 원래 좌표 그대로다 */
+export const PORTRAIT_BASE_H = 1400;
+const PORTRAIT_MIN_H = 1240;
+const PORTRAIT_MAX_H = 1640;
+
+/**
+ * 배치에 맞는 캔버스 크기. 세로 배치는 너비 720에 높이를 무대 비율(aspect = 무대 높이 ÷ 너비)로 정하고 범위 안으로 자른다.
+ * 가로 배치는 늘 1560 × 1000
+ */
+export function canvasSize(layout: Layout, aspect?: number): { width: number; height: number } {
+  const base = SIZES[layout];
+  if (layout === 'landscape' || aspect === undefined || !Number.isFinite(aspect) || aspect <= 0) return base;
+  const height = Math.round(Math.min(PORTRAIT_MAX_H, Math.max(PORTRAIT_MIN_H, base.width * aspect)));
+  return { width: base.width, height };
 }
 
 /** 장사 화면의 영역 */
@@ -39,15 +51,36 @@ export interface DayGeometry {
 /** 반죽 고르기 줄의 높이 */
 const BATTER_H = 72;
 
-/** 장사 화면 배치. 메뉴가 둘 이상 열린 날은 빵틀 판 위쪽을 반죽 고르기 줄로 쓴다 */
-export function dayGeometry(layout: Layout, menus = 1): DayGeometry {
-  const g = baseGeometry(layout);
+/**
+ * 장사 화면 배치. 메뉴가 둘 이상 열린 날은 빵틀 판 위쪽을 반죽 고르기 줄로 쓴다.
+ * 세로 배치 높이가 기준(1400)과 다르면 늘거나 준 만큼 빵틀 판이 받고, 늘 때는 카운터도 최대 +80까지 함께 받는다(펌프 줄은 늘 맨 아래)
+ */
+export function dayGeometry(layout: Layout, menus = 1, height = PORTRAIT_BASE_H): DayGeometry {
+  const g = stretch(baseGeometry(layout), layout === 'portrait' ? height - PORTRAIT_BASE_H : 0);
   if (menus <= 1) return g;
   const { grill } = g;
   return {
     ...g,
     batter: { x: grill.x, y: grill.y, w: grill.w, h: BATTER_H },
     grill: { x: grill.x, y: grill.y + BATTER_H + 12, w: grill.w, h: grill.h - BATTER_H - 12 },
+  };
+}
+
+/** 세로 배치를 extra만큼 늘리거나 줄인다: 카운터(늘 때만, 최대 +80) → 진열대 줄을 내리고 → 빵틀 판이 나머지 → 펌프 줄은 맨 아래 */
+function stretch(g: DayGeometry, extra: number): DayGeometry {
+  if (extra === 0) return g;
+  const counterExtra = extra > 0 ? Math.min(80, Math.round(extra / 2)) : 0;
+  const grillExtra = extra - counterExtra;
+  const down = (r: Rect, dy: number): Rect => ({ ...r, y: r.y + dy });
+  return {
+    ...g,
+    counter: { ...g.counter, h: g.counter.h + counterExtra },
+    shelf: down(g.shelf, counterExtra),
+    trash: down(g.trash, counterExtra),
+    grill: { ...g.grill, y: g.grill.y + counterExtra, h: g.grill.h + grillExtra },
+    pump: down(g.pump, extra),
+    gauge: down(g.gauge, extra),
+    combo: down(g.combo, extra),
   };
 }
 

@@ -411,6 +411,11 @@ onBeforeUnmount(destroyGame);
   inset: 0;
 }
 
+/* 캔버스가 글자처럼 줄에 놓이면 아래에 몇 px 틈이 생겨 페이지가 넘친다 */
+.host :deep(canvas) {
+  display: block;
+}
+
 .overlay {
   position: absolute;
   inset: 0;
@@ -562,15 +567,21 @@ onBeforeUnmount(destroyGame);
   font-size: 13px;
 }
 
+/* 폰: 머리줄을 뺀 나머지 높이를 무대가 채우고, 무대는 좌우 끝까지 (docs/design/261022-13-play-fill-screen.md) */
 @media (max-width: 639px) {
   .play {
-    padding: 10px 10px 12px;
+    display: flex;
+    flex-direction: column;
+    height: calc(100dvh - var(--topbar-height));
+    padding: 10px 0 env(safe-area-inset-bottom);
   }
 
   .head {
+    flex: none;
     flex-wrap: wrap;
     gap: 8px 12px;
     margin-bottom: 8px;
+    padding: 0 10px;
   }
 
   .title {
@@ -595,7 +606,10 @@ onBeforeUnmount(destroyGame);
   }
 
   .stage {
-    height: calc(100dvh - var(--topbar-height) - 110px);
+    flex: 1 1 auto;
+    height: auto;
+    min-height: 0;
+    border-radius: 0;
   }
 }
 </style>

@@ -180,7 +180,7 @@ export class DayView {
     this.sim = sim;
     this.menus = sim.params.menus;
     this.batter = batter < this.menus ? batter : 0;
-    this.g = dayGeometry(layout, this.menus);
+    this.g = dayGeometry(layout, this.menus, scene.scale.height);
     this.root = scene.add.container(0, 0);
     this.backLayer = scene.add.container(0, 0);
     this.peopleLayer = scene.add.container(0, 0);

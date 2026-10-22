@@ -53,6 +53,11 @@ function loadJapaneseFont(): Promise<void> {
   return japaneseFont;
 }
 
+/** 무대 비율(높이 ÷ 너비). 아직 크기가 없으면 undefined (세로 배치 기준 높이를 쓴다) */
+function stageAspect(el: HTMLElement): number | undefined {
+  return el.clientWidth > 0 && el.clientHeight > 0 ? el.clientHeight / el.clientWidth : undefined;
+}
+
 /** 게임 영역이 세로로 길면 세로 배치(휴대폰) */
 function pickLayout(el: HTMLElement): Layout {
   return el.clientWidth < el.clientHeight * 1.15 ? 'portrait' : 'landscape';
@@ -123,7 +128,7 @@ const fishBun: GrowthGameModule = {
       prepareDay: (reputation) => (levelOf(reputation) >= JAPANESE_LEVEL ? loadJapaneseFont() : Promise.resolve()),
       ...(options.onDayActive ? { onDayActive: options.onDayActive } : {}),
     });
-    const { width, height } = canvasSize(layout);
+    const { width, height } = canvasSize(layout, stageAspect(parent));
     const game = new Phaser.Game({
       type: Phaser.AUTO,
       parent,
@@ -146,9 +151,9 @@ const fishBun: GrowthGameModule = {
     const unlock = () => sfx.unlock();
     parent.addEventListener('pointerdown', unlock);
 
-    // 영역 크기가 바뀌면 다시 맞추고, 가로·세로가 바뀌었으면 배치도 바꾼다
+    // 영역 크기가 바뀌면 다시 맞추고, 가로·세로나 세로 배치 높이(화면 비율)가 바뀌었으면 캔버스 크기와 배치도 바꾼다
     const observer = new ResizeObserver(() => {
-      scene.setLayout(pickLayout(parent));
+      scene.setStage(pickLayout(parent), stageAspect(parent));
       game.scale.refresh();
     });
     observer.observe(parent);

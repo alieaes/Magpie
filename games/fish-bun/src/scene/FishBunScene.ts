@@ -34,6 +34,9 @@ import type { Sfx } from './sound';
 import { framedBox, roundBox } from './style';
 import { Button, textStyle, titleStyle, type ScenePalette } from './ui';
 
+/** 세로 배치 높이가 이만큼 이상 달라질 때만 다시 그린다 (게임 단위, 주소창이 조금 움직일 때 깜빡이지 않게) */
+const STAGE_HEIGHT_STEP = 16;
+
 export interface FishBunSceneOptions {
   layout: Layout;
   palette: ScenePalette;
@@ -153,11 +156,14 @@ export class FishBunScene extends Phaser.Scene {
     if (events && events.length > 0) run.view?.handleEvents(events.splice(0));
   }
 
-  /** 배치를 바꾼다(영역이 가로·세로로 바뀌었을 때). 장사 중이면 같은 하루를 새 배치로 다시 그린다 */
-  setLayout(layout: Layout): void {
-    if (layout === this.layout) return;
+  /**
+   * 무대 크기가 바뀌었다(회전, 주소창, 창 크기). 배치(가로·세로)나 세로 배치 높이(화면 비율)가 달라지면
+   * 캔버스 크기를 바꾸고 지금 화면을 다시 그린다(장사 중 상태는 그대로). 높이 차이가 작으면 그대로 둔다
+   */
+  setStage(layout: Layout, aspect?: number): void {
+    const { width, height } = canvasSize(layout, aspect);
+    if (layout === this.layout && Math.abs(height - this.scale.height) < STAGE_HEIGHT_STEP) return;
     this.layout = layout;
-    const { width, height } = canvasSize(layout);
     this.scale.setGameSize(width, height);
     this.show(this.screen);
     if (this.run?.paused) this.showPause();
