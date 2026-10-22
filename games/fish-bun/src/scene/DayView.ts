@@ -1117,16 +1117,11 @@ export class DayView {
     const color = heat < 0.3 ? 0x5aa5e8 : heat < 0.7 ? 0xf2a03d : 0xe5414a;
     meter(this.gauge.clear(), x, y, w, 28, heat, this.palette.surfaceHover, color);
     const speed = cookSpeed(sim.heat) / 100;
-    const pct = Math.round(heat * 100);
-    const times = speed.toFixed(1);
-    // 계기 칸(불꽃 아이콘 오른쪽)에 들어가는 가장 긴 문구를 쓴다. 글자 크기는 도트 격자라 줄이지 못한다
-    const room = gauge.w - 64 - 16;
-    if (this.heatKey !== `${pct}|${times}|${room}`) {
-      this.heatKey = `${pct}|${times}|${room}`;
-      for (const label of [`화력 ${pct}% · 속도 ×${times}`, `화력 ${pct}% · ×${times}`, `${pct}% · ×${times}`]) {
-        this.heatText.setText(label);
-        if (this.heatText.width <= room) break;
-      }
+    // 문구는 굽는 속도 배수 하나로 고정한다(화력 비율은 막대와 색이 보여 준다). 바뀔 때만 다시 쓴다
+    const times = `×${speed.toFixed(1)}`;
+    if (this.heatKey !== times) {
+      this.heatKey = times;
+      this.heatText.setText(times);
     }
     this.sfx.setSizzle(sim.molds.filter((m) => m.phase !== 'empty').length);
     if (sim.combo !== this.shownCombo) {
