@@ -21,7 +21,7 @@ pnpm 워크스페이스. TypeScript 6.0.3 고정 (vue-tsc가 TypeScript 7을 아
 | `pnpm dev` | 클라이언트(5480) + 서버(3473) |
 | `pnpm build` | 전체 타입 검사 + 빌드. 서버는 `server/dist/server.mjs` 한 파일 |
 | `pnpm test` | Vitest. 서버의 랭킹 SQL 테스트는 `.env`의 DB가 `-dev`일 때만 돈다 (트랜잭션 후 되돌림) |
-| `pnpm db:migrate` | `db/*.sql`을 번호 순으로 적용 |
+| `pnpm db:migrate` | `db/*.sql`을 번호 순으로 적용 (서버도 시작할 때 같은 일을 한다. 아래 DB 참고) |
 | `pnpm db:seed-dev` | 개발 DB에 테스트 유저 20명과 기록을 넣는다 (`-dev` 스키마에서만) |
 | `pnpm admin:grant <닉네임>` / `admin:revoke <닉네임>` / `admin:list` | 관리자 지정·해제·목록 ([admin.md](./admin.md)) |
 
@@ -67,6 +67,7 @@ pnpm 워크스페이스. TypeScript 6.0.3 고정 (vue-tsc가 TypeScript 7을 아
 | `SITE_URL` | `http://localhost:5480` | `BASE_URL`이 아니다 (Vitest가 `BASE_URL`을 미리 채워서 충돌) |
 | `DB_HOST`, `DB_PORT`(3306), `DB_USER`, `DB_PASSWORD`, `DB_NAME` | | `DB_NAME`: 개발 `magpie-dev`, 운영 `magpie` |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | 없음 | 둘 다 있어야 로그인이 열린다. 비어 있으면 로그인만 막힌다. [auth.md](./auth.md) |
+| `AUTO_MIGRATE` | 켜짐 | 서버 시작 때 밀린 DB 마이그레이션을 자동 적용. `0`이면 건너뛴다 (DB 권한을 따로 관리해 손으로 돌릴 때) |
 | `DEV_LOGIN` | 없음 | 개발용 테스트 로그인. `-dev` DB + localhost 사이트면 저절로 켜지고, `0`이면 끈다. [auth.md](./auth.md) |
 
 빠지거나 잘못된 키가 있으면 서버가 키 이름을 알려주고 시작하지 않는다.
@@ -90,7 +91,12 @@ pnpm 워크스페이스. TypeScript 6.0.3 고정 (vue-tsc가 TypeScript 7을 아
 - MariaDB 10.6, 문자셋 `utf8mb4`. 서버 연결은 Kysely + mysql2 풀(10개).
 - **시각은 전부 UTC.** 연결마다 `SET time_zone = '+00:00'`을 걸어 `CURRENT_TIMESTAMP`도 UTC가 된다.
 - 스키마 파일: `db/000_database.sql`(스키마 생성, 매번 실행), 그 외는 한 번만 적용하고 `schema_migrations` 표에 남긴다.
-  `{{DB_NAME}}` 자리는 마이그레이션 스크립트가 바꿔 넣는다.
+  `{{DB_NAME}}` 자리는 마이그레이션이 바꿔 넣는다.
+- **자동 마이그레이션**: 서버는 포트를 열기 전에 밀린 파일을 적용한다(`server/src/db/migrate.ts`, `pnpm db:migrate`와 같은 코드). `.env`의 계정에 `CREATE`/`ALTER`/`INDEX` 권한이 필요하다.
+  - 빌드본(`server.mjs`)에는 빌드 때 `db/*.sql` 내용이 들어가므로 운영 폴더에 `db/`가 없어도 된다. 개발 중에는 `db/` 폴더를 직접 읽는다.
+  - 서버가 동시에 여러 개 떠도 DB 락(`GET_LOCK('magpie-migrate')`)으로 한 번에 하나만 적용한다.
+  - 실패하면 `[magpie] 시작 실패: ...`를 찍고 종료한다(서버를 띄우지 않는다). 되돌리기는 없다.
+  - 이미 적용된 파일은 고치지 않는다. 스키마 변경은 새 번호 파일로 추가한다.
 
 | 파일 | 표 |
 |---|---|

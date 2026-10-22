@@ -4,6 +4,7 @@ import { DEV_ACCOUNTS, devLoginEnabled } from './auth/dev-login';
 import { purgeExpiredSessions } from './auth/session';
 import { loadConfig, loadEnvFile } from './config';
 import { createDb, type Db } from './db';
+import { runMigrations } from './db/migrate';
 import { abandonStalePlays } from './plays/service';
 import { VERSION } from './version';
 
@@ -26,9 +27,14 @@ async function dailyCleanup(db: Db): Promise<void> {
 }
 
 /** 서버를 띄운다. nginx가 같은 PC에서 넘겨주므로 127.0.0.1에만 연다 */
-function main(): void {
+async function main(): Promise<void> {
   loadEnvFile();
   const config = loadConfig();
+  // 포트를 열기 전에 밀린 DB 마이그레이션을 적용한다. 실패하면 아래로 못 내려가고 종료한다
+  if (config.AUTO_MIGRATE !== '0') {
+    const applied = await runMigrations(config);
+    console.log(`[magpie] 마이그레이션 완료: ${config.DB_NAME}, 새로 적용 ${applied.length}개`);
+  }
   const db = createDb(config);
   const app = createApp({ db, config });
   const loginReady = Boolean(config.GOOGLE_CLIENT_ID?.trim() && config.GOOGLE_CLIENT_SECRET?.trim());
@@ -56,4 +62,7 @@ function main(): void {
   process.on('SIGTERM', shutdown);
 }
 
-main();
+main().catch((err: unknown) => {
+  console.error('[magpie] 시작 실패:', err instanceof Error ? err.message : err);
+  process.exit(1);
+});

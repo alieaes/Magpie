@@ -13,6 +13,8 @@ const EnvSchema = z.object({
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   // 개발용 테스트 로그인. -dev DB + localhost 사이트면 저절로 켜지고, 0이면 끈다 (docs/spec/auth.md)
   DEV_LOGIN: z.string().optional(),
+  // 서버 시작 때 밀린 DB 마이그레이션을 자동 적용한다. 0이면 건너뛴다 (docs/spec/server.md)
+  AUTO_MIGRATE: z.string().optional(),
 });
 
 /** 서버 설정. 값은 환경 변수(.env)에서 온다 */
