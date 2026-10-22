@@ -25,6 +25,7 @@ import {
 } from '../logic/rules';
 import { BUN_H, BUN_W, MOLD_W, SHELF_W, TEX } from './art';
 import type { Layout, Rect } from './layout';
+import { attachScroll } from './scroll';
 import { PIXEL_ART, disc, framedBox, meter, roundBox, vGradient } from './style';
 import { Button, num, textStyle, titleStyle, won, type ScenePalette } from './ui';
 
@@ -372,25 +373,27 @@ export function buildSettleScreen(o: SettleScreenOptions): Phaser.GameObjects.Co
   const { width, height } = scene.scale;
   const portrait = o.layout === 'portrait';
   const root = scene.add.container(0, 0);
+  const body = scene.add.container(0, 0);
+  root.add(body);
   // 카드 높이는 내용을 다 놓은 뒤 정한다
   const card: Rect = portrait ? { x: 24, y: 40, w: width - 48, h: 0 } : { x: 300, y: 40, w: width - 600, h: 0 };
   const left = card.x + 40;
   const right = card.x + card.w - 40;
   let y = card.y + 64;
-  root.add(scene.add.text(card.x + card.w / 2, y, `${num(o.day)}일차 장사 끝`, titleStyle(44, p.textStrong)).setOrigin(0.5));
+  body.add(scene.add.text(card.x + card.w / 2, y, `${num(o.day)}일차 장사 끝`, titleStyle(44, p.textStrong)).setOrigin(0.5));
   y += 84;
 
   /** 이름 · 값 한 줄 */
   const row = (name: string, value: string, color = p.textStrong, size = 28) => {
-    root.add(scene.add.text(left, y, name, textStyle(24, p.text2, '700')).setOrigin(0, 0.5));
-    root.add(scene.add.text(right, y, value, textStyle(size, color, '800')).setOrigin(1, 0.5));
+    body.add(scene.add.text(left, y, name, textStyle(24, p.text2, '700')).setOrigin(0, 0.5));
+    body.add(scene.add.text(right, y, value, textStyle(size, color, '800')).setOrigin(1, 0.5));
     y += size + 30;
   };
   row('매출 (팁·콤보 포함)', won(stats.revenue));
   row(`재료비 (반죽 ${num(stats.pours)}번)`, stats.doughCost > 0 ? `-${won(stats.doughCost)}` : won(0), stats.doughCost > 0 ? 0xc0392b : p.textStrong);
   const line = scene.add.graphics();
   line.lineStyle(2, p.border, 1).lineBetween(left, y - 12, right, y - 12);
-  root.add(line);
+  body.add(line);
   y += 40;
   row('순 수익', won(outcome.profit), outcome.profit >= 0 ? p.accent : 0xc0392b, 44);
   if (stats.subsidy > 0) row('운영 지원금', `+${won(stats.subsidy)}`, p.text, 24);
@@ -399,8 +402,8 @@ export function buildSettleScreen(o: SettleScreenOptions): Phaser.GameObjects.Co
   row('손님', `${num(served + stats.left)}명`, p.textStrong, 26);
   /** 안쪽으로 들여 쓴 작은 줄: 이름은 왼쪽, 값은 오른쪽 정렬 */
   const sub = (name: string, value: string) => {
-    root.add(scene.add.text(left + 24, y, name, textStyle(22, p.text2, '600')).setOrigin(0, 0.5));
-    root.add(scene.add.text(right, y, value, textStyle(22, p.text, '700')).setOrigin(1, 0.5));
+    body.add(scene.add.text(left + 24, y, name, textStyle(22, p.text2, '600')).setOrigin(0, 0.5));
+    body.add(scene.add.text(right, y, value, textStyle(22, p.text, '700')).setOrigin(1, 0.5));
     y += 38;
   };
   sub('최고', `${num(stats.served.best)}명`);
@@ -434,7 +437,7 @@ export function buildSettleScreen(o: SettleScreenOptions): Phaser.GameObjects.Co
       if (l === 4) news.push('새 강화: 빵틀 12칸');
     }
     if (news.length) {
-      root.add(scene.add.text(left, y, news.join(' · '), { ...textStyle(22, 0xff8a3d, '700'), wordWrap: { width: right - left } }).setOrigin(0, 0.5));
+      body.add(scene.add.text(left, y, news.join(' · '), { ...textStyle(22, 0xff8a3d, '700'), wordWrap: { width: right - left } }).setOrigin(0, 0.5));
       y += 48;
     }
   }
@@ -454,18 +457,21 @@ export function buildSettleScreen(o: SettleScreenOptions): Phaser.GameObjects.Co
   const statusColor = s.kind === 'rejected' || s.kind === 'failed' ? 0xc0392b : s.kind === 'saved' ? p.accent : p.text2;
   const divider = scene.add.graphics();
   divider.lineStyle(2, p.border, 1).lineBetween(left, y, right, y);
-  root.add(divider);
+  body.add(divider);
   y += 50;
-  root.add(
+  body.add(
     scene.add
       .text(card.x + card.w / 2, y, statusText, { ...textStyle(24, statusColor, '700'), align: 'center', wordWrap: { width: right - left } })
       .setOrigin(0.5),
   );
   card.h = y + 56 - card.y;
-  root.addAt(panel(scene, card, p), 0);
+  body.addAt(panel(scene, card, p), 0);
 
   const bw = portrait ? (width - 48 - 16) / 2 : 360;
-  const by = card.y + card.h + 76;
+  // 버튼은 아래에 고정하고 카드만 스크롤한다
+  const footH = 176;
+  root.add(attachScroll({ scene, body, top: 0, contentH: card.y + card.h + 24, bottom: height - footH, width, height, color: p.bg, thumb: p.border }));
+  const by = height - footH + 88;
   const bx1 = portrait ? 24 + bw / 2 : width / 2 - bw / 2 - 8;
   const bx2 = portrait ? width - 24 - bw / 2 : width / 2 + bw / 2 + 8;
   if (s.kind === 'failed') {
@@ -479,11 +485,5 @@ export function buildSettleScreen(o: SettleScreenOptions): Phaser.GameObjects.Co
     upgrades.setEnabled(s.kind !== 'saving');
     root.add(upgrades);
   }
-  // 세로 배치는 높이가 화면 비율에 따라 달라지므로 카드·버튼 묶음을 세로 가운데에 둔다
-  // 내용이 화면보다 길면(메뉴별 판매 줄 등) 통째로 줄여 버튼까지 한 화면에 넣는다. 스크롤은 없다
-  const contentH = by + 50 - card.y;
-  const fit = Math.min(1, (height - 32) / contentH);
-  root.setScale(fit);
-  if (portrait || fit < 1) root.setPosition(Math.round((width * (1 - fit)) / 2), Math.max(0, Math.round((height - contentH * fit) / 2) - card.y * fit));
   return root;
 }

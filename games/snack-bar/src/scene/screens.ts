@@ -26,6 +26,7 @@ import {
 } from '../logic/rules';
 import type { Layout } from './layout';
 import { MENU_ART, ensureStaff, iconKey, menuIconKey, propKey, stationKey, trayKey } from './sprites';
+import { attachScroll } from './scroll';
 import { framedBox, meter } from './style';
 import { Button, num, textStyle, titleStyle, won, type ScenePalette } from './ui';
 
@@ -188,15 +189,17 @@ export function buildSettleScreen(o: SettleScreenOptions): Phaser.GameObjects.Co
   const cx = width / 2;
   const left = cx - cw / 2 + 32;
   const right = cx + cw / 2 - 32;
+  const body = scene.add.container(0, 0);
+  root.add(body);
   const card = scene.add.graphics();
-  root.add(card);
-  root.add(heading(scene, cx, 70, `${o.day}일째 장사 끝`, p));
+  body.add(card);
+  body.add(heading(scene, cx, 70, `${o.day}일째 장사 끝`, p));
 
   let y = 150;
   /** 한 줄: 왼쪽 이름, 오른쪽 값 */
   const row = (label: string, value: string, color = p.textStrong, size = 26) => {
-    root.add(scene.add.text(left, y, label, textStyle(size, p.text)).setOrigin(0, 0.5));
-    root.add(scene.add.text(right, y, value, textStyle(size, color)).setOrigin(1, 0.5));
+    body.add(scene.add.text(left, y, label, textStyle(size, p.text)).setOrigin(0, 0.5));
+    body.add(scene.add.text(right, y, value, textStyle(size, color)).setOrigin(1, 0.5));
     y += size + 22;
   };
   row('음식 값', won(stats.food));
@@ -204,13 +207,13 @@ export function buildSettleScreen(o: SettleScreenOptions): Phaser.GameObjects.Co
   row('재료비', stats.cost > 0 ? `-${won(stats.cost)}` : won(0), stats.cost > 0 ? 0xc0392b : p.textStrong);
   if (stats.subsidy > 0) row('운영 지원금', won(stats.subsidy), p.text2, 22);
   const line = scene.add.graphics().fillStyle(p.border, 1).fillRect(left, y - 16, right - left, 4);
-  root.add(line);
+  body.add(line);
   y += 14;
   row('하루 수익', won(outcome.profit), outcome.profit >= 0 ? p.accent : 0xc0392b, 33);
   const lost = stats.discarded + stats.wasted;
   if (lost > 0) row('버린 음식', `${lost}그릇`, p.text2, 22);
   row('손님', `${stats.guests}명`, p.textStrong, 22);
-  root.add(
+  body.add(
     scene.add
       .text(left, y, `활짝 ${stats.happy}(최고 ${stats.best}) · 보통 ${stats.normal} · 찡그림 ${stats.sad}${stats.angry ? ` · 화남 ${stats.angry}` : ''}${stats.turnedAway ? ` · 돌아감 ${stats.turnedAway}무리` : ''}`, {
         ...textStyle(22, p.text2),
@@ -219,20 +222,26 @@ export function buildSettleScreen(o: SettleScreenOptions): Phaser.GameObjects.Co
       .setOrigin(0, 0.5),
   );
   y += 48;
-  // 메뉴별 그릇 (등급 진행)
+  // 메뉴별 판매: 메뉴마다 두 줄(이름·그릇 수 / 등급 진행)
   const sold = MENUS.map((m, i) => ({ m, i, n: stats.sold[i] ?? 0 })).filter((s) => s.n > 0);
-  sold.forEach((s, k) => {
-    const x = left + (k % 3) * ((right - left) / 3);
-    const yy = y + Math.floor(k / 3) * 52;
-    root.add(scene.add.image(x + 27, yy, menuIconKey(MENU_ART[s.i]!)));
+  if (sold.length > 0) {
+    body.add(scene.add.text(left, y, '메뉴별 판매', textStyle(22, p.text2)).setOrigin(0, 0.5));
+    y += 44;
+  }
+  sold.forEach((s) => {
+    body.add(scene.add.image(left + 27, y + 22, menuIconKey(MENU_ART[s.i]!)));
+    body.add(scene.add.text(left + 62, y, s.m.name, textStyle(26, p.textStrong)).setOrigin(0, 0.5));
+    body.add(scene.add.text(right, y, `${s.n}그릇`, textStyle(26, p.textStrong)).setOrigin(1, 0.5));
     const total = outcome.nextState.sold[s.i] ?? 0;
     const before = gradeOf(o.before.sold[s.i] ?? 0);
     const after = gradeOf(total);
-    const left2 = toNextGrade(total);
-    const text = `${s.n}그릇 ${GRADE_NAMES[after]}${after > before ? ' 올랐어요' : left2 > 0 ? ` · ${GRADE_NAMES[after + 1]}까지 ${left2}` : ''}`;
-    root.add(scene.add.text(x + 62, yy, text, textStyle(22, after > before ? p.accent : p.textStrong)).setOrigin(0, 0.5));
+    const more = toNextGrade(total);
+    const grade = after > before ? `${GRADE_NAMES[after]}등급으로 올랐어요` : `${GRADE_NAMES[after]}등급`;
+    const next = more > 0 ? ` · ${GRADE_NAMES[after + 1]}등급까지 ${more}그릇` : ' · 최고 등급';
+    body.add(scene.add.text(left + 62, y + 36, `${grade}${next}`, textStyle(22, after > before ? p.accent : p.text2)).setOrigin(0, 0.5));
+    y += 88;
   });
-  y += Math.ceil(sold.length / 3) * 52 + 10;
+  y += 10;
   // 경험치·레벨
   const levelUp = outcome.levelAfter > outcome.levelBefore;
   row('경험치', `+${num(outcome.exp)}  Lv${outcome.levelBefore}${levelUp ? ` → Lv${outcome.levelAfter}` : ''}`, levelUp ? p.accent : p.textStrong, 22);
@@ -246,7 +255,7 @@ export function buildSettleScreen(o: SettleScreenOptions): Phaser.GameObjects.Co
       if (def.levels.some((lv) => lv > outcome.levelBefore && lv <= outcome.levelAfter && lv > 1)) opened.push(def.name);
     }
     if (opened.length) {
-      root.add(scene.add.text(left, y, `새로 열림: ${opened.join(', ')}`, { ...textStyle(22, p.accent), wordWrap: { width: right - left } }).setOrigin(0, 0.5));
+      body.add(scene.add.text(left, y, `새로 열림: ${opened.join(', ')}`, { ...textStyle(22, p.accent), wordWrap: { width: right - left } }).setOrigin(0, 0.5));
       y += 44;
     }
   }
@@ -255,14 +264,14 @@ export function buildSettleScreen(o: SettleScreenOptions): Phaser.GameObjects.Co
     const id = outcome.newStaff[0]!;
     const box = scene.add.graphics();
     framedBox(box, left - 8, y - 8, right - left + 16, 130, 16, 0xfff3c4, 0xe2ac3a);
-    root.add(box);
+    body.add(box);
     const img = scene.add.image(left + 56, y + 116, ensureStaff(scene, id, 'down', 'stand', { face: 'happy' })).setOrigin(0.5, 1).setScale(1.2);
-    root.add(img);
+    body.add(img);
     scene.tweens.add({ targets: img, y: img.y - 14, duration: 260, yoyo: true, repeat: 2, delay: 300, ease: 'Quad.easeOut' });
-    root.add(scene.add.text(left + 120, y + 30, `새 직원이 왔어요! ${STAFF[id].name}`, textStyle(26, 0x5a3410)).setOrigin(0, 0.5));
-    root.add(scene.add.text(left + 120, y + 74, STAFF[id].ability, textStyle(22, 0x8a5a26)).setOrigin(0, 0.5));
+    body.add(scene.add.text(left + 120, y + 30, `새 직원이 왔어요! ${STAFF[id].name}`, textStyle(26, 0x5a3410)).setOrigin(0, 0.5));
+    body.add(scene.add.text(left + 120, y + 74, STAFF[id].ability, textStyle(22, 0x8a5a26)).setOrigin(0, 0.5));
     if (o.status.kind === 'saved' || o.status.kind === 'trial') {
-      root.add(new Button(scene, { x: right - 110, y: y + 74, width: 200, height: 60, label: '오늘 직원으로', style: 'warm', palette: p, fontSize: 22, onPress: () => o.onPickNew(id) }));
+      body.add(new Button(scene, { x: right - 110, y: y + 74, width: 200, height: 60, label: '오늘 직원으로', style: 'warm', palette: p, fontSize: 22, onPress: () => o.onPickNew(id) }));
     }
     y += 150;
   }
@@ -278,28 +287,30 @@ export function buildSettleScreen(o: SettleScreenOptions): Phaser.GameObjects.Co
           : st.kind === 'rejected'
             ? st.message
             : '체험이라 저장되지 않아요';
-  root.add(scene.add.text(cx, y + 10, statusText, { ...textStyle(22, st.kind === 'failed' || st.kind === 'rejected' ? 0xc0392b : p.text2), align: 'center', wordWrap: { width: cw - 64 } }).setOrigin(0.5));
+  body.add(scene.add.text(cx, y + 10, statusText, { ...textStyle(22, st.kind === 'failed' || st.kind === 'rejected' ? 0xc0392b : p.text2), align: 'center', wordWrap: { width: cw - 64 } }).setOrigin(0.5));
   y += 70;
   framedBox(card, cx - cw / 2, 120, cw, y - 120, 20, p.surface, p.border);
 
-  // 버튼
+  // 버튼은 아래에 고정하고 카드만 스크롤한다
+  const st2 = st.kind;
   const bw = cw;
-  let by = Math.min(height - 200, y + 40);
-  if (st.kind === 'failed') {
-    root.add(new Button(scene, { x: cx, y: by + 40, width: bw, height: 96, label: '다시 보내기', style: 'primary', palette: p, fontSize: 32, onPress: o.onRetry }));
+  const footH = st2 === 'saving' ? 24 : st2 === 'failed' ? 144 : 266;
+  root.add(attachScroll({ scene, body, top: 0, contentH: y + 24, bottom: height - footH, width, height, color: p.bg, thumb: p.border }));
+  const by = height - footH + 16;
+  if (st2 === 'failed') {
+    root.add(new Button(scene, { x: cx, y: by + 48, width: bw, height: 96, label: '다시 보내기', style: 'primary', palette: p, fontSize: 32, onPress: o.onRetry }));
     return root;
   }
-  if (st.kind === 'saving') return root;
-  if (st.kind === 'trial') {
-    root.add(new Button(scene, { x: cx, y: by + 40, width: bw, height: 96, label: '로그인하고 저장하기', style: 'primary', palette: p, fontSize: 32, onPress: o.onLogin }));
-    root.add(new Button(scene, { x: cx, y: by + 150, width: bw, height: 80, label: '다시 체험하기', style: 'secondary', palette: p, fontSize: 26, onPress: o.onRetryTrial }));
+  if (st2 === 'saving') return root;
+  if (st2 === 'trial') {
+    root.add(new Button(scene, { x: cx, y: by + 48, width: bw, height: 96, label: '로그인하고 저장하기', style: 'primary', palette: p, fontSize: 32, onPress: o.onLogin }));
+    root.add(new Button(scene, { x: cx, y: by + 158, width: bw, height: 80, label: '다시 체험하기', style: 'secondary', palette: p, fontSize: 26, onPress: o.onRetryTrial }));
     return root;
   }
-  by = Math.max(by, y + 20);
-  root.add(new Button(scene, { x: cx, y: by + 40, width: bw, height: 96, label: '다음 날 장사', style: 'primary', palette: p, fontSize: 32, onPress: o.onNextDay }));
+  root.add(new Button(scene, { x: cx, y: by + 48, width: bw, height: 96, label: '다음 날 장사', style: 'primary', palette: p, fontSize: 32, onPress: o.onNextDay }));
   const half = (bw - 16) / 2;
-  root.add(new Button(scene, { x: cx - bw / 2 + half / 2, y: by + 150, width: half, height: 80, label: '가게 꾸리기', style: 'secondary', palette: p, fontSize: 26, onPress: o.onUpgrades }));
-  root.add(new Button(scene, { x: cx + bw / 2 - half / 2, y: by + 150, width: half, height: 80, label: '직원 명부', style: 'secondary', palette: p, fontSize: 26, onPress: o.onStaff }));
+  root.add(new Button(scene, { x: cx - bw / 2 + half / 2, y: by + 158, width: half, height: 80, label: '가게 꾸리기', style: 'secondary', palette: p, fontSize: 26, onPress: o.onUpgrades }));
+  root.add(new Button(scene, { x: cx + bw / 2 - half / 2, y: by + 158, width: half, height: 80, label: '직원 명부', style: 'secondary', palette: p, fontSize: 26, onPress: o.onStaff }));
   return root;
 }
 
