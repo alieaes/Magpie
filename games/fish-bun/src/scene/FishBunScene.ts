@@ -428,7 +428,8 @@ export class FishBunScene extends Phaser.Scene {
       if (response.accepted) {
         if (response.save) this.save = response.save as SaveSnapshot<ShopState>;
         else if (trial) this.save = { version: this.save.version, state: s.outcome.nextState };
-        s.status = trial ? { kind: 'trial' } : { kind: 'saved', rank: response.rank.today, best: response.best };
+        // "게임" 분류라 일간 랭킹이 없다. 순위는 전체 순위
+        s.status = trial ? { kind: 'trial' } : { kind: 'saved', rank: response.rank.allTime ?? null, best: response.best };
       } else {
         s.status = { kind: 'rejected', message: REJECT_TEXT[response.reason] ?? '이 날은 저장되지 않았어요.' };
         try {
@@ -438,7 +439,7 @@ export class FishBunScene extends Phaser.Scene {
         }
       }
       if (trial) this.trialUsed = true;
-      if (s.status.kind === 'saved' && (s.status.best.allTime || s.status.best.today)) this.opts.sfx.fanfare();
+      if (s.status.kind === 'saved' && s.status.best.allTime) this.opts.sfx.fanfare();
       this.opts.onDayActive?.(false);
     } catch (err) {
       console.warn('[fish-bun] 하루를 보내지 못했다', err);

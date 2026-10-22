@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import type { Game, GameSummary } from '@magpie/shared';
+import { isGrowthGame, type Game, type GameSummary } from '@magpie/shared';
 import { formatNumber } from '../format';
 import GameThumb from './GameThumb.vue';
 
@@ -12,6 +12,9 @@ const props = defineProps<{
 
 const playable = computed(() => props.game.status === 'playable');
 const unit = computed(() => props.game.scoreUnit);
+/** 게임 분류(성장형)는 일간 랭킹이 없어 오늘 1위 대신 전체 1위를 보여준다 */
+const growth = computed(() => isGrowthGame(props.game));
+const top = computed(() => (growth.value ? props.summary?.allTimeTop : props.summary?.todayTop) ?? null);
 </script>
 
 <template>
@@ -35,8 +38,8 @@ const unit = computed(() => props.game.scoreUnit);
 
       <dl v-if="playable" class="stats">
         <div class="stat">
-          <dt>오늘 1위</dt>
-          <dd v-if="summary?.todayTop" class="num">{{ formatNumber(summary.todayTop.score) }}{{ unit }}</dd>
+          <dt>{{ growth ? '1위' : '오늘 1위' }}</dt>
+          <dd v-if="top" class="num">{{ formatNumber(top.score) }}{{ unit }}</dd>
           <dd v-else class="empty">첫 기록에 도전</dd>
         </div>
         <div v-if="loggedIn && summary?.progress" class="stat">

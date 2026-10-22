@@ -1,6 +1,6 @@
 // 랭킹 API가 주고받는 형식. 규칙: docs/design/261006-06-ranking.md
 
-import type { GameId } from './games';
+import { findGame, isGrowthGame, type GameId } from './games';
 
 /** 랭킹 기간. daily = KST 하루, alltime = 전체 기간 */
 export type RankingPeriod = 'daily' | 'alltime';
@@ -9,6 +9,16 @@ export type RankingPeriod = 'daily' | 'alltime';
 export type RankingTarget = 'total' | GameId;
 
 export const RANKING_PERIODS: readonly RankingPeriod[] = ['daily', 'alltime'];
+
+/**
+ * 이 대상에 일간 랭킹이 있는지. "게임" 분류(성장형)는 날마다 초기화하지 않는 전체 랭킹 하나뿐이다.
+ * 근거: docs/design/261022-07-game-categories.md §2
+ */
+export function hasDailyRanking(target: RankingTarget): boolean {
+  if (target === 'total') return true;
+  const game = findGame(target);
+  return game !== undefined && !isGrowthGame(game);
+}
 
 /** 한 번에 받을 수 있는 최대 줄 수 */
 export const RANKING_MAX_LIMIT = 100;
@@ -45,7 +55,11 @@ export interface RankingResponse {
 /** GET /api/games/summary 응답의 한 줄 */
 export interface GameSummary {
   gameId: GameId;
+  /** 일간 랭킹이 없는 게임(성장형)은 늘 null */
   todayTop: { nickname: string; score: number } | null;
+  /** 성장형 게임만. 전체 랭킹 1위 */
+  allTimeTop?: { nickname: string; score: number } | null;
+  /** 일간 랭킹이 없는 게임(성장형)은 늘 null */
   myTodayBest: number | null;
   myAllTimeBest: number | null;
   /** 성장형 게임만, 로그인했고 저장이 있을 때. 저장이 몇 일째인지 */

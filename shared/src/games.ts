@@ -8,10 +8,17 @@ export type ScoreSort = 'desc' | 'asc';
 export type GameStatus = 'playable' | 'coming-soon';
 
 /**
- * 게임 종류. minigame = 한 판으로 끝나는 게임, growth = 하루 단위로 저장하며 키우는 성장형.
- * 근거: docs/design/261021-04-game-save.md
+ * 게임 종류(분류). minigame = 한 판으로 끝나는 게임, growth = 하루 단위로 저장하며 키우는 성장형.
+ * 화면에서는 성장형을 "게임"이라고 부른다(GAME_KIND_LABELS).
+ * 근거: docs/design/261021-04-game-save.md, docs/design/261022-07-game-categories.md
  */
 export type GameKind = 'minigame' | 'growth';
+
+/** 분류의 화면 이름 */
+export const GAME_KIND_LABELS: Readonly<Record<GameKind, string>> = { minigame: '미니게임', growth: '게임' };
+
+/** 분류 순서. 로비 묶음과 랭킹 대상 묶음이 이 순서를 따른다 */
+export const GAME_KINDS: readonly GameKind[] = ['minigame', 'growth'];
 
 /** 로비·랭킹·점수 제출이 같이 보는 게임 정보 */
 export interface GameMeta {
@@ -131,7 +138,12 @@ export function findGame(id: string): Game | undefined {
   return GAME_BY_ID.get(id);
 }
 
-/** 성장형 게임인지 (하루 단위 저장, 총합 랭킹에서 빠진다) */
+/** 게임의 분류. kind가 없으면 미니게임 */
+export function gameKind(game: GameMeta): GameKind {
+  return game.kind ?? 'minigame';
+}
+
+/** 성장형("게임" 분류)인지. 하루 단위로 저장하고, 일간 랭킹이 없고, 총합 랭킹에서 빠진다 */
 export function isGrowthGame(game: GameMeta): boolean {
   return game.kind === 'growth';
 }

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 // 랭킹 전체 페이지. 고른 대상·기간은 주소 쿼리(?target=&period=)에 남긴다.
+// 대상 탭은 분류(미니게임·게임)로 묶고, 게임 분류는 일간이 없어 기간 전환을 숨긴다. 근거: docs/design/261022-07-game-categories.md §4
 // 관리자에게는 줄마다 관리 메뉴(기록 삭제·닉네임 초기화)가 생긴다. 근거: docs/design/261008-02-admin.md §5
 import { computed, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
@@ -8,6 +9,7 @@ import {
   RANKING_MAX_LIMIT,
   TOTAL_POINTS_PER_GAME,
   findGame,
+  hasDailyRanking,
   type RankingEntry,
   type RankingPeriod,
   type RankingTarget,
@@ -17,7 +19,7 @@ import { useAsyncData } from '../composables/useAsyncData';
 import { useAuthStore } from '../stores/auth';
 import { useCountdown } from '../composables/useCountdown';
 import { formatNumber, formatRemaining, scoreUnit, targetLabel } from '../format';
-import { parsePeriod, parseTarget, rankingTargetOptions } from '../rankingTargets';
+import { effectivePeriod, parsePeriod, parseTarget, rankingTargetGroups } from '../rankingTargets';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
 import PeriodToggle from '../components/PeriodToggle.vue';
 import RankingList from '../components/RankingList.vue';
@@ -25,7 +27,7 @@ import TargetTabs from '../components/TargetTabs.vue';
 
 const route = useRoute();
 const router = useRouter();
-const options = rankingTargetOptions();
+const groups = rankingTargetGroups();
 const auth = useAuthStore();
 
 /** 주소 쿼리를 바꾼다. 기록이 쌓이지 않게 replace로 */
@@ -42,10 +44,15 @@ const period = computed<RankingPeriod>({
   set: (value) => setQuery({ period: value }),
 });
 
+/** 일간 랭킹이 있는 대상인지. 게임 분류(성장형)는 전체 랭킹 하나뿐이다 */
+const daily = computed(() => hasDailyRanking(target.value));
+/** 실제로 보여주는 기간. 게임 분류면 쿼리의 기간을 무시하고 전체 */
+const shownPeriod = computed(() => effectivePeriod(target.value, period.value));
+
 const { data, loading, error, reload } = useAsyncData(
-  () => fetchRanking(target.value, period.value, RANKING_MAX_LIMIT),
+  () => fetchRanking(target.value, shownPeriod.value, RANKING_MAX_LIMIT),
   // 로그인·로그아웃하면 내 순위가, 관리자면 관리용 번호가, 닉네임을 바꾸면 보이는 이름이 바뀌므로 다시 불러온다
-  [target, period, () => auth.loggedIn, () => auth.isAdmin, () => auth.user?.nickname],
+  [target, shownPeriod, () => auth.loggedIn, () => auth.isAdmin, () => auth.user?.nickname],
 );
 const remaining = useCountdown(() => data.value?.resetsAt, () => void reload());
 const unit = computed(() => scoreUnit(target.value));
@@ -102,16 +109,17 @@ async function runAction(): Promise<void> {
   <main class="ranking-page">
     <h1 class="title">랭킹</h1>
 
-    <TargetTabs v-model="target" :options="options" class="tabs" />
+    <TargetTabs v-model="target" :groups="groups" class="tabs" />
 
     <div class="toolbar">
-      <PeriodToggle v-model="period" />
-      <p v-if="period === 'daily' && data?.day" class="meta">
+      <PeriodToggle v-if="daily" v-model="period" />
+      <p v-if="shownPeriod === 'daily' && data?.day" class="meta">
         <PhClock :size="15" weight="bold" />
         <span class="num">{{ data.day }}</span>
         <span v-if="remaining !== null"> · 초기화까지 {{ formatRemaining(remaining) }}</span>
       </p>
-      <p v-else-if="period === 'alltime'" class="meta">전체 기간</p>
+      <p v-else-if="!daily" class="meta">전체 기간 · 매일 초기화되지 않아요</p>
+      <p v-else-if="shownPeriod === 'alltime'" class="meta">전체 기간</p>
     </div>
 
     <p v-if="target === 'total'" class="note">
@@ -133,7 +141,7 @@ async function runAction(): Promise<void> {
       :skeleton-rows="12"
       :show-me-below="false"
       :manageable="auth.isAdmin"
-      :empty-text="period === 'daily' ? '아직 오늘 기록이 없어요' : '아직 기록이 없어요'"
+      :empty-text="shownPeriod === 'daily' ? '아직 오늘 기록이 없어요' : '아직 기록이 없어요'"
       @retry="reload"
       @remove-play="ask('removePlay', $event)"
       @reset-nickname="ask('resetNickname', $event)"

@@ -31,7 +31,8 @@ import { Button, num, textStyle, titleStyle, won, type ScenePalette } from './ui
 /** 정산 화면의 저장 상태 */
 export type SettleStatus =
   | { kind: 'saving' }
-  | { kind: 'saved'; rank: number | null; best: { today: boolean; allTime: boolean } }
+  /** rank는 전체 랭킹 순위, best.allTime이면 내 최고 수익 */
+  | { kind: 'saved'; rank: number | null; best: { allTime: boolean } }
   | { kind: 'rejected'; message: string }
   | { kind: 'failed' }
   | { kind: 'trial' };
@@ -419,7 +420,7 @@ export function buildSettleScreen(o: SettleScreenOptions): Phaser.GameObjects.Co
     s.kind === 'saving'
       ? '저장하는 중'
       : s.kind === 'saved'
-        ? `저장했어요${s.best.allTime ? ' · 역대 최고 수익' : s.best.today ? ' · 오늘 최고 수익' : ''}${s.rank !== null ? ` · 오늘 ${num(s.rank)}위` : ''}`
+        ? `저장했어요${s.best.allTime ? ' · 최고 수익' : ''}${s.rank !== null ? ` · 전체 ${num(s.rank)}위` : ''}`
         : s.kind === 'rejected'
           ? s.message
           : s.kind === 'failed'

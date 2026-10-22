@@ -1,7 +1,8 @@
 <script setup lang="ts">
+// 메인(로비). 게임 카드를 분류(미니게임 → 게임) 묶음으로 나눠 보여준다. 근거: docs/design/261022-07-game-categories.md §3
 import { computed } from 'vue';
 import { storeToRefs } from 'pinia';
-import { GAMES, type GameSummary } from '@magpie/shared';
+import { GAMES, GAME_KINDS, GAME_KIND_LABELS, gameKind, type GameKind, type GameSummary } from '@magpie/shared';
 import { fetchGamesSummary } from '../api';
 import { useAsyncData } from '../composables/useAsyncData';
 import { useAuthStore } from '../stores/auth';
@@ -13,34 +14,51 @@ const { loggedIn } = storeToRefs(useAuthStore());
 const { data: summaries } = useAsyncData(fetchGamesSummary, [loggedIn]);
 
 const summaryById = computed(() => new Map<string, GameSummary>((summaries.value ?? []).map((s) => [s.gameId, s])));
-// 준비 중(coming-soon) 게임은 로비에 보이지 않는다
+/** 묶음 제목 옆 작은 설명 */
+const SECTION_HINTS: Record<GameKind, string> = {
+  minigame: '한 판으로 끝나요 · 랭킹은 매일 밤 12시에 새로 시작',
+  growth: '하루씩 저장하며 키워요 · 랭킹은 이어져요',
+};
+
+// 준비 중(coming-soon) 게임은 로비에 보이지 않는다. 게임이 없는 묶음은 통째로 숨긴다
 const playableGames = GAMES.filter((g) => g.status === 'playable');
+const sections = GAME_KINDS.map((kind) => ({
+  kind,
+  title: GAME_KIND_LABELS[kind],
+  hint: SECTION_HINTS[kind],
+  games: playableGames.filter((g) => gameKind(g) === kind),
+})).filter((s) => s.games.length > 0);
+/** 카드가 차례로 떠오르는 순서. 묶음을 넘어 이어서 센다 */
+const riseIndex = new Map(sections.flatMap((s) => s.games).map((g, i) => [g.id, i]));
 </script>
 
 <template>
   <main class="home">
     <section class="intro">
       <h1 class="headline">오늘은 어떤 게임?</h1>
-      <p class="lede">랭킹은 매일 밤 12시에 새로 시작해요.</p>
+      <p class="lede">한 판 승부 미니게임과 오래 키우는 게임이 있어요.</p>
     </section>
 
     <div class="layout">
-      <section class="games" aria-labelledby="games-title">
-        <header class="section-head">
-          <h2 id="games-title" class="section-title">게임</h2>
-        </header>
-        <div class="grid">
-          <GameCard
-            v-for="(game, i) in playableGames"
-            :key="game.id"
-            class="rise-in"
-            :style="{ '--index': i }"
-            :game="game"
-            :summary="summaryById.get(game.id) ?? null"
-            :logged-in="loggedIn"
-          />
-        </div>
-      </section>
+      <div class="games">
+        <section v-for="section in sections" :key="section.kind" class="group" :aria-labelledby="`games-${section.kind}`">
+          <header class="section-head">
+            <h2 :id="`games-${section.kind}`" class="section-title">{{ section.title }}</h2>
+            <p class="section-hint">{{ section.hint }}</p>
+          </header>
+          <div class="grid">
+            <GameCard
+              v-for="game in section.games"
+              :key="game.id"
+              class="rise-in"
+              :style="{ '--index': riseIndex.get(game.id) }"
+              :game="game"
+              :summary="summaryById.get(game.id) ?? null"
+              :logged-in="loggedIn"
+            />
+          </div>
+        </section>
+      </div>
 
       <aside class="side">
         <RankingPanel class="rise-in" :style="{ '--index': 2 }" />
@@ -82,10 +100,16 @@ const playableGames = GAMES.filter((g) => g.status === 'playable');
   align-items: start;
 }
 
+.group + .group {
+  margin-top: 32px;
+}
+
+/* 설명이 길어 자리가 모자라면 제목 아래 줄로 내려간다 */
 .section-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  gap: 8px;
+  gap: 2px 10px;
   margin-bottom: 14px;
 }
 
@@ -93,6 +117,11 @@ const playableGames = GAMES.filter((g) => g.status === 'playable');
   font-size: 17px;
   font-weight: 700;
   color: var(--text-strong);
+}
+
+.section-hint {
+  font-size: 13px;
+  color: var(--text-3);
 }
 
 .grid {
@@ -139,6 +168,10 @@ const playableGames = GAMES.filter((g) => g.status === 'playable');
 
   .lede {
     font-size: 14px;
+  }
+
+  .group + .group {
+    margin-top: 24px;
   }
 
   .grid {

@@ -4,6 +4,7 @@ import type { Kysely } from 'kysely';
 import {
   GAMES,
   findGame,
+  hasDailyRanking,
   kstDayKey,
   nextKstMidnight,
   type GameSummary,
@@ -74,11 +75,22 @@ export function createRankingService(db: Kysely<Database>, now: () => Date = () 
       return response;
     },
 
-    /** 로비 카드용: 게임마다 오늘 1위와 내 오늘·역대 최고 기록 */
+    /** 로비 카드용: 게임마다 오늘 1위와 내 오늘·역대 최고 기록. 성장형은 전체 1위와 내 역대 최고 기록 */
     async getGamesSummary(userId) {
       const day = kstDayKey(now());
       return Promise.all(
         GAMES.map(async (game): Promise<GameSummary> => {
+          if (!hasDailyRanking(game.id)) {
+            const alltime = await loadRows(game.id, 'alltime', day);
+            const top = alltime[0];
+            return {
+              gameId: game.id,
+              todayTop: null,
+              allTimeTop: top ? { nickname: top.nickname, score: top.score } : null,
+              myTodayBest: null,
+              myAllTimeBest: userId === null ? null : (alltime.find((r) => r.userId === userId)?.score ?? null),
+            };
+          }
           const daily = await loadRows(game.id, 'daily', day);
           const top = daily[0];
           let myTodayBest: number | null = null;

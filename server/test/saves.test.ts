@@ -1,5 +1,6 @@
 // 성장형 게임 저장 통합 테스트. 개발 DB(-dev)의 되돌림 트랜잭션 안에서 시험용 가게 로직(growth-fixture)으로
-// 저장 불러오기, 가게 행동, 하루 끝 검증과 저장 갱신, stale_save, 일시정지 시간 검사, 로비 진행 상황, 총합 랭킹 제외를 본다.
+// 저장 불러오기, 가게 행동, 하루 끝 검증과 저장 갱신, stale_save, 일시정지 시간 검사, 로비 진행 상황,
+// 총합 랭킹 제외와 전체 랭킹만 있는 것(일간 없음)을 본다.
 
 import { describe, expect, it } from 'vitest';
 import type { FinishPlayResponse, GameSummary, RankingResponse, SaveSnapshot, StartPlayResponse } from '@magpie/shared';
@@ -59,7 +60,10 @@ describe.skipIf(!canRunDb)('성장형 저장 (개발 DB)', () => {
       expect(play.saveVersion).toBe(1);
 
       const result = await finishDay(ctx, user, play, dayInputs([3, 4, 5]), 12);
-      expect(result).toMatchObject({ accepted: true, score: 12, best: { today: true, allTime: true } });
+      // 성장형은 일간 기록이 없다: best_daily에 쓰지 않고, 순위는 전체 순위로 준다
+      expect(result).toMatchObject({ accepted: true, score: 12, best: { today: false, allTime: true }, rank: { today: null } });
+      expect(result.accepted && result.rank.allTime).toBeGreaterThanOrEqual(1);
+      expect(await ctx.trx.selectFrom('best_daily').select('play_id').where('play_id', '=', play.playId).execute()).toEqual([]);
       const expected = { version: 2, state: { v: 1, day: 2, money: 12, level: 0 } };
       expect(result.accepted && result.save).toEqual(expected);
       expect(await load(ctx, user)).toEqual(expected);
@@ -157,8 +161,10 @@ describe.skipIf(!canRunDb)('성장형 저장 (개발 DB)', () => {
     });
   });
 
-  it('총합 랭킹에서 성장형 게임은 빠지고, 게임별 랭킹에는 나온다', async () => {
+  it('총합 랭킹에서 성장형 게임은 빠지고, 게임별 랭킹에는 전체 랭킹으로만 나온다', async () => {
     await withTestApp(async (ctx) => {
+      // 개발 DB에 쌓인 실제 기록과 섞이지 않게 비우고 시작한다 (되돌림 트랜잭션이라 남지 않는다)
+      await ctx.trx.deleteFrom('best_alltime').where('game_id', '=', GAME).execute();
       const grower = await ctx.login();
       const play = await startDay(ctx, grower);
       await finishDay(ctx, grower, play, dayInputs([7]), 7);
@@ -174,9 +180,35 @@ describe.skipIf(!canRunDb)('성장형 저장 (개발 DB)', () => {
       expect(total.participants).toBe(1);
       expect(total.entries.map((e) => e.score)).toEqual([1000]);
 
-      const growth = (await (await ctx.get(`/api/rankings?target=${GAME}&period=daily`)).json()) as RankingResponse;
-      expect(growth.participants).toBe(1);
+      // 기간을 빼면 전체(역대), 일간은 없다
+      const growth = (await (await ctx.get(`/api/rankings?target=${GAME}`)).json()) as RankingResponse;
+      expect(growth).toMatchObject({ period: 'alltime', participants: 1 });
       expect(growth.entries[0]?.score).toBe(7);
+      expect(growth.day).toBeUndefined();
+      expect((await ctx.get(`/api/rankings?target=${GAME}&period=daily`)).status).toBe(400);
+      expect((await ctx.get(`/api/rankings?target=${GAME}&period=alltime`)).status).toBe(200);
+      // 미니게임·총합은 기간을 빼면 지금처럼 일간
+      expect(((await (await ctx.get('/api/rankings?target=apple-ten')).json()) as RankingResponse).period).toBe('daily');
+      expect(((await (await ctx.get('/api/rankings')).json()) as RankingResponse).period).toBe('daily');
+    });
+  });
+
+  it('로비 요약: 성장형은 오늘 1위 대신 전체 1위를 준다', async () => {
+    await withTestApp(async (ctx) => {
+      await ctx.trx.deleteFrom('best_alltime').where('game_id', '=', GAME).execute();
+      const first = await ctx.login({ nickname: '요약일등' });
+      await finishDay(ctx, first, await startDay(ctx, first), dayInputs([9]), 9);
+      const second = await ctx.login();
+      await finishDay(ctx, second, await startDay(ctx, second), dayInputs([4]), 4);
+
+      const summaries = (await (await ctx.get('/api/games/summary', second.cookie)).json()) as GameSummary[];
+      expect(summaries.find((s) => s.gameId === GAME)).toMatchObject({
+        todayTop: null,
+        allTimeTop: { nickname: '요약일등', score: 9 },
+        myTodayBest: null,
+        myAllTimeBest: 4,
+      });
+      expect(summaries.find((s) => s.gameId === 'apple-ten')?.allTimeTop).toBeUndefined();
     });
   });
 

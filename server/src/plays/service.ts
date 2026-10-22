@@ -6,6 +6,7 @@ import { gzipSync } from 'node:zlib';
 import type { Kysely } from 'kysely';
 import {
   findGame,
+  hasDailyRanking,
   isGrowthLogic,
   randomSeed,
   type FinishPlayRequest,
@@ -57,6 +58,12 @@ export function createPlayService(
   db: Kysely<Database>,
   { ranking, now = () => new Date(), logics = defaultLogics, runner = createInlineRunner(logics) }: PlayServiceOptions,
 ): PlayService {
+  /** 판이 통과한 뒤의 내 순위. 일간 랭킹이 있으면 오늘 순위, 성장형은 전체 순위 */
+  async function rankAfterPlay(gameId: GameId, userId: number): Promise<{ today: number | null; allTime?: number | null }> {
+    if (hasDailyRanking(gameId)) return { today: (await ranking.getRanking(gameId, 'daily', 1, userId)).me?.rank ?? null };
+    return { today: null, allTime: (await ranking.getRanking(gameId, 'alltime', 1, userId)).me?.rank ?? null };
+  }
+
   return {
     async start(userId, gameId) {
       const logic = logics.find(gameId);
@@ -168,8 +175,7 @@ export function createPlayService(
       if (!final.accepted) return { kind: 'judged', response: { accepted: false, reason: final.reason } };
 
       if (best.today || best.allTime) ranking.invalidate();
-      const daily = await ranking.getRanking(game.id, 'daily', 1, userId);
-      const response: FinishPlayResponse = { accepted: true, score: final.score, best, rank: { today: daily.me?.rank ?? null } };
+      const response: FinishPlayResponse = { accepted: true, score: final.score, best, rank: await rankAfterPlay(game.id, userId) };
       if (save) response.save = save;
       return { kind: 'judged', response };
     },

@@ -1,10 +1,17 @@
 # 스펙: 랭킹
 
-설계: [261006-06-ranking.md](../design/261006-06-ranking.md)
+설계: [261006-06-ranking.md](../design/261006-06-ranking.md), 분류별 랭킹 [261022-07-game-categories.md](../design/261022-07-game-categories.md)
 
 ## 종류
 
-대상(게임별 / 총합) × 기간(일간 / 역대). 화면 기본값은 총합·일간.
+게임은 두 분류다([261022-07](../design/261022-07-game-categories.md)). 분류 이름은 `shared/src/games.ts`의 `GAME_KIND_LABELS`.
+
+| 분류 | `GameMeta.kind` | 랭킹 |
+|---|---|---|
+| 미니게임 | `minigame`(없으면 이것) | 대상(게임별 / 총합) × 기간(일간 / 역대). 화면 기본값은 총합·일간 |
+| 게임 | `growth`(성장형) | 게임별 **전체 랭킹 하나**(`alltime`). 일간이 없고, 날마다 초기화하지 않는다. 총합에 들어가지 않는다 |
+
+- 대상에 일간이 있는지는 `hasDailyRanking(target)`(`shared/src/ranking.ts`)으로 본다.
 
 ## 규칙
 
@@ -18,7 +25,7 @@
   - 총합이 같으면, 총합에 들어간 기록 중 가장 늦은 기록을 먼저 달성한 사람이 위.
   - SQL(윈도우 함수)로 계산한다 (`server/src/ranking/queries.ts`). 같은 공식의 TS 버전 `rankToPoints`는 화면 설명과 테스트에 쓴다.
 - **반영 조건**: 판이 검증을 통과하면(`plays.status = 'accepted'`) 더 좋은 기록일 때만 `best_daily`, `best_alltime`을 갱신한다.
-  동점이면 먼저 달성한 기록을 둔다. 점수 제출·검증은 [plays.md](./plays.md).
+  동점이면 먼저 달성한 기록을 둔다. 성장형은 `best_alltime`만 갱신한다(예전에 쌓인 붕어빵 가게 `best_daily` 줄은 읽지 않는다). 점수 제출·검증은 [plays.md](./plays.md).
 
 ## 표
 
@@ -43,7 +50,7 @@
 | 파라미터 | 값 | 기본값 |
 |---|---|---|
 | `target` | `total` 또는 게임 id | `total` |
-| `period` | `daily` / `alltime` | `daily` |
+| `period` | `daily` / `alltime`. 성장형 게임에 `daily`면 `400 BAD_REQUEST`("이 게임은 일간 랭킹이 없어요.") | `daily`, 성장형 게임은 `alltime` |
 | `limit` | 1~100 | 10 |
 
 응답 (`shared/src/ranking.ts`의 `RankingResponse`):
@@ -55,4 +62,5 @@
 ### `GET /api/games/summary`
 
 게임마다 `{ gameId, todayTop: {nickname, score} | null, myTodayBest, myAllTimeBest }`. `my*`는 비로그인이면 `null`.
+성장형 게임은 `todayTop`·`myTodayBest`가 늘 `null`이고 전체 1위 `allTimeTop: {nickname, score} | null`이 붙는다.
 로그인했고 저장이 있는 성장형 게임에는 `progress: { day }`(몇 일째)가 붙는다([saves.md](./saves.md)).

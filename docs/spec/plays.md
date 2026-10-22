@@ -50,7 +50,7 @@
 |---|---|
 | `plays` | `status`, `reject_reason`(`bad_input` / `time` / `mismatch` / `abandoned` / `admin`(관리자가 지움, [admin.md](./admin.md)) / `stale_save`(성장형: 판을 연 뒤 저장이 바뀜)), `score`(통과한 판만, 서버 점수), `client_score`(보낸 점수), `ended_at`(끝 요청 시각. 버려진 판은 NULL), `save_version`(성장형만, 판을 연 때의 저장 버전) |
 | `play_replays` | 보낸 `inputs`의 JSON을 gzip. 거절된 판도 남긴다 |
-| `best_daily`, `best_alltime` | 통과한 판이 더 좋을 때만 갱신. 동점이면 먼저 달성한 기록을 둔다. 일간의 날짜는 끝 요청 시각의 KST 날짜 |
+| `best_daily`, `best_alltime` | 통과한 판이 더 좋을 때만 갱신. 동점이면 먼저 달성한 기록을 둔다. 일간의 날짜는 끝 요청 시각의 KST 날짜. 성장형은 `best_alltime`만 |
 
 - 판을 닫는 것(`status = 'pending'`일 때만 바꿈), 입력 기록, 최고 기록 갱신은 한 트랜잭션이다. 같은 판의 끝 요청이 동시에 오면 하나만 처리된다.
 - 최고 기록은 `INSERT ... ON DUPLICATE KEY UPDATE`로 더 좋을 때만 값을 바꾸고(고칠 값은 `score`를 맨 끝에 둔다), 바뀌었는지는 다시 읽어 `play_id`로 본다(`server/src/plays/bests.ts`).
@@ -62,7 +62,7 @@
 | 요청 | 본문 | 응답 |
 |---|---|---|
 | `POST /api/plays` | `{ "gameId" }` | `200 { playId, seed }`(성장형은 `saveVersion` 추가). 비로그인 `401 UNAUTHORIZED`, 닉네임 전 `403 NICKNAME_REQUIRED`, 없는·기록할 수 없는 게임 `400 BAD_REQUEST`, 유저당 분당 20회 초과 `429 TOO_MANY_REQUESTS` |
-| `POST /api/plays/:id/finish` | `{ inputs: [], ticks, score }` | `200 { accepted: true, score, best: { today, allTime }, rank: { today } }`(성장형은 새 저장 `save` 추가) 또는 `200 { accepted: false, reason }` |
+| `POST /api/plays/:id/finish` | `{ inputs: [], ticks, score }` | `200 { accepted: true, score, best: { today, allTime }, rank: { today } }`(성장형은 `rank: { today: null, allTime }`, 새 저장 `save` 추가) 또는 `200 { accepted: false, reason }` |
 
 `finish`의 오류(판을 건드리지 않는다):
 
@@ -74,6 +74,7 @@
 | 없는 판 / 남의 판 / 이미 끝난 판 | `404 NOT_FOUND` / `403 FORBIDDEN` / `409 PLAY_FINISHED` |
 
 - `rank.today`: 그 게임의 오늘 순위. 날짜가 바뀌는 순간이면 `null`일 수 있다.
+- 성장형("게임" 분류)은 일간 랭킹이 없다: `best_daily`에 쓰지 않아 `best.today`가 늘 `false`, 순위는 `rank.allTime`(전체 순위)으로 준다([ranking.md](./ranking.md)).
 - 형식은 `shared/src/plays.ts`(`StartPlayResponse`, `FinishPlayRequest`, `FinishPlayResponse`, `PlayRejectReason`).
 - 요청 횟수 제한은 프로세스 메모리에 둔다(`server/src/lib/rate-limit.ts`, 지난 60초 안의 요청 수).
 

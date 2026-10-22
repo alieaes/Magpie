@@ -34,10 +34,13 @@ export type FinishPlayResponse =
       accepted: true;
       /** 서버가 다시 계산한 점수 */
       score: number;
-      /** 이 판으로 최고 기록이 바뀌었는지 */
+      /** 이 판으로 최고 기록이 바뀌었는지. 성장형은 일간 기록이 없어 today가 늘 false */
       best: { today: boolean; allTime: boolean };
-      /** 그 게임의 오늘 순위. 날짜가 바뀌는 순간에 끝나면 null일 수 있다 */
-      rank: { today: number | null };
+      /**
+       * 그 게임의 순위. 미니게임은 오늘 순위(날짜가 바뀌는 순간에 끝나면 null일 수 있다),
+       * 성장형은 today가 null이고 allTime에 전체 순위
+       */
+      rank: { today: number | null; allTime?: number | null };
       /** 성장형만. 그날을 반영한 새 저장 */
       save?: SaveSnapshot;
     }

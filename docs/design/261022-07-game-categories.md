@@ -117,9 +117,18 @@ Magpie는 한 판으로 끝나는 미니게임을 모으고, 랭킹을 매일 �
 
 ---
 
-## 8. 결정 사항 (컨펌 대기)
+## 8. 결정 사항 (2026-10-22 컨펌)
 
-- [ ] 분류 이름 "미니게임" / "게임", 내부 `kind`는 `growth` 유지
-- [ ] 게임 분류 랭킹 점수는 하루 최고 수익 그대로 (누적 수익 아님)
-- [ ] 게임 분류는 일간 랭킹 없음, `best_daily`에 쓰지 않음
-- [ ] 로비는 두 묶음, 미니게임이 먼저
+- [x] 분류 이름 "미니게임" / "게임", 내부 `kind`는 `growth` 유지
+- [x] 게임 분류 랭킹 점수는 하루 최고 수익 그대로 (누적 수익 아님)
+- [x] 게임 분류는 일간 랭킹 없음, `best_daily`에 쓰지 않음
+- [x] 로비는 두 묶음, 미니게임이 먼저
+
+## 9. 구현 메모 (2026-10-22)
+
+- 대상에 일간이 있는지는 `hasDailyRanking(target)`(`shared/src/ranking.ts`) 하나로 본다. 서버 라우트·요약·판 끝 응답과 화면이 같이 쓴다.
+- 분류 순서는 `GAME_KINDS`, 분류별 게임은 `gameKind()`. 클라이언트의 랭킹 대상 묶음은 `rankingTargetGroups()`, 실제 보여줄 기간은 `effectivePeriod()`(`client/src/rankingTargets.ts`).
+- `TargetTabs`는 선택지 목록 대신 묶음(`groups`)을 받는다.
+- 붕어빵 가게 정산의 팡파르는 이제 `best.allTime`(내 최고 수익)일 때만.
+- 확인: `server/test/saves.test.ts`(성장형 판은 `best_daily`에 안 씀, `rank.allTime`, 기간 기본값·`daily` 400, 요약 `allTimeTop`), 전체 테스트 통과.
+  화면은 확인용 서버로 PC(1024px)·폰(375px)에서 로비 두 묶음, 패널 optgroup·"전체 랭킹"·기간 기억, 랭킹 페이지 구분선·`?period=daily` 무시·미니게임 탭 복귀를 봤다. 개발 DB에 붕어빵 가게 기록이 없어 정산 문구와 채워진 전체 랭킹은 화면으로 보지 못했다.
