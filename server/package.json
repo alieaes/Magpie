@@ -21,6 +21,7 @@
     "@hono/zod-validator": "^0.9.1",
     "@magpie/game-apple-ten": "workspace:*",
     "@magpie/game-fish-bun": "workspace:*",
+    "@magpie/game-snack-bar": "workspace:*",
     "@magpie/game-lucky-scratch": "workspace:*",
     "@magpie/shared": "workspace:*",
     "hono": "^4.13.13",

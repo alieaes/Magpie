@@ -1,0 +1,19 @@
+# 던파 비트비트체 v2 (DNF Bit Bit v2)
+
+- 파일: `DNFBitBitv2.otf` — 넥슨이 배포한 `DNF_BitBit_v2.zip`의 `OTF/DNFBitBitv2.otf`를 **바꾸지 않고** 그대로 넣었다(버전 1.010, 2023-09-25 빌드).
+- 배포처: 넥슨 브랜드 가이드 서체 안내 https://brand.nexon.com/ko/ci-brand-guidelines/typeface
+- 글꼴 안 저작권 표기: "Copyright © 2005 NEOPLE inc. All Rights Reserved." / "DNF Bit Bit v2 is a trademark of NEOPLE inc" / 디자인 YoonDesign Inc.
+
+## 저작권 안내 (넥슨 서체 FAQ, 2026-10-22 확인)
+
+- 제공되는 모든 서체의 지적 재산권을 포함한 모든 권리는 넥슨코리아에 있습니다.
+- 서체는 개인 및 기업 사용자를 포함한 모든 사용자에게 무료로 제공되며 자유롭게 사용 및 배포하실 수 있습니다. (상업적인 용도로 사용 가능) 단, 임의로 폰트 파일을 수정 편집하여 재배포할 수 없습니다.
+- 글꼴 자체를 유료로 판매하는 것은 금지되며, 서체의 본 저작권 안내를 포함해서 다른 소프트웨어와 번들하거나 임베디드 폰트로 사용하실 수 있습니다.
+- 서체의 출처 표기를 권장합니다.
+- 서체를 사용한 인쇄물, 광고물(온라인포함)은 넥슨의 프로모션을 위해 활용될 수 있습니다.
+
+## 이 저장소에서 지킬 것
+
+- 파일을 고치지 않는다. 글자 덜어 내기(서브셋), woff2 등 다른 형식으로 바꾸기, 글꼴 이름 바꾸기를 하지 않는다.
+- 이 안내 파일을 글꼴 파일과 함께 둔다.
+- 쓰는 곳과 출처 표기: [스펙 snack-bar.md](../../../../../docs/spec/snack-bar.md) "도트 그림" 절, 설계 [261022-12](../../../../../docs/design/261022-12-snack-bar-pixel-art.md). 붕어빵 가게(`games/fish-bun/assets/fonts/dnf-bitbit-v2/`)와 같은 파일이다.
