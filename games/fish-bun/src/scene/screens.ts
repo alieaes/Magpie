@@ -480,6 +480,10 @@ export function buildSettleScreen(o: SettleScreenOptions): Phaser.GameObjects.Co
     root.add(upgrades);
   }
   // 세로 배치는 높이가 화면 비율에 따라 달라지므로 카드·버튼 묶음을 세로 가운데에 둔다
-  if (portrait) root.setY(Math.max(0, Math.round((height - (by + 50 - card.y)) / 2) - card.y));
+  // 내용이 화면보다 길면(메뉴별 판매 줄 등) 통째로 줄여 버튼까지 한 화면에 넣는다. 스크롤은 없다
+  const contentH = by + 50 - card.y;
+  const fit = Math.min(1, (height - 32) / contentH);
+  root.setScale(fit);
+  if (portrait || fit < 1) root.setPosition(Math.round((width * (1 - fit)) / 2), Math.max(0, Math.round((height - contentH * fit) / 2) - card.y * fit));
   return root;
 }
