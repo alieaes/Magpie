@@ -10,6 +10,7 @@ import {
   HEAT_START,
   KINDS,
   LAST_ARRIVAL_TICK,
+  OFFICE_FREE_TICKS,
   MENUS,
   MIN_TAP_GAP,
   REPAIR_HITS,
@@ -169,7 +170,7 @@ describe('굽기', () => {
 });
 
 describe('손님과 판매', () => {
-  it('손님은 시드대로 온다. 자리가 없으면 기다렸다가, 마감 30초 전부터는 오지 않는다', () => {
+  it('손님은 시드대로 온다. 자리가 없으면 기다렸다가, 마감 10초 전부터는 오지 않는다', () => {
     const a = createDay(initialShopState(), 'arrivals');
     const b = createDay(initialShopState(), 'arrivals');
     run(a, 3000);
@@ -641,5 +642,26 @@ describe('강화', () => {
     expect(up.params.prices).toEqual([160, 200, 240]);
     expect(up.params.goldChance).toBe(150);
     expect(up.params.shelfCap).toBe(16);
+  });
+});
+
+describe('초반과 막다른 길', () => {
+  it('하루를 연 뒤 20초 동안은 바쁜 직장인이 오지 않는다', () => {
+    for (let n = 0; n < 40; n += 1) {
+      const sim = createDay({ ...initialShopState(), reputation: 30 }, `office-${n}`);
+      run(sim, OFFICE_FREE_TICKS);
+      for (const c of sim.seats) expect(c?.kind).not.toBe('office');
+    }
+  });
+
+  it('돈이 바닥나 빵도 빵틀도 없으면 팥 반죽 한 번은 거저 부어진다', () => {
+    const sim = createDay(initialShopState(), 'stuck');
+    sim.money = 10;
+    must(sim, OP.tap, tapArg(0, 0));
+    expect(sim.molds[0]!.phase).toBe('bottom');
+    expect(sim.money).toBe(10);
+    // 이미 굽는 틀이 있으면 돈이 모자란 붓기는 막힌다
+    run(sim, MIN_TAP_GAP);
+    expect(applyInput(sim, OP.tap, tapArg(1, 0))).toEqual({ ok: false, reason: 'no_money' });
   });
 });

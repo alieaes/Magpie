@@ -77,6 +77,8 @@ interface CustomerView {
   extra: Button;
   waitShown: boolean;
   lineTimer: Phaser.Time.TimerEvent | null;
+  /** 말풍선 상자의 가운데 높이 (떠날 때 대사를 가운데에 놓는다) */
+  bubbleMid: number;
 }
 
 /** 메뉴를 알아맞혀야 하는 손님에게 줄 때 뜨는 메뉴 고르기 */
@@ -158,6 +160,8 @@ export class DayView {
   private pumpTween: Phaser.Tweens.Tween | null = null;
   private gauge!: Phaser.GameObjects.Graphics;
   private heatText!: Phaser.GameObjects.Text;
+  /** 화력 문구를 마지막으로 정한 값 (바뀔 때만 다시 잰다) */
+  private heatKey = '';
   private comboText!: Phaser.GameObjects.Text;
   private shownCombo = 0;
   private info: Phaser.GameObjects.Text | null = null;
@@ -491,20 +495,29 @@ export class DayView {
     // 메뉴를 알아맞혀야 하는 손님은 메뉴 아이콘 대신 "?"(수수께끼 손님은 성격 아이콘이 곧 "?"라 하나만)
     const trait = TRAIT_ICON[customer.kind];
     const menuIcon: IconName | null = guesses ? (customer.kind === 'tourist' ? 'question' : null) : this.menus > 1 ? MENU_ICON[customer.menu]! : null;
-    const countX = trait && menuIcon ? 40 : trait || menuIcon ? 18 : 0;
-    const count = this.scene.add.text(countX, rowY, `${customer.order}개`, textStyle(40, 0x3a2410, '900')).setOrigin(0.5);
+    const count = this.scene.add.text(0, rowY, `${customer.order}개`, textStyle(40, 0x3a2410, '900')).setOrigin(0.5);
     bubble.add([bubbleBg, count, line]);
     // 메뉴 아이콘은 성격 아이콘보다 크게 해서 둘이 섞여 보이지 않게 한다
-    if (trait) bubble.add(this.scene.add.image(menuIcon ? -80 : -60, rowY, TEX.icon(trait)).setScale(menuIcon ? 0.45 : 0.55));
-    if (menuIcon) bubble.add(this.scene.add.image(trait ? -30 : -46, rowY, TEX.icon(menuIcon)).setScale(0.8));
+    const icons: Phaser.GameObjects.Image[] = [];
+    if (trait) icons.push(this.scene.add.image(0, rowY, TEX.icon(trait)).setScale(menuIcon ? 0.45 : 0.75));
+    if (menuIcon) icons.push(this.scene.add.image(0, rowY, TEX.icon(menuIcon)).setScale(0.8));
+    bubble.add(icons);
+    // 윗줄(아이콘들 + 개수)을 말풍선 가운데에 한 묶음으로 놓는다
+    const gap = 10;
+    let cursor = -(icons.reduce((sum, icon) => sum + icon.displayWidth + gap, 0) + count.width) / 2;
+    for (const icon of icons) {
+      icon.setX(cursor + icon.displayWidth / 2);
+      cursor += icon.displayWidth + gap;
+    }
+    count.setX(cursor + count.width / 2);
     const root = this.scene.add.container(x, 0, [person, bubble]);
     this.peopleLayer.add(root);
 
     const patience = this.scene.add.graphics();
     const give = new Button(this.scene, {
-      x: x - 34,
+      x: x - 48,
       y: this.boardTop + 96,
-      width: 140,
+      width: 112,
       height: 72,
       label: `${customer.order}개 주기`,
       sub: '',
@@ -512,23 +525,23 @@ export class DayView {
       palette: this.palette,
       fontSize: 24,
       onPress: () => (guesses ? this.requestChooser(seat, false) : this.handlers.sell(seat, false, customer.menu)),
-      onDenied: () => this.denied(x - 34, this.boardTop + 70, 'no_stock'),
+      onDenied: () => this.denied(x - 48, this.boardTop + 70, 'no_stock'),
     });
     const extra = new Button(this.scene, {
-      x: x + 72,
+      x: x + 58,
       y: this.boardTop + 96,
-      width: 64,
+      width: 88,
       height: 72,
-      label: '+1',
-      sub: '덤',
+      label: '+1 덤',
+      sub: '',
       style: 'warm',
       palette: this.palette,
-      fontSize: 26,
+      fontSize: 24,
       onPress: () => (guesses ? this.requestChooser(seat, true) : this.handlers.sell(seat, true, customer.menu)),
-      onDenied: () => this.denied(x + 72, this.boardTop + 70, 'no_stock'),
+      onDenied: () => this.denied(x + 58, this.boardTop + 70, 'no_stock'),
     });
     this.uiLayer.add([patience, give, extra]);
-    const view: CustomerView = { customer, root, person, bubble, count, line, patience, give, extra, waitShown: false, lineTimer: null };
+    const view: CustomerView = { customer, root, person, bubble, count, line, patience, give, extra, waitShown: false, lineTimer: null, bubbleMid: (top + 52) / 2 };
     // 메뉴를 돌려 말한 대사는 단서라서 지우지 않는다
     if (!guesses) view.lineTimer = this.scene.time.delayedCall(2200, () => this.fadeLine(view));
     if (animate) {
@@ -623,10 +636,11 @@ export class DayView {
     view.patience.destroy();
     view.person.setTexture(TEX.person(view.customer.kind, view.customer.id % 2, face));
     if (line) {
-      view.count.setVisible(false);
+      // 개수·아이콘을 모두 치우고 대사만 상자 가운데에 둔다 (아이콘이 남으면 글자와 겹친다)
+      for (const item of view.bubble.list) if (item !== view.line && !(item instanceof Phaser.GameObjects.Graphics)) (item as Phaser.GameObjects.Image).setVisible(false);
       view.lineTimer?.remove();
       this.scene.tweens.killTweensOf(view.line);
-      view.line.setText(line).setAlpha(1).setY(0).setFontSize(22);
+      view.line.setText(line).setAlpha(1).setFontSize(22).setY(view.bubbleMid);
     } else {
       view.bubble.setVisible(false);
     }
@@ -1103,8 +1117,17 @@ export class DayView {
     const color = heat < 0.3 ? 0x5aa5e8 : heat < 0.7 ? 0xf2a03d : 0xe5414a;
     meter(this.gauge.clear(), x, y, w, 28, heat, this.palette.surfaceHover, color);
     const speed = cookSpeed(sim.heat) / 100;
-    const label = `화력 ${Math.round(heat * 100)}% · 굽는 속도 ×${speed.toFixed(1)}`;
-    if (this.heatText.text !== label) this.heatText.setText(label);
+    const pct = Math.round(heat * 100);
+    const times = speed.toFixed(1);
+    // 계기 칸(불꽃 아이콘 오른쪽)에 들어가는 가장 긴 문구를 쓴다. 글자 크기는 도트 격자라 줄이지 못한다
+    const room = gauge.w - 64 - 16;
+    if (this.heatKey !== `${pct}|${times}|${room}`) {
+      this.heatKey = `${pct}|${times}|${room}`;
+      for (const label of [`화력 ${pct}% · 속도 ×${times}`, `화력 ${pct}% · ×${times}`, `${pct}% · ×${times}`]) {
+        this.heatText.setText(label);
+        if (this.heatText.width <= room) break;
+      }
+    }
     this.sfx.setSizzle(sim.molds.filter((m) => m.phase !== 'empty').length);
     if (sim.combo !== this.shownCombo) {
       this.shownCombo = sim.combo;

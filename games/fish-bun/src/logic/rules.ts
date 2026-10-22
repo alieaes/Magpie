@@ -29,8 +29,10 @@ export const DAY_TICKS = 10_800;
 /** 게임 시계 1분 = 15틱. 10:00에 열고 22:00에 닫는다 */
 export const TICKS_PER_GAME_MINUTE = 15;
 export const OPEN_MINUTE = 10 * 60;
-/** 마감 30초 전(21:30)부터 새 손님이 오지 않는다 */
-export const LAST_ARRIVAL_TICK = DAY_TICKS - 30 * 60;
+/** 마감 10초 전(21:20)부터 새 손님이 오지 않는다. 그 전까지는 계속 온다 */
+export const LAST_ARRIVAL_TICK = DAY_TICKS - 10 * 60;
+/** 하루를 연 뒤 20초 동안은 바쁜 직장인(타임어택 손님)이 오지 않는다. 첫 빵이 구워지기 전에 기다림이 끝나지 않게 */
+export const OFFICE_FREE_TICKS = 20 * 60;
 /** 하루를 시작할 때 돈이 이보다 적으면 이만큼 채운다 */
 export const SUBSIDY_FLOOR = 500;
 /** 카운터 자리 */
@@ -416,7 +418,10 @@ export function advance(sim: DaySim): void {
     const seat = sim.seats.indexOf(null);
     if (seat >= 0) {
       // 뽑는 순서(손님 → 다음 간격)를 바꾸면 저장된 하루의 재계산이 달라진다
-      const { kind, menu, lang, order } = drawCustomer(sim.customersRng, sim.repLevel, params.menus);
+      const drawn = drawCustomer(sim.customersRng, sim.repLevel, params.menus);
+      const { menu, lang, order } = drawn;
+      // 뽑은 값(난수 순서)은 그대로 두고, 초반의 직장인만 동네 손님으로 바꾼다
+      const kind: CustomerKind = drawn.kind === 'office' && sim.tick < OFFICE_FREE_TICKS ? 'regular' : drawn.kind;
       const customer: Customer = { id: sim.nextId, kind, menu, lang, order, patience: KINDS[kind].patience, waited: 0 };
       sim.nextId += 1;
       sim.seats[seat] = customer;
@@ -479,9 +484,12 @@ function tap(sim: DaySim, arg: number): InputResult {
   if (mold.phase === 'empty') {
     if (menu >= sim.params.menus) return { ok: false, reason: 'locked_menu' };
     const cost = MENUS[menu]!.cost;
-    if (sim.money < cost) return { ok: false, reason: 'no_money' };
-    sim.money -= cost;
-    sim.stats.doughCost += cost;
+    // 돈이 바닥나 굽는 틀도 진열대 빵도 없으면 더 벌 길이 없다: 이때는 팥 반죽 한 번을 거저 준다
+    const stuck = menu === 0 && sim.money < cost && shelfCount(sim) === 0 && sim.molds.every((m) => m.phase === 'empty');
+    if (sim.money < cost && !stuck) return { ok: false, reason: 'no_money' };
+    const paid = stuck ? 0 : cost;
+    sim.money -= paid;
+    sim.stats.doughCost += paid;
     sim.stats.pours += 1;
     mold.phase = 'bottom';
     mold.bottom = 0;

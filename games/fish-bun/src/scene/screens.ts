@@ -362,7 +362,6 @@ export interface SettleScreenOptions {
   status: SettleStatus;
   onRetry(): void;
   onUpgrades(): void;
-  onNextDay(): void;
   onLogin(): void;
   onRetryTrial(): void;
 }
@@ -475,11 +474,10 @@ export function buildSettleScreen(o: SettleScreenOptions): Phaser.GameObjects.Co
     root.add(new Button(scene, { x: bx1, y: by, width: bw, height: 100, label: '다시 체험하기', style: 'secondary', palette: p, fontSize: 30, onPress: o.onRetryTrial }));
     root.add(new Button(scene, { x: bx2, y: by, width: bw, height: 100, label: '로그인하고 저장', style: 'primary', palette: p, fontSize: 30, onPress: o.onLogin }));
   } else {
-    const upgrades = new Button(scene, { x: bx1, y: by, width: bw, height: 100, label: '가게 꾸리기', style: 'secondary', palette: p, fontSize: 30, onPress: o.onUpgrades });
-    const next = new Button(scene, { x: bx2, y: by, width: bw, height: 100, label: '다음 날 장사', style: 'primary', palette: p, fontSize: 30, onPress: o.onNextDay });
+    // 강화를 놓치고 바로 다음 날로 넘어가지 않게, 정산 뒤에는 가게 꾸리기를 거쳐 가게에서 장사를 시작한다
+    const upgrades = new Button(scene, { x: width / 2, y: by, width: portrait ? width - 48 : 560, height: 100, label: '가게 꾸리기', style: 'primary', palette: p, fontSize: 34, onPress: o.onUpgrades });
     upgrades.setEnabled(s.kind !== 'saving');
-    next.setEnabled(s.kind !== 'saving');
-    root.add([upgrades, next]);
+    root.add(upgrades);
   }
   // 세로 배치는 높이가 화면 비율에 따라 달라지므로 카드·버튼 묶음을 세로 가운데에 둔다
   if (portrait) root.setY(Math.max(0, Math.round((height - (by + 50 - card.y)) / 2) - card.y));

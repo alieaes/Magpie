@@ -161,6 +161,8 @@ export class FishBunScene extends Phaser.Scene {
    * 캔버스 크기를 바꾸고 지금 화면을 다시 그린다(장사 중 상태는 그대로). 높이 차이가 작으면 그대로 둔다
    */
   setStage(layout: Layout, aspect?: number): void {
+    // 장면이 아직 뜨기 전(첫 크기 알림)이면 create가 처음 크기로 그린다
+    if (!this.scale) return;
     const { width, height } = canvasSize(layout, aspect);
     if (layout === this.layout && Math.abs(height - this.scale.height) < STAGE_HEIGHT_STEP) return;
     this.layout = layout;
@@ -232,10 +234,6 @@ export class FishBunScene extends Phaser.Scene {
           status: s.status,
           onRetry: () => void this.submitDay(),
           onUpgrades: () => this.click(() => this.show('upgrades')),
-          onNextDay: () => {
-            this.settlement = null;
-            void this.startDay();
-          },
           onLogin: () => this.opts.session.requestLogin(),
           onRetryTrial: () => this.click(() => this.retryTrial()),
         });
@@ -416,8 +414,13 @@ export class FishBunScene extends Phaser.Scene {
   /** 오늘 장사 그만두기: 그날은 저장하지 않고 가게로 (서버의 열린 판은 다음 시작이나 하루 뒤 정리된다) */
   private quitDay(): void {
     this.opts.sfx.click();
+    this.run?.view?.releaseAll();
     this.run?.view?.destroy();
+    // 그날 입력·정산은 보내지도 남기지도 않는다
     this.run = null;
+    this.settlement = null;
+    this.opts.sfx.setPumping(false);
+    this.opts.sfx.setSizzle(0);
     this.opts.onDayActive?.(false);
     this.show('shop');
   }

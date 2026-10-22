@@ -36,7 +36,7 @@ interface KindDef {
 export const KINDS: Readonly<Record<CustomerKind, KindDef>> = {
   regular: { order: [1, 3], patience: 20 * 60 },
   kid: { order: [1, 1], patience: 20 * 60 },
-  office: { order: [1, 2], patience: 10 * 60 },
+  office: { order: [1, 2], patience: 15 * 60 },
   elder: { order: [2, 3], patience: 30 * 60 },
   creator: { order: [3, 5], patience: 20 * 60 },
   reviewer: { order: [1, 2], patience: 20 * 60 },
