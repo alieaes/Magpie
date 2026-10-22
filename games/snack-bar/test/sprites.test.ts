@@ -98,7 +98,7 @@ describe('도트 그림 약속', () => {
     expect(guestArtKey(0, 'normal', 'front', 7, false, 'sit')).toBe(guestArtKey(0, 'normal', 'front', 1, false, 'sit'));
   });
 
-  it('고정 그림은 키가 겹치지 않고 가구·조리대·접시·쟁반·아이콘을 모두 굽는다', () => {
+  it('고정 그림은 키가 겹치지 않고 가구·조리대·접시·메뉴 그림·쟁반·아이콘을 모두 굽는다', () => {
     const keys = staticArts().map((a) => a.key);
     expect(new Set(keys).size).toBe(keys.length);
     const props: PropName[] = ['table', 'tableDirty', 'tableLocked', 'chair', 'floorA', 'floorB', 'wall', 'window', 'door', 'menuBoard', 'shopFront'];
@@ -107,6 +107,7 @@ describe('도트 그림 약속', () => {
     for (const m of [...MENU_ART, 'water', 'trash', 'locked']) expect(keys).toContain(`station:${m}`);
     for (const m of [...MENU_ART, 'water', 'empty']) expect(keys).toContain(`dish:${m}`);
     for (const m of [...MENU_ART, 'water']) expect(keys).toContain(`dishMini:${m}`);
+    for (const m of [...MENU_ART, 'water']) expect(keys).toContain(`menuIcon:${m}`);
     for (const n of TRAY_SLOTS) expect(keys).toContain(`tray:${n}`);
     for (const i of ICON_NAMES) expect(keys).toContain(`icon:${i}`);
   });
@@ -144,7 +145,8 @@ describe('그림 규칙', () => {
     for (const k of ['floorA', 'floorB', 'wall']) expectSize(`prop:${k}`, 8, 8);
     for (const m of [...MENU_ART, 'water', 'trash', 'locked']) expectSize(`station:${m}`, 24, 24);
     for (const m of [...MENU_ART, 'water', 'empty']) expectSize(`dish:${m}`, 10, 8);
-    for (const m of [...MENU_ART, 'water']) expectSize(`dishMini:${m}`, 6, 5);
+    for (const m of [...MENU_ART, 'water']) expectSize(`dishMini:${m}`, 6, 6);
+    for (const m of [...MENU_ART, 'water']) expectSize(`menuIcon:${m}`, 16, 14);
     for (const i of ICON_NAMES) expectSize(`icon:${i}`, 9, 9);
   });
 

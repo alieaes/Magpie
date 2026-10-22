@@ -1,4 +1,4 @@
-// 주방 그림: 조리대(24 × 24), 접시(10 × 8), 작은 접시(6 × 5), 쟁반(칸 3~6), 아이콘(9 × 9)
+// 주방 그림: 조리대(24 × 24), 접시(10 × 8), 작은 접시(6 × 6), 메뉴 그림(16 × 14), 쟁반(칸 3~6), 아이콘(9 × 9)
 // 근거: docs/design/261022-12-snack-bar-pixel-art.md §2, docs/design/261022-09-snack-bar.md §6
 // 시안: draft-sprites.py의 PAN_STATION·DISH_*·tray_with·CUP·HEART
 
@@ -34,86 +34,103 @@ function counter(tag?: string): Grid {
   return c;
 }
 
-/** 떡볶이 철판 */
-const PAN = g([
-  '.gggggggggggggggggggg.',
-  'gEEEEEEEEEEEEEEEEEEEEg',
-  'gERRtRRRRRtRRRRRtRRREg',
-  'gERWWRRtRWWRRCCRWWRREg',
-  'gERRRWWRRRRRRRCRRRtREg',
-  'gERtRRRRWWRRtRRRWWRREg',
-  'gERRCCRRRRRRWWRRRRRREg',
-  'gERRRCRRtRRRRRRRtRRREg',
-  'gEEEEEEEEEEEEEEEEEEEEg',
-  '.gggggggggggggggggggg.',
-]);
-
-/** 김밥 한 줄을 썬 단면(5 × 5) */
-const KIMBAP_SLICE = g(['.EEE.', 'EWWWE', 'EWYVE', 'EWOWE', '.EEE.']);
-
-/** 순대 찜기: 뚜껑을 연 둥근 찜통에 순대가 똬리 */
-const STEAMER = g([
-  '....ssssssssssss....',
-  '..ssWWWWWWWWWWWWss..',
-  '.sWggmgggggmggggWs..',
-  'sWgmggLLggmgLLggmWs.',
-  'sWgggLggLgggggLggWs.',
-  '.sWggmggggLLggmgWs..',
-  '..ssWWWWWWWWWWWWss..',
-  '..mssssssssssssssm..',
-  '..mmmmmmmmmmmmmmmm..',
-  '...mssssssssssssm...',
-]);
-
-/** 라면 냄비(노란 양은 냄비)와 화구 */
-const RAMEN_POT = g([
-  '....YYYYYYYYYYYY....',
-  '..YYOOOCOOOOCOOOYY..',
-  '.YOOCCOOCVOOOCCOOOY.',
-  'oYOCOOOOOOWYOOCOOOYo',
-  'oYOOOCCOVOOOCOOVOOYo',
-  '.YYOOOOOCOOOOOOOOYY.',
-  '..YYYYYYYYYYYYYYYY..',
-  '..OYYYYYYYYYYYYYYO..',
-  '...OOOOOOOOOOOOOO...',
-  '.gggggggggggggggggg.',
-]);
-
-/** 튀김기: 기름 통과 철망 바구니 */
-const FRYER = g([
-  'gggggggggggggggggggggg',
-  'gEEEEEEEEEEEEEEEEEEEEg',
-  'gEYYOYYYYsssssssssYYEg',
-  'gEYYYYOYYsOoOYOosYYYEg',
-  'gEYOYYYYYsoOYOOOsYOYEg',
-  'gEYYYYYOYsOYoOoOsYYYEg',
-  'gEYYOYYYYsssssssssYYEg',
-  'gEEEEEEEEEEEEEEEEEEEEg',
-  'gggggggggggggggggggggg',
-]);
-
-/** 물통(하늘색 물통과 꼭지) */
-const WATER_JUG = g([
-  '..ssss..',
-  '.ssssss.',
-  '11111111',
-  '1W111111',
-  '1W111111',
-  '1W111111',
-  '11111111',
-  '11111111',
-  '.111111.',
-]);
-
-/** 단무지 통 */
-const DANMUJI_TUB = g([
-  '.WWWWWWWWWW.',
-  'WYYoYYYYoYYW',
-  'WYoYYYYYYoYW',
-  'WYYYYoYYYYYW',
-  'wWWWWWWWWWWw',
-  '.wwwwwwwwww.',
-]);
+/**
+ * 조리대 위 음식(공통 받침 위에 겹치는 격자, 받침과 같은 칸은 '.'). 음식마다 한눈에 알아볼 특징 하나:
+ * 떡볶이 철판의 떡 원통·어묵·파, 도마 위 김밥 단면과 칼, 찜기 속 순대 줄과 썬 단면, 양은 냄비의 꼬불 면·달걀,
+ * 기름 통과 새우튀김(꼬리)·고구마튀김(보라 껍질) 진열, 물통과 단무지 통
+ */
+const STATION_FOOD: Record<MenuArt | 'water', readonly string[]> = {
+  tteok: [
+    '..gggggggggggggggggggg..',
+    '.gEEErrrrVEEEEEEEErrrEg.',
+    '.gERrWPPPtrRrrrrrrWPtrg.',
+    '.gERrtKKttrrWPPPtrtttrg.',
+    '.gERRrCKrrRrtttttrrrVEg.',
+    '.gERrrrrrRRRvrrrrrrrrEg.',
+    '.gErWPPPtrrrrrrrWPPPtrg.',
+    '.gErtttttrWPPPtrtKKKtrg.',
+    '.gERrrrrrrtttttrrKCKrEg.',
+    '.gErVrrrrrrrrVrrrrrrrEg.',
+    '.gEEEEEEEEEEEEEEEEEEEEg.',
+    '..gggggggggggggggggggg..',
+  ],
+  kimbap: [
+    '.EEEEEEEEEEEEEEE........',
+    'EEWWWEEWWWWEEEEEE.......',
+    'EEWYOEEWYOEEWWWWEE......',
+    'EEWVtEEWVtEEWYOWEE......',
+    'EEWWEEEEWEEEEVtWEE......',
+    '.EEEEEEEEEEEEEWWEEKKKKK.',
+    'EEEEWWWEEWWWWEEEEKKKKKK.',
+    '.EEEWYOEEWYOWEEEEEEEEEK.',
+    '.KEEWVtEEWVtWEE.....JJE.',
+    '.KEEWWWEEWWWWEEsssssEEK.',
+    '.KKEEEEEEEEEEEKEEEEEJJK.',
+    '.JEEEEEEEEEEEEEJJJJJJJJ.',
+    '.JJEEEEEEEEEEEJJJJJJJJJ.',
+  ],
+  sundae: [
+    '...JJEEEEEEEEEEJJJJJJ...',
+    '.JKKEmmmmmmmmmgEKKKKKKJ.',
+    '.JKaEgggggggEEEEEEEEaKJ.',
+    '.JKaEEEEEEEEEmmmmmmgEKJ.',
+    '.JKEmmmmmmmmgEggggggEKJ.',
+    '.JKEgggggggggEMMMMMMEKJ.',
+    '.JKEMMMMMMMMMEEEEEEEaKJ.',
+    '.JKKEEEEEEEEEEgggEEEEKJ.',
+    '..KKKKKKKKKKEgM.MEgggE..',
+    '..JJJJJJJJJJEg.MEgM.MgE.',
+    '..KKKKKKKKKKEgMgEg.MggE.',
+    '..KJJJJJJJJJJEggEgMg.gE.',
+    '..............EEEEgggE..',
+    '..................EEE...',
+  ],
+  ramen: [
+    '........................',
+    '.....YYYYYYYYYYYYYY.....',
+    '...YYOOOOOOOOOOOOOOYY...',
+    '..YYCCRCCRCCVCCRWWWWYY..',
+    '.oYRRCCRCCRCCRCWWYYWWYo.',
+    '.oYRCCRCCRCCRCCRWWWWRYo.',
+    '..YYRRVRRVRRRRRRRVRRYY..',
+    '...YYYYRRRRRRRRRRYYYY...',
+    '...YYYYYYYYYYYYYYYYYY...',
+    '...YOYYYYYYYYYYYYYYOY...',
+    '...YYYYYYYYYYYYYYYYYY...',
+    '....OOOOOOOOOOOOOOOO....',
+    '..gggggggggggggggggggg..',
+  ],
+  fried: [
+    '.......EE...............',
+    '......EggE.......tt.....',
+    '......EgE.......tRt..tt.',
+    '......EgE......YOt..tRt.',
+    '.......gg.....YOYO.YOt..',
+    'gggggggggg...YOYOYYOEEE.',
+    'gEEEEEEEEg..YOYOYYOE444E',
+    'gEYYWYYYEg.OYOYOYOE4YYY4',
+    'gEYOYYWYEg.YOYOOYOE4YOY4',
+    'gEYYYOYYEg.WWWWYOYE4YYY4',
+    'gEEEEEEEEg.WWWWWWWWE444E',
+    'gggggggggg.WWWWW.WWWEEEW',
+    '...........W.WWWWWWW.WWW',
+  ],
+  water: [
+    '....EEEE................',
+    '...EssssE...............',
+    '..EssssssE..............',
+    '.E11111111E.............',
+    '.E1W111111E.............',
+    '.E1W111111E.EEEEEEEEEE..',
+    '.E1W111111EEWWWWWWWWWWE.',
+    '.E11111111EWYYOYYYOYYYWE',
+    '.E11111111EWOYYYOYYYOYWE',
+    '..E111111EEWYYOYYYOYYYWE',
+    '...EEssEE.E.WWWWWWWWWW.E',
+    '.....s.....E..........E.',
+    '............EEEEEEEEEE..',
+  ],
+};
 
 /** 쓰레기통(조리대 없이 서 있다) */
 const TRASH_BIN = g([
@@ -167,40 +184,7 @@ function lockedStation(): Grid {
 export function stationGrid(name: MenuArt | 'water' | 'trash' | 'locked'): Grid {
   if (name === 'trash') return stamp(blank(STATION_SIZE, STATION_SIZE), TRASH_BIN, 3, 7);
   if (name === 'locked') return lockedStation();
-  const c = counter(STATION_TAG[name]);
-  switch (name) {
-    case 'tteok':
-      stamp(c, PAN, 1, 2);
-      break;
-    case 'kimbap': {
-      put(c, rect(2, 5, 21, 10), 'K');
-      put(c, rect(2, 11, 21, 12), 'J');
-      put(c, [[5, 10], [6, 10], [16, 6], [17, 6], [12, 11]], 'J');
-      // 썰기 전 김밥 한 줄 + 썬 단면 둘
-      stampOutlined(c, g(['ggggggg', 'EEEEEEE', 'EEEEEEE', 'EEEEEEE', 'EEEEEEE']), 3, 5);
-      stampOutlined(c, KIMBAP_SLICE, 9, 5);
-      stampOutlined(c, KIMBAP_SLICE, 15, 4);
-      stampOutlined(c, KIMBAP_SLICE, 16, 8);
-      break;
-    }
-    case 'sundae':
-      stamp(c, STEAMER, 2, 1);
-      break;
-    case 'ramen':
-      stamp(c, RAMEN_POT, 2, 1);
-      put(c, [[4, 11], [8, 11], [12, 11], [16, 11], [19, 11]], 'R');
-      break;
-    case 'fried':
-      stamp(c, FRYER, 1, 2);
-      stampOutlined(c, g(['gg', 'g.', 'g.']), 19, 0);
-      break;
-    case 'water':
-      stampOutlined(c, WATER_JUG, 2, 1);
-      put(c, [[5, 10], [6, 10], [5, 11]], 's'); // 꼭지
-      stampOutlined(c, DANMUJI_TUB, 11, 6);
-      break;
-  }
-  return c;
+  return stamp(counter(STATION_TAG[name]), g(STATION_FOOD[name]), 0, 0);
 }
 
 // ---------------------------------------------------------------- 접시
@@ -290,21 +274,136 @@ export function dishGrid(name: MenuArt | 'water' | 'empty'): Grid {
 
 /** 작은 접시 크기(작은 도트, 테두리 제외) */
 export const MINI_W = 6;
-export const MINI_H = 5;
+export const MINI_H = 6;
 
-/** 쟁반 위·쟁반 칸에 보이는 작은 접시 */
+/** 머리 위 쟁반에 얹는 작은 접시: 큰 메뉴 그림(MENU_ICONS)을 줄인 모양(떡 원통, 김밥 단면, 순대, 냄비, 새우·고구마) */
 const MINI: Record<MenuArt | 'water', readonly string[]> = {
-  tteok: ['.RRRR.', 'RWRtWR', 'RRWWRR', 'WWWWWW', '.wwww.'],
-  kimbap: ['.EEEE.', 'EWWWWE', 'EWYOWE', 'WEEEEW', '.wwww.'],
-  sundae: ['.gggg.', 'gmgmgg', 'ggmgmg', 'WWWWWW', '.wwww.'],
-  ramen: ['YYYYYY', 'YOCOCY', 'YCOVOY', 'oYYYYo', '.OOOO.'],
-  fried: ['.OO...', 'OYOoO.', 'oOYOOO', 'WWWWWW', '.wwww.'],
-  water: ['WW....', '11.YY.', '1WYYYY', '11WWWW', '11.ww.'],
+  tteok: ['.rrrr.', 'rWPPtr', 'RrrrrR', 'RWPtVR', 'WRRRRW', '.wwww.'],
+  kimbap: ['.EEEE.', 'EWWWWE', 'EWYOWE', 'EWVtWE', '.EEEE.', 'EEEEEE'],
+  sundae: ['.EEEE.', 'EmmmgE', 'EMMMME', '.EEE..', 'WgwgMW', '.wwww.'],
+  ramen: ['.YYYY.', 'YRCCWY', 'YCRVRY', 'oYYYYo', '.YYYY.', '..OO..'],
+  fried: ['....t.', '...Yt.', '..YO44', '.YO4Y4', 'WOYW44', '.wwww.'],
+  water: ['WW....', '11....', '1W.YY.', '11YYYY', '11WWWW', '11.ww.'],
 };
 
 /** 작은 접시 그림 */
 export function dishMiniGrid(name: MenuArt | 'water'): Grid {
   return g(MINI[name]);
+}
+
+// ---------------------------------------------------------------- 메뉴 그림
+
+/** 메뉴 그림 크기(작은 도트, 테두리 제외) */
+export const MENU_ICON_W = 16;
+export const MENU_ICON_H = 14;
+
+/**
+ * 메뉴 그림: 손님 머리 위 주문 말풍선·화면 아래 쟁반 칸·메뉴 카드에 크게 보이는 음식 그림.
+ * 색이 아니라 모양으로 알아보게 음식마다 특징을 그린다(떡볶이: 소스 속 떡 원통과 어묵, 김밥: 단면 다섯 조각,
+ * 순대: 순대 한 줄·썬 단면·소금, 라면: 양은 냄비에 꼬불 면·달걀, 튀김: 새우튀김 꼬리·고구마 보라 껍질)
+ */
+const MENU_ICONS: Record<MenuArt | 'water', readonly string[]> = {
+  tteok: [
+    '................',
+    '......rrrrr.....',
+    '.....rWPPPtr....',
+    '.....rtttttr....',
+    '..rrrrrrrrrrrr..',
+    '.rWPPPtrrWPPvtr.',
+    '.rtttttrrttttVr.',
+    '..rrrrrrrrrrrr..',
+    '.RRRrWPPtrRKKRR.',
+    'RRVRrttttrRKCKRR',
+    'RRRvRrrrrRVKKKRR',
+    'WRRRRRRRRRRRRRRW',
+    'WWwwwwwwwwwwwwWW',
+    '.WWWWWWWWWWWWWW.',
+  ],
+  kimbap: [
+    '......EEEE......',
+    '.EEEEEWWWWEEEEE.',
+    'EWWWWEWYOWEWWWWE',
+    'EWYOWEWVtWEWYOWE',
+    'EWVtWEWWWWEWVtWE',
+    'EWWEEEEEEEEEEWWE',
+    '.EEWWWWEEWWWWEE.',
+    'EEEWYOWEEWYOWEEE',
+    '.EEWVtWEEWVtWEE.',
+    '..EWWWWEEWWWWE..',
+    '.WwEEEEwwEEEEwW.',
+    'WwEEEEEEEEEEEEwW',
+    'WWwEEEEwwEEEEwWW',
+    '.WWWWWWWWWWWWWW.',
+  ],
+  sundae: [
+    '.............EE.',
+    '....EEEEEEEEEwwE',
+    '..EEgggggggEwWgw',
+    '.EggmmmmmmEwWWWw',
+    'EggggggggggEEEEE',
+    'ggEEEgggggEEEgE.',
+    'EEgggEEEEEgggE..',
+    'EgMwMEggEgMwMgE.',
+    'EgwMEgMwEgwMMgE.',
+    'EgMMEgwMEgMMwgE.',
+    '.EggEgMMwEgggEW.',
+    'WwEEEEgggEEEEwwW',
+    'WWwwwwEEEwwwwwWW',
+    '.WWWWWWWWWWWWWW.',
+  ],
+  ramen: [
+    '................',
+    '...YYYYYYYYYY...',
+    '.YYOOOOOOOOOOYY.',
+    'YYOVRRRRRRRWWWYY',
+    'YRCCRCCRCCWWYYWY',
+    'YRRCCRCCRCRWWWRY',
+    'YYCCRCCRCCRRRVYY',
+    '.YYYvRRRRVRRYYY.',
+    'OOYYYYYYYYYYYYOO',
+    'OOYYYYYYYYYYYYOO',
+    '.YOYYYYYYYYYYOY.',
+    '.YYYYYYYYYYYYYY.',
+    '..OYYYYYYYYYYO..',
+    '...OOOOOOOOOO...',
+  ],
+  fried: [
+    '................',
+    '...........tt...',
+    '......tt..tRt...',
+    '.....tRt.YOt....',
+    '....YOt.YOYO....',
+    '...YOYOYOYOEEE..',
+    '..YOYOYOYOE444E.',
+    '.YOYOOYOYE4YYY4E',
+    'OYOYOYOYOE4YOY4E',
+    'YOYO.....E4YYY4E',
+    'WW.O......E444EW',
+    'WwW.....O..EEEwW',
+    '.WwWWWWWWWWWWwW.',
+    '..wwwwwwwwwwww..',
+  ],
+  water: [
+    '................',
+    '................',
+    'WWWWWW..........',
+    '111111..........',
+    '1W1111..........',
+    '1W1111..........',
+    '1W1111..........',
+    '111111..........',
+    '111111...YYYY...',
+    '111111..YYoYYY..',
+    '111111.WYYYYYYW.',
+    '111111.WWWWWWWW.',
+    '.1111...wwwwww..',
+    '................',
+  ],
+};
+
+/** 메뉴 그림 */
+export function menuIconGrid(name: MenuArt | 'water'): Grid {
+  return g(MENU_ICONS[name]);
 }
 
 // ---------------------------------------------------------------- 쟁반

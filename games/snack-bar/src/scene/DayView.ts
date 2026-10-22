@@ -31,7 +31,7 @@ import {
 } from '../logic/rules';
 import { cellAt, cellCenter, dayGeometry, type DayGeometry, type Layout } from './layout';
 import type { Sfx } from './sound';
-import { MENU_ART, dishKey, dishMiniKey, ensureGuest, ensureStaff, iconKey, propKey, stationKey, trayKey, traySlotOffsets, STAFF_TRAY_Y, type Facing, type GuestFace } from './sprites';
+import { MENU_ART, dishKey, dishMiniKey, ensureGuest, ensureStaff, iconKey, menuIconKey, propKey, stationKey, trayKey, traySlotOffsets, STAFF_TRAY_Y, type Facing, type GuestFace } from './sprites';
 import { cells, framedBox, meter, roundBox, tail, vGradient } from './style';
 import { Button, clockText, mix, num, textStyle, titleStyle, won, type ScenePalette } from './ui';
 
@@ -48,6 +48,8 @@ const FACING: readonly Facing[] = ['up', 'right', 'down', 'left'];
 const NOTHING_TEXT: Record<string, string> = { noMoney: '돈이 모자라요', trayFull: '쟁반이 가득해요', locked: '아직 못 만들어요' };
 /** 깊이: 바닥 < 테이블·사람(화면 y) < 말풍선 < 효과 < 위 정보 줄 */
 const DEPTH = { floor: 0, bubble: 3000, fx: 3500, hud: 4000 } as const;
+/** 머리 위 말풍선 높이의 절반(메뉴 그림 48px + 위아래 여백) */
+const BUBBLE_HALF = 30;
 
 /** 테이블 한 곳의 그림 */
 interface TableArt {
@@ -293,7 +295,7 @@ export class DayView {
       const x = tray.x + (tray.w - rowW) / 2 + col * (w + gap);
       const y = top + row * (h + gap);
       const bg = scene.add.graphics();
-      const dish = scene.add.image(w / 2, h * 0.44, dishMiniKey('water')).setScale(2).setVisible(false);
+      const dish = scene.add.image(w / 2, h * 0.44, menuIconKey('water')).setVisible(false);
       const number = scene.add.text(12, 8, String(i + 1), textStyle(22, p.text2)).setOrigin(0, 0);
       const caption = scene.add.text(w / 2, h - 10, '', textStyle(22, p.accent)).setOrigin(0.5, 1);
       const root = scene.add.container(x, y, [bg, dish, number, caption]).setDepth(DEPTH.hud).setSize(w, h);
@@ -565,10 +567,10 @@ export class DayView {
     const filled = Math.ceil((table.gauge * 10) / table.patience);
     const color = filled >= 6 ? 0x5fbf5a : filled >= 3 ? 0xf2b632 : 0xe0453a;
     const w = 10 * 8 + 9 * 2;
-    cells(g, art.bubble.x - w / 2, art.bubble.y + 30, 10, filled, 8, 2, 0x3a2e2e, color);
+    cells(g, art.bubble.x - w / 2, art.bubble.y + BUBBLE_HALF + 4, 10, filled, 8, 2, 0x3a2e2e, color);
     if (table.mood <= -1) {
       const blink = Math.floor(this.renderTick / 20) % 2 === 0;
-      if (blink) g.fillStyle(0xe0453a, 1).fillRect(art.bubble.x + w / 2 + 6, art.bubble.y + 26, 8, 16);
+      if (blink) g.fillStyle(0xe0453a, 1).fillRect(art.bubble.x + w / 2 + 6, art.bubble.y + BUBBLE_HALF, 8, 16);
     }
     void index;
   }
@@ -576,22 +578,24 @@ export class DayView {
   /** 말풍선 안을 채운다 */
   private fillBubble(bubble: Phaser.GameObjects.Container, table: Table): void {
     const { scene } = this;
-    const items: { key: string; count: number }[] =
+    const items: { key: string; count: number; scale: number }[] =
       table.phase === 'water'
-        ? [{ key: iconKey('cup'), count: 1 }]
-        : table.guests.filter((g) => g.left > 0).map((g) => ({ key: dishMiniKey(MENU_ART[g.menu]!), count: g.left }));
-    const itemW = 52;
-    const w = Math.max(64, items.length * itemW + 16);
+        ? [{ key: iconKey('cup'), count: 1, scale: 1.4 }]
+        : table.guests.filter((g) => g.left > 0).map((g) => ({ key: menuIconKey(MENU_ART[g.menu]!), count: g.left, scale: 1 }));
+    // 칸 하나: 그림 58px + 그릇 수가 있으면 숫자 자리 24px
+    const cellW = (it: { count: number }) => 58 + (it.count > 1 ? 24 : 0);
+    const w = Math.max(72, items.reduce((sum, it) => sum + cellW(it), 0) + 12);
     const bg = scene.add.graphics();
-    framedBox(bg, -w / 2, -26, w, 52, 8, 0xfffaf0, 0x2c1c22);
-    tail(bg, 0, 25, 0x2c1c22);
-    tail(bg, 0, 21, 0xfffaf0);
+    framedBox(bg, -w / 2, -BUBBLE_HALF, w, BUBBLE_HALF * 2, 8, 0xfffaf0, 0x2c1c22);
+    tail(bg, 0, BUBBLE_HALF - 1, 0x2c1c22);
+    tail(bg, 0, BUBBLE_HALF - 5, 0xfffaf0);
     bubble.add(bg);
-    items.forEach((it, k) => {
-      const x = -w / 2 + 8 + k * itemW + itemW / 2;
-      bubble.add(scene.add.image(x - (it.count > 1 ? 8 : 0), 0, it.key).setScale(1.4));
-      if (it.count > 1) bubble.add(scene.add.text(x + 14, 6, `${it.count}`, textStyle(22, 0x2c1c22)).setOrigin(0.5));
-    });
+    let x = -w / 2 + 6;
+    for (const it of items) {
+      bubble.add(scene.add.image(x + 29, 0, it.key).setScale(it.scale));
+      if (it.count > 1) bubble.add(scene.add.text(x + 58 + 10, 6, `${it.count}`, textStyle(22, 0x2c1c22)).setOrigin(0.5));
+      x += cellW(it);
+    }
     bubble.setScale(0.6).setAlpha(0);
     scene.tweens.add({ targets: bubble, scale: 1, alpha: 1, duration: 160, ease: 'Back.easeOut' });
   }
@@ -697,7 +701,7 @@ export class DayView {
         slot.caption.setText('');
         return;
       }
-      slot.dish.setTexture(item === WATER ? dishMiniKey('water') : dishMiniKey(MENU_ART[item]!)).setVisible(true);
+      slot.dish.setTexture(item === WATER ? menuIconKey('water') : menuIconKey(MENU_ART[item]!)).setVisible(true);
       slot.caption.setText(caption);
     });
   }
@@ -724,15 +728,15 @@ export class DayView {
         case 'cooked':
           this.sfx.done();
           this.sparkle(STATION_X, e.station);
-          if (e.slot >= 0) this.fly(e.station, e.slot, dishMiniKey(MENU_ART[e.station]!));
+          if (e.slot >= 0) this.fly(e.station, e.slot, menuIconKey(MENU_ART[e.station]!));
           break;
         case 'pickup':
           this.sfx.serve();
-          this.fly(e.station, e.slot, dishMiniKey(MENU_ART[e.station]!));
+          this.fly(e.station, e.slot, menuIconKey(MENU_ART[e.station]!));
           break;
         case 'fill':
           this.sfx.pour();
-          for (const slot of e.slots) this.fly(WATER_STATION, slot, dishMiniKey('water'));
+          for (const slot of e.slots) this.fly(WATER_STATION, slot, menuIconKey('water'));
           break;
         case 'serveWater':
         case 'serve':
@@ -834,8 +838,8 @@ export class DayView {
     const from = cellCenter(this.g.grid, STATION_X, station);
     const s = this.slots[slot];
     if (!s) return;
-    const img = this.scene.add.image(from.x, from.y - 20, key).setDepth(DEPTH.fx).setScale(1.5);
-    this.scene.tweens.add({ targets: img, x: s.rect.x + s.rect.w / 2, y: s.rect.y + s.rect.h * 0.44, scale: 2, duration: 260, ease: 'Quad.easeIn', onComplete: () => img.destroy() });
+    const img = this.scene.add.image(from.x, from.y - 20, key).setDepth(DEPTH.fx).setScale(0.75);
+    this.scene.tweens.add({ targets: img, x: s.rect.x + s.rect.w / 2, y: s.rect.y + s.rect.h * 0.44, scale: 1, duration: 260, ease: 'Quad.easeIn', onComplete: () => img.destroy() });
   }
 
   /** 가운데 큰 안내 */

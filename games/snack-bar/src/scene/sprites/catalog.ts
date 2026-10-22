@@ -10,6 +10,7 @@ import {
   dishKey,
   dishMiniKey,
   iconKey,
+  menuIconKey,
   propKey,
   stationKey,
   trayKey,
@@ -24,7 +25,7 @@ import {
 } from './index';
 import { width, type Grid } from './grid';
 import { GUEST_LOOK_LIST, guestGrid, guestName } from './guests';
-import { dishGrid, dishMiniGrid, iconGrid, stationGrid, trayGrid } from './kitchen';
+import { dishGrid, dishMiniGrid, iconGrid, menuIconGrid, stationGrid, trayGrid } from './kitchen';
 import { PROP_NAMES, propArt } from './props';
 import { STAFF_LOOKS, staffGrid } from './staff';
 import { CLOTH_COLORS } from './palette';
@@ -86,7 +87,7 @@ export function guestArt(look: number, face: GuestFace, side: 'front' | 'back', 
 /** 고정 그림 목록(처음 부를 때 한 번 만든다) */
 let statics: Art[] | null = null;
 
-/** 고정 그림 전부: 가구·바닥·벽, 조리대, 접시, 작은 접시, 쟁반, 아이콘 */
+/** 고정 그림 전부: 가구·바닥·벽, 조리대, 접시, 작은 접시, 메뉴 그림, 쟁반, 아이콘 */
 export function staticArts(): Art[] {
   statics ??= makeStaticArts();
   return statics;
@@ -102,6 +103,7 @@ function makeStaticArts(): Art[] {
   for (const name of [...MENU_ART, 'water', 'trash', 'locked'] as const) arts.push({ key: stationKey(name), grid: stationGrid(name), dot: DOT, outline: true });
   for (const name of [...MENU_ART, 'water', 'empty'] as const) arts.push({ key: dishKey(name), grid: dishGrid(name), dot: SMALL_DOT, outline: true });
   for (const name of [...MENU_ART, 'water'] as const) arts.push({ key: dishMiniKey(name), grid: dishMiniGrid(name), dot: SMALL_DOT, outline: true });
+  for (const name of [...MENU_ART, 'water'] as const) arts.push({ key: menuIconKey(name), grid: menuIconGrid(name), dot: SMALL_DOT, outline: true });
   for (const n of TRAY_SLOTS) arts.push({ key: trayKey(n), grid: trayGrid(n), dot: SMALL_DOT, outline: true });
   for (const name of ICON_NAMES) arts.push({ key: iconKey(name), grid: iconGrid(name), dot: SMALL_DOT, outline: true });
   return arts;
@@ -192,6 +194,7 @@ function sections(): Section[] {
   const pick = (prefix: string, title: string) =>
     out.push({ title, items: all.filter((a) => a.key.startsWith(prefix)).map((art) => ({ art, label: art.key.slice(prefix.length) })) });
   pick('station:', '조리대');
+  pick('menuIcon:', '메뉴 그림 (주문 말풍선·쟁반 칸·메뉴 카드)');
   pick('dish:', '접시');
   pick('dishMini:', '작은 접시');
   out.push({

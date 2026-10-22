@@ -11,7 +11,7 @@
 // - 직원 72 × 96 (격자 16 × 22). 손님 88 × 80 (격자 20 × 18, 머리 16칸이 가운데, 양옆 2칸은 대식가 어깨·숟가락 팔 자리)
 // - 테이블 104 × 72, 의자 48 × 48, 조리대 104 × 104, 바닥·벽 타일 32 × 32(테두리 없음), 창문 96 × 64(유리 자리는 비어 있음)
 // - 문 80 × 112(위에 종), 메뉴판 168 × 72(글자 없음), 가게 앞모습 264 × 200(간판 글자 없음)
-// - 접시 36 × 30, 작은 접시 24 × 21, 아이콘 33 × 33, 쟁반 (21 × 칸 + 15) × 15
+// - 접시 36 × 30, 작은 접시 24 × 24, 메뉴 그림 54 × 48, 아이콘 33 × 33, 쟁반 (21 × 칸 + 15) × 15
 // 파일: palette(색) · grid(격자 도구) · heads·animals·staff·guests·kitchen·props(그림) · catalog(목록·그림 보기 배치) · bake(굽기) · gallery(그림 보기)
 
 import type Phaser from 'phaser';
@@ -130,9 +130,17 @@ export function dishKey(name: MenuArt | 'water' | 'empty'): string {
   return `dish:${name}`;
 }
 
-/** 쟁반 위·화면 아래 쟁반 칸에 보이는 작은 접시 그림 키 */
+/** 머리 위 쟁반에 얹는 작은 접시 그림 키 (24 × 24px) */
 export function dishMiniKey(name: MenuArt | 'water'): string {
   return `dishMini:${name}`;
+}
+
+/**
+ * 메뉴 그림 키: 손님 머리 위 주문 말풍선·화면 아래 쟁반 칸·메뉴 카드처럼 음식을 알아봐야 하는 자리에 쓰는 큰 그림
+ * (16 × 14 도트, 54 × 48px). 1배로 쓴다(작은 접시를 키워 쓰지 않는다)
+ */
+export function menuIconKey(name: MenuArt | 'water'): string {
+  return `menuIcon:${name}`;
 }
 
 /** 머리 위 쟁반 그림 키 (칸 수 3~6에 맞는 폭, bakeSprites가 3~6을 굽는다) */

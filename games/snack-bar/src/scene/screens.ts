@@ -25,7 +25,7 @@ import {
   type UpgradeKey,
 } from '../logic/rules';
 import type { Layout } from './layout';
-import { MENU_ART, dishMiniKey, ensureStaff, iconKey, propKey, stationKey, trayKey } from './sprites';
+import { MENU_ART, ensureStaff, iconKey, menuIconKey, propKey, stationKey, trayKey } from './sprites';
 import { framedBox, meter } from './style';
 import { Button, num, textStyle, titleStyle, won, type ScenePalette } from './ui';
 
@@ -126,10 +126,10 @@ export function buildShopScreen(o: ShopScreenOptions): Phaser.GameObjects.Contai
   root.add(scene.add.text(lx, cardY + 176, '메뉴', textStyle(22, p.text2)).setOrigin(0, 0.5));
   MENUS.forEach((m, i) => {
     const x = lx + 90 + i * ((cardW - 140) / MENUS.length);
-    const icon = scene.add.image(x, cardY + 176, dishMiniKey(MENU_ART[i]!)).setScale(2);
+    const icon = scene.add.image(x, cardY + 176, menuIconKey(MENU_ART[i]!));
     if (i >= menus) icon.setAlpha(0.25);
     root.add(icon);
-    root.add(scene.add.text(x + 22, cardY + 176, i < menus ? GRADE_NAMES[gradeOf(state.sold[i] ?? 0)]! : `Lv${m.level}`, textStyle(22, i < menus ? p.textStrong : p.text2)).setOrigin(0, 0.5));
+    root.add(scene.add.text(x + 32, cardY + 176, i < menus ? GRADE_NAMES[gradeOf(state.sold[i] ?? 0)]! : `Lv${m.level}`, textStyle(22, i < menus ? p.textStrong : p.text2)).setOrigin(0, 0.5));
   });
   root.add(scene.add.text(lx, cardY + 240, `오늘의 직원 ${STAFF[state.character].name} · ${STAFF[state.character].ability}`, textStyle(22, p.text)).setOrigin(0, 0.5));
   if (state.stats.bestProfit > 0) root.add(scene.add.text(cardX + cardW - 32, cardY + 240, `최고 ${won(state.stats.bestProfit)}`, textStyle(22, p.text2)).setOrigin(1, 0.5));
@@ -223,16 +223,16 @@ export function buildSettleScreen(o: SettleScreenOptions): Phaser.GameObjects.Co
   const sold = MENUS.map((m, i) => ({ m, i, n: stats.sold[i] ?? 0 })).filter((s) => s.n > 0);
   sold.forEach((s, k) => {
     const x = left + (k % 3) * ((right - left) / 3);
-    const yy = y + Math.floor(k / 3) * 44;
-    root.add(scene.add.image(x + 16, yy, dishMiniKey(MENU_ART[s.i]!)).setScale(2));
+    const yy = y + Math.floor(k / 3) * 52;
+    root.add(scene.add.image(x + 27, yy, menuIconKey(MENU_ART[s.i]!)));
     const total = outcome.nextState.sold[s.i] ?? 0;
     const before = gradeOf(o.before.sold[s.i] ?? 0);
     const after = gradeOf(total);
     const left2 = toNextGrade(total);
     const text = `${s.n}그릇 ${GRADE_NAMES[after]}${after > before ? ' 올랐어요' : left2 > 0 ? ` · ${GRADE_NAMES[after + 1]}까지 ${left2}` : ''}`;
-    root.add(scene.add.text(x + 40, yy, text, textStyle(22, after > before ? p.accent : p.textStrong)).setOrigin(0, 0.5));
+    root.add(scene.add.text(x + 62, yy, text, textStyle(22, after > before ? p.accent : p.textStrong)).setOrigin(0, 0.5));
   });
-  y += Math.ceil(sold.length / 3) * 44 + 10;
+  y += Math.ceil(sold.length / 3) * 52 + 10;
   // 경험치·레벨
   const levelUp = outcome.levelAfter > outcome.levelBefore;
   row('경험치', `+${num(outcome.exp)}  Lv${outcome.levelBefore}${levelUp ? ` → Lv${outcome.levelAfter}` : ''}`, levelUp ? p.accent : p.textStrong, 22);
