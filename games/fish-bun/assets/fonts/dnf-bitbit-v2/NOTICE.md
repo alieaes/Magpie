@@ -16,4 +16,5 @@
 
 - 파일을 고치지 않는다. 글자 덜어 내기(서브셋), woff2 등 다른 형식으로 바꾸기, 글꼴 이름 바꾸기를 하지 않는다.
 - 이 안내 파일을 글꼴 파일과 함께 둔다.
-- 쓰는 곳과 출처 표기: [스펙 fish-bun.md](../../../../../docs/spec/fish-bun.md) "도트 그림체" 절, 설계 [261022-04](../../../../../docs/design/261022-04-fish-bun-title-font.md).
+- 출처 표기와 저작권 안내: 게임 설정 → 오픈소스 라이선스(원문 `assets/licenses/dnf-bitbit-v2.md`, 설계 [261023-03](../../../../../docs/design/261023-03-oss-licenses.md)).
+- 쓰는 곳: [스펙 fish-bun.md](../../../../../docs/spec/fish-bun.md) "도트 그림체" 절, 설계 [261022-04](../../../../../docs/design/261022-04-fish-bun-title-font.md).

@@ -121,18 +121,20 @@ function buildHapticsRow(scene: Phaser.Scene, left: number, right: number, y: nu
   return scene.add.container(0, 0, [label, toggle]);
 }
 
-/** 가게 화면의 설정 창: 어둡게 덮고 가운데에 설정 줄과 [닫기] */
+/** 가게 화면의 설정 창: 어둡게 덮고 가운데에 설정 줄, [오픈소스 라이선스], [닫기] */
 export function buildSettingsPanel(
   scene: Phaser.Scene,
   palette: ScenePalette,
   sfx: Sfx,
   onChange: (muted: boolean, volume: number) => void,
   onClose: () => void,
+  onLicenses: () => void,
 ): Phaser.GameObjects.Container {
   const { width, height } = scene.scale;
   const p = palette;
   const cw = Math.min(560, width - 80);
-  const ch = 420 + hapticsRowHeight();
+  // [오픈소스 라이선스] 단추(96)만큼 길다 (docs/design/261023-03-oss-licenses.md §2)
+  const ch = 420 + hapticsRowHeight() + 96;
   const top = height / 2 - ch / 2;
   const dim = scene.add.rectangle(0, 0, width, height, 0x000000, 0.55).setOrigin(0).setInteractive();
   dim.on(Phaser.Input.Events.POINTER_DOWN, onClose);
@@ -141,6 +143,7 @@ export function buildSettingsPanel(
   const blocker = scene.add.rectangle(width / 2, height / 2, cw, ch, 0x000000, 0).setInteractive();
   const title = scene.add.text(width / 2, top + 64, '설정', titleStyle(40, p.textStrong)).setOrigin(0.5);
   const controls = buildSettingRows(scene, { x: width / 2, y: top + 150, width: cw - 80, palette: p, sfx, onChange });
+  const licenses = new Button(scene, { x: width / 2, y: top + ch - 166, width: cw - 80, height: 72, label: '오픈소스 라이선스', style: 'secondary', palette: p, fontSize: 24, onPress: onLicenses });
   const close = new Button(scene, { x: width / 2, y: top + ch - 70, width: cw - 80, height: 80, label: '닫기', style: 'secondary', palette: p, fontSize: 28, onPress: onClose });
-  return scene.add.container(0, 0, [dim, card, blocker, title, controls, close]).setDepth(150);
+  return scene.add.container(0, 0, [dim, card, blocker, title, controls, licenses, close]).setDepth(150);
 }

@@ -426,7 +426,7 @@ export function buildUpgradeScreen(o: UpgradeScreenOptions): Phaser.GameObjects.
   const rows = Math.ceil(UPGRADE_KEYS.length / cols);
   const backY = Math.min(height - 70, top + rows * (cardH + gap) + 60);
   root.add(new Button(scene, { x: width / 2, y: backY, width: Math.min(560, width - 48), height: 76, label: '가게로', style: 'secondary', palette: p, fontSize: 28, onPress: o.onBack }));
-  root.add(scene.add.text(width / 2, height - 6, '글꼴: 던파 비트비트체 v2(넥슨), 갈무리11', textStyle(22, p.text2)).setOrigin(0.5, 1).setAlpha(0.7));
+  // 글꼴 출처는 설정 → 오픈소스 라이선스에 둔다 (docs/design/261023-03-oss-licenses.md)
   return root;
 }
 

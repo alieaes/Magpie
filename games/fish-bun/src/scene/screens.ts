@@ -26,7 +26,7 @@ import {
 import { BUN_H, BUN_W, MOLD_W, SHELF_W, TEX } from './art';
 import type { Layout, Rect } from './layout';
 import { attachScroll } from './scroll';
-import { PIXEL_ART, disc, framedBox, meter, roundBox, vGradient } from './style';
+import { disc, framedBox, meter, roundBox, vGradient } from './style';
 import { Button, num, textStyle, titleStyle, won, type ScenePalette } from './ui';
 
 /** 정산 화면의 저장 상태 */
@@ -346,10 +346,7 @@ export function buildUpgradeScreen(o: UpgradeScreenOptions): Phaser.GameObjects.
     button.setEnabled(!o.trial && check.ok && o.buying === null);
     root.add(button);
   });
-  // 글꼴 출처 (넥슨 서체는 출처 표기를 권장한다. 근거: docs/design/261022-04-fish-bun-title-font.md §3)
-  if (PIXEL_ART) {
-    root.add(scene.add.text(width / 2, scene.scale.height - 30, '글꼴: 던파 비트비트체 v2(넥슨), 갈무리11', textStyle(22, p.text2)).setOrigin(0.5));
-  }
+  // 글꼴 출처는 설정 → 오픈소스 라이선스에 둔다 (docs/design/261023-03-oss-licenses.md)
   return root;
 }
 

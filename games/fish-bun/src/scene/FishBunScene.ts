@@ -30,6 +30,7 @@ import {
 import type { TextureSet } from './art';
 import { DayView } from './DayView';
 import { buildGuidePanel } from './guide';
+import { buildLicenseScreen } from './licenses';
 import { canvasSize, type Layout } from './layout';
 import { REJECT_TEXT, buildSettleScreen, buildShopScreen, buildUpgradeScreen, type SettleStatus } from './screens';
 import { buildSettingRows, buildSettingsPanel, hapticsRowHeight } from './settings';
@@ -102,6 +103,9 @@ export class FishBunScene extends Phaser.Scene {
   private pauseLayer: Phaser.GameObjects.Container | null = null;
   /** 가게 화면의 설정 창 */
   private settingsLayer: Phaser.GameObjects.Container | null = null;
+  /** 설정 창 위 오픈소스 라이선스 화면과 보던 원문(null이면 목록) */
+  private licenseLayer: Phaser.GameObjects.Container | null = null;
+  private license: { item: number | null } | null = null;
   /** 게임 방법 창과 그 상태(연 곳, 보던 쪽). 배치를 다시 그려도 같은 쪽을 다시 연다 */
   private guideLayer: Phaser.GameObjects.Container | null = null;
   private guide: { from: 'shop' | 'pause'; page: number } | null = null;
@@ -176,9 +180,13 @@ export class FishBunScene extends Phaser.Scene {
     this.layout = layout;
     this.scale.setGameSize(width, height);
     const guide = this.guide;
+    const settings = this.settingsLayer !== null;
+    const license = this.license;
     this.show(this.screen);
     if (this.run?.paused) this.showPause();
     if (guide) this.openGuide(guide.from, guide.page);
+    if (settings) this.openSettings();
+    if (license) this.openLicenses(license.item);
   }
 
   /** 화면이 가려지면(탭·앱 전환) 장사를 멈춘다 */
@@ -309,13 +317,45 @@ export class FishBunScene extends Phaser.Scene {
   /** 설정 창을 연다 (가게 화면) */
   private openSettings(): void {
     this.closeSettings();
-    this.settingsLayer = buildSettingsPanel(this, this.opts.palette, this.opts.sfx, (m, v) => this.soundChanged(m, v), () => this.closeSettings());
+    this.settingsLayer = buildSettingsPanel(
+      this,
+      this.opts.palette,
+      this.opts.sfx,
+      (m, v) => this.soundChanged(m, v),
+      () => this.closeSettings(),
+      () => this.click(() => this.openLicenses(null)),
+    );
   }
 
-  /** 설정 창을 닫는다 */
+  /** 설정 창을 닫는다 (위에 뜬 라이선스 화면도) */
   private closeSettings(): void {
+    this.closeLicenses();
     this.settingsLayer?.destroy();
     this.settingsLayer = null;
+  }
+
+  /** 오픈소스 라이선스 화면을 연다 (설정 창 위). 닫으면 설정 창으로 돌아간다 */
+  private openLicenses(item: number | null): void {
+    this.closeLicenses();
+    const license = { item };
+    this.license = license;
+    this.licenseLayer = buildLicenseScreen({
+      scene: this,
+      palette: this.opts.palette,
+      sfx: this.opts.sfx,
+      item,
+      // 설정 창(150)보다 위
+      depth: 170,
+      onItem: (i) => (license.item = i),
+      onClose: () => this.closeLicenses(),
+    });
+  }
+
+  /** 오픈소스 라이선스 화면을 닫는다 */
+  private closeLicenses(): void {
+    this.licenseLayer?.destroy();
+    this.licenseLayer = null;
+    this.license = null;
   }
 
   /** 게임 방법 창을 연다. 멈춤 창에서 열면 닫을 때 멈춤 창으로 돌아간다(시간은 계속 멈춰 있다) */
