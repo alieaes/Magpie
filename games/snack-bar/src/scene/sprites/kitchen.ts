@@ -9,6 +9,8 @@ import { blank, g, put, rect, stamp, stampOutlined, type Grid } from './grid';
 
 /** 조리대 크기(도트) */
 export const STATION_SIZE = 24;
+/** 조리대 앞면 가운데 높이(도트, 받침 앞면 테두리 15~20줄의 가운데) */
+export const STATION_FRONT_MID = 18;
 
 /** 조리대 앞 이름표 색 (메뉴마다) */
 const STATION_TAG: Record<MenuArt | 'water', string> = {

@@ -6,8 +6,8 @@ import Phaser from 'phaser';
 import { BASE_WIPES, DAY_TICKS, MENUS, OPEN_MINUTE, TICKS_PER_GAME_MINUTE } from '../logic/rules';
 import type { Rect } from './layout';
 import type { Sfx } from './sound';
-import { MENU_ART, ensureGuest, ensureStaff, iconKey, menuIconKey, propKey, stationKey } from './sprites';
-import { UI_DOT, cells, disc, framedBox, meter, tail } from './style';
+import { MENU_ART, STATION_FRONT_UP, ensureGuest, ensureStaff, iconKey, menuIconKey, propKey, stationKey } from './sprites';
+import { PANEL_PAD, PATIENCE_W, UI_DOT, disc, framedBox, panelCells, panelWidth, patienceBar, speechBubble } from './style';
 import { Button, textStyle, titleStyle, type ScenePalette } from './ui';
 
 /** 글 한 줄. strong이면 강조색 */
@@ -37,9 +37,6 @@ const LINE_GAP = 14;
 /** 쓸어 넘기기로 보는 가로 이동 거리 */
 const SWIPE_MIN = 90;
 
-/** 말풍선 반 높이 (장사 화면과 같다) */
-const BUBBLE_HALF = 30;
-
 /** 바라보는 곳 테두리 색 (장사 화면과 같다) */
 const FOCUS = 0xfff3b0;
 
@@ -61,13 +58,10 @@ function arrow(scene: Phaser.Scene, x: number, y: number, color: number): Phaser
   return g;
 }
 
-/** 머리 위 말풍선 하나 (그림 한 개, 꼬리는 아래) */
-function bubble(scene: Phaser.Scene, x: number, y: number, key: string, scale: number): Phaser.GameObjects.GameObject[] {
-  const w = 72;
-  const g = scene.add.graphics();
-  framedBox(g, x - w / 2, y - BUBBLE_HALF, w, BUBBLE_HALF * 2, 8, 0xfffaf0, 0x2c1c22);
-  tail(g, x, y + BUBBLE_HALF - 1, 0x2c1c22);
-  tail(g, x, y + BUBBLE_HALF - 5, 0xfffaf0);
+/** 머리 위 말풍선 하나 (그림 한 개, 꼬리는 아래). bar가 있으면 장사 화면처럼 아래쪽에 기다림 막대 */
+function bubble(scene: Phaser.Scene, x: number, y: number, key: string, scale: number, bar?: { filled: number; color: number }): Phaser.GameObjects.GameObject[] {
+  const g = speechBubble(scene.add.graphics(), x, y, bar ? PATIENCE_W + 24 : 72, bar !== undefined);
+  if (bar) patienceBar(g, x, y, bar.filled, bar.color);
   return [g, scene.add.image(x, y, key).setScale(scale)];
 }
 
@@ -159,10 +153,14 @@ export function guidePages(): GuidePage[] {
         const out: Phaser.GameObjects.GameObject[] = [];
         const gap = 44;
         const cy = box.y + 110;
-        // 조리대와 누른 횟수 막대
+        // 조리대와 앞면 게이지 (연타 수만큼 칸, 한 번 남은 모습)
         const x0 = slotX(box, 3, gap, 0);
-        out.push(scene.add.image(x0, cy, stationKey(MENU_ART[0])).setScale(1.2));
-        out.push(meter(scene.add.graphics(), x0 - 44, cy - 92, 88, 16, 0.75, 0x3a2e2e, 0xf2b632));
+        const station = scene.add.image(x0, cy, stationKey(MENU_ART[0])).setScale(1.2);
+        out.push(station);
+        const taps = MENUS[0]!.taps;
+        const gw = panelWidth(taps, 12, 4);
+        const gy = cy + station.displayHeight / 2 - STATION_FRONT_UP * 1.2 - (12 + PANEL_PAD * 2) / 2;
+        out.push(panelCells(scene.add.graphics(), x0 - gw / 2, gy, taps, taps - 1, 12, 12, 4, 0xf2b632));
         // 쟁반 칸
         const x1 = slotX(box, 3, gap, 1);
         const sw = 112;
@@ -176,13 +174,13 @@ export function guidePages(): GuidePage[] {
         const slot = (box.w - gap * 2) / 3;
         out.push(arrow(scene, x0 + slot / 2 + gap / 2, cy, p.text2));
         out.push(arrow(scene, x1 + slot / 2 + gap / 2, cy, p.text2));
-        out.push(caption(scene, x0, box.y + box.h - 34, '여러 번 누르기', p.textStrong));
+        out.push(caption(scene, x0, box.y + box.h - 34, '칸 수만큼 누르기', p.textStrong));
         out.push(caption(scene, x1, box.y + box.h - 34, '쟁반 칸', p.textStrong));
         out.push(caption(scene, x2, box.y + box.h - 34, '보고 칸 누르기', p.accent));
         return out;
       },
       lines: [
-        { text: '메뉴 조리대를 여러 번 누르면 음식이 완성돼요. 처음 누를 때 재료비가 들어요.' },
+        { text: '메뉴 조리대를 게이지 칸 수만큼 누르면 음식이 완성돼요. 처음 누를 때 재료비가 들어요.' },
         { text: '완성된 음식은 쟁반 빈 칸에 올라가요. 쟁반이 가득하면 조리대에서 기다려요(초록 깜빡).' },
         { text: '테이블을 바라보고 쟁반 칸을 누르면 줘요. 안 시킨 음식은 받지 않아요.', strong: true },
         { text: '남는 음식은 쓰레기통을 바라보고 쟁반 칸을 눌러 버려요.' },
@@ -199,16 +197,16 @@ export function guidePages(): GuidePage[] {
         ];
         items.forEach((it, i) => {
           const cx = slotX(box, 3, 0, i);
-          out.push(scene.add.image(cx, box.y + 100, ensureGuest(scene, 2, it.face, 'front')).setScale(1.5));
-          const w = 10 * 8 + 9 * 2;
-          out.push(cells(scene.add.graphics(), cx - w / 2, box.y + 172, 10, it.filled, 8, 2, 0x3a2e2e, it.color));
-          if (i === 2) out.push(disc(scene.add.graphics(), cx + w / 2 + 14, box.y + 176, 6, 0xe0453a));
+          const by = box.y + 50;
+          out.push(...bubble(scene, cx, by, iconKey('cup'), 1.4, { filled: it.filled, color: it.color }));
+          out.push(scene.add.image(cx, box.y + 166, ensureGuest(scene, 2, it.face, 'front')).setScale(1.2));
+          if (i === 2) out.push(disc(scene.add.graphics(), cx + (PATIENCE_W + 24) / 2 + 14, by + 26, 6, 0xe0453a));
           out.push(caption(scene, cx, box.y + box.h - 34, it.cap, p.textStrong));
         });
         return out;
       },
       lines: [
-        { text: '물·음식을 기다리는 동안 말풍선 아래 막대가 줄어요.' },
+        { text: '물·음식을 기다리는 동안 말풍선 속 막대가 줄어요.' },
         { text: '막대가 다 닳으면 기분이 한 칸 나빠지고, 막대는 다시 차요.' },
         { text: '기분이 바닥까지 떨어지면 화나서 돈을 안 내고 나가요.', strong: true },
         { text: '물·음식을 받고 계산할 때마다 기분이 좋아져요. 기분이 좋으면 팁을 줘요.' },

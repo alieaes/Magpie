@@ -18,7 +18,7 @@ import type Phaser from 'phaser';
 import { bakeArt } from './bake';
 import { guestArt, guestArtKey, staffArt, staffArtKey, staticArts } from './catalog';
 import { GUEST_LOOK_LIST } from './guests';
-import { traySlotDots } from './kitchen';
+import { STATION_FRONT_MID, STATION_SIZE, traySlotDots } from './kitchen';
 import { STAFF_HAND_TOP } from './staff';
 
 export { drawGallery } from './gallery';
@@ -119,6 +119,9 @@ export function ensureGuest(
   if (scene.textures.exists(key)) return key;
   return bakeArt(scene, guestArt(look, face, side, cloth, big, pose));
 }
+
+/** 조리대 그림 아래 끝(테두리 포함)에서 앞면 가운데까지 px(1배). 연타 게이지를 앞면에 얹는다 */
+export const STATION_FRONT_UP = (STATION_SIZE + 1 - STATION_FRONT_MID) * DOT;
 
 /** 조리대 그림 키 (메뉴 5, 물·단무지 통, 쓰레기통, 잠긴 덮개) */
 export function stationKey(name: MenuArt | 'water' | 'trash' | 'locked'): string {

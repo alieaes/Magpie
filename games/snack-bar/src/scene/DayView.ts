@@ -31,8 +31,8 @@ import {
 } from '../logic/rules';
 import { cellAt, cellCenter, dayGeometry, type DayGeometry, type Layout } from './layout';
 import type { Sfx } from './sound';
-import { MENU_ART, dishKey, dishMiniKey, ensureGuest, ensureStaff, iconKey, menuIconKey, propKey, stationKey, trayKey, traySlotOffsets, STAFF_TRAY_Y, type Facing, type GuestFace } from './sprites';
-import { cells, framedBox, meter, roundBox, tail, vGradient } from './style';
+import { MENU_ART, dishKey, dishMiniKey, ensureGuest, ensureStaff, iconKey, menuIconKey, propKey, stationKey, trayKey, traySlotOffsets, STAFF_TRAY_Y, STATION_FRONT_UP, type Facing, type GuestFace } from './sprites';
+import { BUBBLE_BAR, BUBBLE_HALF, PANEL_PAD, PATIENCE_CELLS, PATIENCE_W, framedBox, meter, panelCells, panelWidth, patienceBar, speechBubble, vGradient } from './style';
 import { Button, clockText, mix, num, textStyle, titleStyle, won, type ScenePalette } from './ui';
 
 /** 장면이 넘기는 조작. 받아들여지면 true */
@@ -48,8 +48,10 @@ const FACING: readonly Facing[] = ['up', 'right', 'down', 'left'];
 const NOTHING_TEXT: Record<string, string> = { noMoney: '돈이 모자라요', trayFull: '쟁반이 가득해요', locked: '아직 못 만들어요' };
 /** 깊이: 바닥 < 테이블·사람(화면 y) < 말풍선 < 효과 < 위 정보 줄 */
 const DEPTH = { floor: 0, bubble: 3000, fx: 3500, hud: 4000 } as const;
-/** 머리 위 말풍선 높이의 절반(메뉴 그림 48px + 위아래 여백) */
-const BUBBLE_HALF = 30;
+/** 조리대 게이지 칸 사이 */
+const GAUGE_GAP = 4;
+/** 음식이 다 되면 게이지를 꽉 찬 채로 보여 주는 틱 (0.3초) */
+const COOKED_SHOW_TICKS = 18;
 
 /** 테이블 한 곳의 그림 */
 interface TableArt {
@@ -59,6 +61,8 @@ interface TableArt {
   dishes: Phaser.GameObjects.Image[];
   bubble: Phaser.GameObjects.Container;
   bubbleKey: string;
+  /** 말풍선 상자 너비 (화난 표시를 오른쪽 옆에 둔다) */
+  bubbleW: number;
   patience: Phaser.GameObjects.Graphics;
   arrivedAt: number;
 }
@@ -82,7 +86,10 @@ export class DayView {
   private readonly objects: Phaser.GameObjects.GameObject[] = [];
   private readonly sky: Phaser.GameObjects.Graphics;
   private readonly tables: TableArt[] = [];
+  private readonly stationArt: Phaser.GameObjects.Image[] = [];
   private readonly stationGauges: Phaser.GameObjects.Graphics;
+  /** 조리대마다 마지막으로 음식이 다 된 틱 */
+  private readonly cookedAt: number[] = [];
   private readonly staff: Phaser.GameObjects.Image;
   private readonly tray: Phaser.GameObjects.Container;
   private readonly trayDishes: Phaser.GameObjects.Image[] = [];
@@ -231,6 +238,7 @@ export class DayView {
     const key = s === WATER_STATION ? stationKey('water') : s === TRASH_STATION ? stationKey('trash') : locked ? stationKey('locked') : stationKey(MENU_ART[s]!);
     const img = this.keep(scene.add.image(c.x, c.y + g.grid.ch / 2 - 4, key).setOrigin(0.5, 1).setDepth(c.y));
     img.setScale(Math.min(1, (g.grid.cw - 4) / img.width));
+    this.stationArt[s] = img;
     if (s < MENUS.length) {
       const label = locked ? `Lv${MENUS[s]!.level}` : GRADE_NAMES[sim.params.grades[s] ?? 0]!;
       const tag = this.keep(scene.add.text(c.x + g.grid.cw / 2 - 6, c.y - g.grid.ch / 2 + 4, label, textStyle(22, 0xffffff)).setOrigin(1, 0).setDepth(c.y + 1));
@@ -254,9 +262,10 @@ export class DayView {
       this.keep(scene.add.image(up.x, c.y - g.grid.ch * 0.18, propKey('chair')).setOrigin(0.5, 1).setDepth(c.y - 1).setVisible(false)),
       this.keep(scene.add.image(down.x, down.y + g.grid.ch * 0.2, propKey('chair')).setOrigin(0.5, 1).setDepth(down.y).setVisible(false)),
     ];
-    const bubble = this.keep(scene.add.container(c.x, up.y - g.grid.ch * 0.45).setDepth(DEPTH.bubble));
+    // 기다림 막대 줄만큼 올려 꼬리 끝은 손님 머리 위 그대로
+    const bubble = this.keep(scene.add.container(c.x, up.y - g.grid.ch * 0.45 - BUBBLE_BAR).setDepth(DEPTH.bubble));
     const patience = this.keep(scene.add.graphics().setDepth(DEPTH.bubble + 1));
-    return { table, chairs, guests, dishes: [], bubble, bubbleKey: '', patience, arrivedAt: -1000 };
+    return { table, chairs, guests, dishes: [], bubble, bubbleKey: '', bubbleW: 0, patience, arrivedAt: -1000 };
   }
 
   /** 위 정보 줄: 날짜·게임 시계·하루 진행 막대·돈·레벨·[II] */
@@ -553,43 +562,41 @@ export class DayView {
     });
   }
 
-  /** 머리 위 말풍선: 물 기다림이면 물컵, 음식 기다림이면 남은 메뉴·그릇 수. 아래에 기다림 막대 10칸 */
+  /** 머리 위 말풍선: 물 기다림이면 물컵, 음식 기다림이면 남은 메뉴·그릇 수. 말풍선 안 아래쪽에 기다림 막대 10칸 */
   private drawBubble(art: TableArt, table: Table, index: number): void {
     const waiting = table.phase === 'water' || table.phase === 'food';
     const key = waiting ? `${table.phase}:${table.guests.map((g) => `${g.menu}x${g.left}`).join(',')}:${table.group}` : '';
     if (key !== art.bubbleKey) {
       art.bubbleKey = key;
       art.bubble.removeAll(true);
-      if (waiting) this.fillBubble(art.bubble, table);
+      if (waiting) art.bubbleW = this.fillBubble(art.bubble, table);
     }
     const g = art.patience.clear();
     if (!waiting) return;
-    const filled = Math.ceil((table.gauge * 10) / table.patience);
+    // 막대는 말풍선과 같이 커지고 나타나게 말풍선 자리·크기를 따른다
+    const { bubble } = art;
+    g.setPosition(bubble.x, bubble.y).setScale(bubble.scaleX, bubble.scaleY).setAlpha(bubble.alpha);
+    const filled = Math.ceil((table.gauge * PATIENCE_CELLS) / table.patience);
     const color = filled >= 6 ? 0x5fbf5a : filled >= 3 ? 0xf2b632 : 0xe0453a;
-    const w = 10 * 8 + 9 * 2;
-    cells(g, art.bubble.x - w / 2, art.bubble.y + BUBBLE_HALF + 4, 10, filled, 8, 2, 0x3a2e2e, color);
+    patienceBar(g, 0, 0, filled, color);
     if (table.mood <= -1) {
       const blink = Math.floor(this.renderTick / 20) % 2 === 0;
-      if (blink) g.fillStyle(0xe0453a, 1).fillRect(art.bubble.x + w / 2 + 6, art.bubble.y + BUBBLE_HALF, 8, 16);
+      if (blink) g.fillStyle(0xe0453a, 1).fillRect(art.bubbleW / 2 + 6, BUBBLE_HALF - 8, 8, 16);
     }
     void index;
   }
 
-  /** 말풍선 안을 채운다 */
-  private fillBubble(bubble: Phaser.GameObjects.Container, table: Table): void {
+  /** 말풍선 안을 채우고 상자 너비를 돌려준다 */
+  private fillBubble(bubble: Phaser.GameObjects.Container, table: Table): number {
     const { scene } = this;
     const items: { key: string; count: number; scale: number }[] =
       table.phase === 'water'
         ? [{ key: iconKey('cup'), count: 1, scale: 1.4 }]
         : table.guests.filter((g) => g.left > 0).map((g) => ({ key: menuIconKey(MENU_ART[g.menu]!), count: g.left, scale: 1 }));
-    // 칸 하나: 그림 58px + 그릇 수가 있으면 숫자 자리 24px
+    // 칸 하나: 그림 58px + 그릇 수가 있으면 숫자 자리 24px. 기다림 막대가 들어가는 너비는 넘긴다
     const cellW = (it: { count: number }) => 58 + (it.count > 1 ? 24 : 0);
-    const w = Math.max(72, items.reduce((sum, it) => sum + cellW(it), 0) + 12);
-    const bg = scene.add.graphics();
-    framedBox(bg, -w / 2, -BUBBLE_HALF, w, BUBBLE_HALF * 2, 8, 0xfffaf0, 0x2c1c22);
-    tail(bg, 0, BUBBLE_HALF - 1, 0x2c1c22);
-    tail(bg, 0, BUBBLE_HALF - 5, 0xfffaf0);
-    bubble.add(bg);
+    const w = Math.max(PATIENCE_W + 24, items.reduce((sum, it) => sum + cellW(it), 0) + 12);
+    bubble.add(speechBubble(scene.add.graphics(), 0, 0, w, true));
     let x = -w / 2 + 6;
     for (const it of items) {
       bubble.add(scene.add.image(x + 29, 0, it.key).setScale(it.scale));
@@ -598,18 +605,32 @@ export class DayView {
     }
     bubble.setScale(0.6).setAlpha(0);
     scene.tweens.add({ targets: bubble, scale: 1, alpha: 1, duration: 160, ease: 'Back.easeOut' });
+    return w;
   }
 
-  /** 조리대 게이지: 누른 횟수 / 연타 수. 완성된 접시가 기다리면 반짝 */
+  /**
+   * 조리대 게이지: 조리대 앞면에 크림색 판, 연타 수만큼 칸을 두고 누른 만큼 채운다.
+   * 다 되면 잠깐 꽉 찬 채로 두고, 쟁반이 가득해 접시가 기다리면 초록 칸이 깜빡
+   */
   private drawStations(sim: DaySim): void {
     const g = this.stationGauges.clear();
-    const { grid } = this.g;
+    const cell = this.g.grid.cw >= 100 ? 12 : 8;
     sim.stations.forEach((st, s) => {
       if (s >= sim.params.menus) return;
-      const c = cellCenter(grid, STATION_X, s);
       const taps = sim.params.taps[s]!;
-      if (st.progress > 0) meter(g, c.x - 36, c.y - grid.ch / 2 + 8, 72, 14, st.progress / taps, 0x3a2e2e, 0xf2b632);
-      if (st.ready && Math.floor(this.renderTick / 15) % 2 === 0) roundBox(g, c.x - 36, c.y - grid.ch / 2 + 6, 72, 18, 5, 0x5fbf5a);
+      let filled = st.progress;
+      let color = 0xf2b632;
+      if (st.ready) {
+        filled = Math.floor(this.renderTick / 15) % 2 === 0 ? taps : 0;
+        color = 0x5fbf5a;
+      } else if (filled === 0) {
+        if (sim.tick - (this.cookedAt[s] ?? -COOKED_SHOW_TICKS) >= COOKED_SHOW_TICKS) return;
+        filled = taps;
+      }
+      const img = this.stationArt[s]!;
+      const w = panelWidth(taps, cell, GAUGE_GAP);
+      const h = cell + PANEL_PAD * 2;
+      panelCells(g, img.x - w / 2, img.y - STATION_FRONT_UP * img.scaleY - h / 2, taps, filled, cell, cell, GAUGE_GAP, color);
     });
   }
 
@@ -727,6 +748,7 @@ export class DayView {
           break;
         case 'cooked':
           this.sfx.done();
+          this.cookedAt[e.station] = sim.tick;
           this.sparkle(STATION_X, e.station);
           if (e.slot >= 0) this.fly(e.station, e.slot, menuIconKey(MENU_ART[e.station]!));
           break;

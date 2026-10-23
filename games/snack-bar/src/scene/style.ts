@@ -89,3 +89,55 @@ export function tail(g: Phaser.GameObjects.Graphics, cx: number, y: number, colo
   for (let i = 0; i < 3; i += 1) g.fillRect(snap(cx) - (3 - i) * UI_DOT, snap(y) + i * UI_DOT, (3 - i) * 2 * UI_DOT, UI_DOT);
   return g;
 }
+
+/** 칸 막대의 빈 칸 색 (크림색 판·말풍선 안에서 찬 칸과 잘 갈리게 어둡게) */
+const EMPTY_CELL = 0x5a4a44;
+
+/** 칸 막대 판의 테두리 + 안쪽 여백 (한쪽 px) */
+export const PANEL_PAD = UI_DOT * 2;
+
+/** 칸 count개짜리 판 너비 */
+export function panelWidth(count: number, cell: number, gap: number): number {
+  return count * cell + (count - 1) * gap + PANEL_PAD * 2;
+}
+
+/**
+ * 크림색 판에 담은 칸 막대 (조리대 연타 게이지). 그림 위에 얹어도 구분되게 진한 테두리와 아래 그림자를 두고,
+ * 칸 하나가 한 번 누르기다. (x, y)는 판 왼쪽 위, filled칸을 front로
+ */
+export function panelCells(g: Phaser.GameObjects.Graphics, x: number, y: number, count: number, filled: number, cell: number, cellH: number, gap: number, front: number): Phaser.GameObjects.Graphics {
+  const w = panelWidth(count, cell, gap);
+  const h = cellH + PANEL_PAD * 2;
+  roundBox(g, x, y + UI_DOT, w, h, 5, 0x000000, 0.35);
+  framedBox(g, x, y, w, h, 5, 0xfffaf0, 0x2c1c22);
+  for (let i = 0; i < count; i += 1) {
+    g.fillStyle(i < filled ? front : EMPTY_CELL, 1).fillRect(snap(x) + PANEL_PAD + i * (cell + gap), snap(y) + PANEL_PAD, cell, cellH);
+  }
+  return g;
+}
+
+/** 머리 위 말풍선 그림 칸의 반 높이(메뉴 그림 48px + 위아래 여백) */
+export const BUBBLE_HALF = 30;
+/** 말풍선 아래쪽에 더하는 기다림 막대 줄 높이 */
+export const BUBBLE_BAR = 12;
+/** 기다림 막대 칸 수 (원작 게이지 10칸) */
+export const PATIENCE_CELLS = 10;
+/** 기다림 막대 너비: 칸 6 × 8px, 사이 2px */
+export const PATIENCE_W = PATIENCE_CELLS * 8 - 2;
+
+/** 머리 위 말풍선 상자와 아래 꼬리. (cx, cy)는 그림 칸 가운데, bar면 아래에 기다림 막대 줄을 더한다 */
+export function speechBubble(g: Phaser.GameObjects.Graphics, cx: number, cy: number, w: number, bar: boolean): Phaser.GameObjects.Graphics {
+  const h = BUBBLE_HALF * 2 + (bar ? BUBBLE_BAR : 0);
+  const bottom = cy - BUBBLE_HALF + h;
+  framedBox(g, cx - w / 2, cy - BUBBLE_HALF, w, h, 8, 0xfffaf0, 0x2c1c22);
+  tail(g, cx, bottom - 1, 0x2c1c22);
+  return tail(g, cx, bottom - 5, 0xfffaf0);
+}
+
+/** 말풍선 속 기다림 막대 (cx, cy는 speechBubble과 같은 그림 칸 가운데). filled칸을 front로 */
+export function patienceBar(g: Phaser.GameObjects.Graphics, cx: number, cy: number, filled: number, front: number): Phaser.GameObjects.Graphics {
+  const x = snap(cx - PATIENCE_W / 2);
+  const y = snap(cy + BUBBLE_HALF - 2);
+  for (let i = 0; i < PATIENCE_CELLS; i += 1) g.fillStyle(i < filled ? front : EMPTY_CELL, 1).fillRect(x + i * 8, y, 6, 8);
+  return g;
+}
