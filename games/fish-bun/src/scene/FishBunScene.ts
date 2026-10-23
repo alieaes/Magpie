@@ -14,6 +14,7 @@ import {
   applyInput,
   createDay,
   initialShopState,
+  levelOf,
   sellArg,
   settleDay,
   tapArg,
@@ -28,6 +29,7 @@ import {
 } from '../logic/rules';
 import type { TextureSet } from './art';
 import { DayView } from './DayView';
+import { buildGuidePanel } from './guide';
 import { canvasSize, type Layout } from './layout';
 import { REJECT_TEXT, buildSettleScreen, buildShopScreen, buildUpgradeScreen, type SettleStatus } from './screens';
 import { buildSettingRows, buildSettingsPanel, hapticsRowHeight } from './settings';
@@ -100,6 +102,11 @@ export class FishBunScene extends Phaser.Scene {
   private pauseLayer: Phaser.GameObjects.Container | null = null;
   /** 가게 화면의 설정 창 */
   private settingsLayer: Phaser.GameObjects.Container | null = null;
+  /** 게임 방법 창과 그 상태(연 곳, 보던 쪽). 배치를 다시 그려도 같은 쪽을 다시 연다 */
+  private guideLayer: Phaser.GameObjects.Container | null = null;
+  private guide: { from: 'shop' | 'pause'; page: number } | null = null;
+  /** 1일째 가게 화면에서 게임 방법을 저절로 열었는지 (게임을 열 때마다 한 번) */
+  private guideShown = false;
   private toastText: Phaser.GameObjects.Container | null = null;
 
   constructor(opts: FishBunSceneOptions) {
@@ -168,8 +175,10 @@ export class FishBunScene extends Phaser.Scene {
     if (layout === this.layout && Math.abs(height - this.scale.height) < STAGE_HEIGHT_STEP) return;
     this.layout = layout;
     this.scale.setGameSize(width, height);
+    const guide = this.guide;
     this.show(this.screen);
     if (this.run?.paused) this.showPause();
+    if (guide) this.openGuide(guide.from, guide.page);
   }
 
   /** 화면이 가려지면(탭·앱 전환) 장사를 멈춘다 */
@@ -189,6 +198,7 @@ export class FishBunScene extends Phaser.Scene {
     this.pauseLayer?.destroy();
     this.pauseLayer = null;
     this.closeSettings();
+    this.closeGuide();
     const { palette } = this.opts;
     const trial = this.opts.session.mode === 'trial';
     switch (screen) {
@@ -204,10 +214,16 @@ export class FishBunScene extends Phaser.Scene {
           trialHint: this.opts.session.trialHint ?? '로그인하면 가게가 저장돼요',
           onStart: () => void this.startDay(),
           onSettings: () => this.click(() => this.openSettings()),
+          onGuide: () => this.click(() => this.openGuide('shop', 0)),
           onUpgrades: () => this.click(() => this.show('upgrades')),
           onLogin: () => this.opts.session.requestLogin(),
           onRetryTrial: () => this.click(() => this.retryTrial()),
         });
+        // 처음 하는 날(1일째)은 게임 방법을 한 번 저절로 연다
+        if (this.save.state.day === 1 && !this.guideShown && !this.starting) {
+          this.guideShown = true;
+          this.openGuide('shop', 0);
+        }
         break;
       case 'upgrades':
         this.screenRoot = buildUpgradeScreen({
@@ -300,6 +316,32 @@ export class FishBunScene extends Phaser.Scene {
   private closeSettings(): void {
     this.settingsLayer?.destroy();
     this.settingsLayer = null;
+  }
+
+  /** 게임 방법 창을 연다. 멈춤 창에서 열면 닫을 때 멈춤 창으로 돌아간다(시간은 계속 멈춰 있다) */
+  private openGuide(from: 'shop' | 'pause', page: number): void {
+    this.closeGuide();
+    const guide = { from, page };
+    this.guide = guide;
+    this.guideLayer = buildGuidePanel({
+      scene: this,
+      palette: this.opts.palette,
+      sfx: this.opts.sfx,
+      level: levelOf(this.save.state.reputation),
+      page,
+      lastLabel: from === 'pause' ? '멈춤 창으로' : '닫기',
+      // 멈춤 창(150)보다 위
+      depth: 160,
+      onPage: (p) => (guide.page = p),
+      onClose: () => this.click(() => this.closeGuide()),
+    });
+  }
+
+  /** 게임 방법 창을 닫는다 */
+  private closeGuide(): void {
+    this.guideLayer?.destroy();
+    this.guideLayer = null;
+    this.guide = null;
   }
 
   /** 화면 위쪽에 잠깐 뜨는 안내 */
@@ -397,7 +439,8 @@ export class FishBunScene extends Phaser.Scene {
     const cw = Math.min(560, width - 80);
     // 설정 줄(소리·진동)이 들어가 카드가 길다. 셸 머리줄이 없어서 장사 중 소리·진동은 여기서 바꾼다
     const extra = hapticsRowHeight();
-    const ch = 640 + extra;
+    // [게임 방법] 단추(96)만큼 더 길다
+    const ch = 640 + extra + 96;
     const top = height / 2 - ch / 2;
     const card = framedBox(this.add.graphics(), width / 2 - cw / 2, top, cw, ch, 28, p.surface, p.border);
     const title = this.add.text(width / 2, top + 70, '잠깐 쉬는 중', titleStyle(40, p.textStrong)).setOrigin(0.5);
@@ -408,9 +451,10 @@ export class FishBunScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
     const sound = buildSettingRows(this, { x: width / 2, y: top + 230, width: cw - 80, palette: p, sfx: this.opts.sfx, onChange: (m, v) => this.soundChanged(m, v) });
-    const resume = new Button(this, { x: width / 2, y: top + 430 + extra, width: cw - 80, height: 96, label: '계속하기', style: 'primary', palette: p, fontSize: 32, onPress: () => this.resumeDay() });
-    const quit = new Button(this, { x: width / 2, y: top + 548 + extra, width: cw - 80, height: 84, label: '오늘 장사 그만두기', style: 'secondary', palette: p, fontSize: 26, onPress: () => this.quitDay() });
-    this.pauseLayer = this.add.container(0, 0, [dim, card, title, note, sound, resume, quit]).setDepth(150);
+    const guide = new Button(this, { x: width / 2, y: top + 420 + extra, width: cw - 80, height: 76, label: '게임 방법', style: 'secondary', palette: p, fontSize: 26, onPress: () => this.click(() => this.openGuide('pause', 0)) });
+    const resume = new Button(this, { x: width / 2, y: top + 526 + extra, width: cw - 80, height: 96, label: '계속하기', style: 'primary', palette: p, fontSize: 32, onPress: () => this.resumeDay() });
+    const quit = new Button(this, { x: width / 2, y: top + 644 + extra, width: cw - 80, height: 84, label: '오늘 장사 그만두기', style: 'secondary', palette: p, fontSize: 26, onPress: () => this.quitDay() });
+    this.pauseLayer = this.add.container(0, 0, [dim, card, title, note, sound, guide, resume, quit]).setDepth(150);
   }
 
   /** 계속하기 */

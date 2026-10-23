@@ -183,6 +183,8 @@ export interface ShopScreenOptions {
   onRetryTrial(): void;
   /** 오른쪽 위 톱니: 설정 창(소리) */
   onSettings(): void;
+  /** 톱니 왼쪽 [게임 방법] */
+  onGuide(): void;
 }
 
 /** 가게 화면: 몇 일째, 돈, 평판, [장사 시작] [가게 꾸리기] */
@@ -200,6 +202,8 @@ export function buildShopScreen(o: ShopScreenOptions): Phaser.GameObjects.Contai
       scene.add.image(0, 0, TEX.icon('gear')).setScale(0.7),
     ),
   );
+  // 톱니 왼쪽 [게임 방법]: 처음 하는 사람이 굽는 법을 볼 수 있게 글자로 쓴다 (docs/design/261023-02-growth-how-to-play.md §1)
+  root.add(new Button(scene, { x: width - 56 - 38 - 12 - 90, y: 56, width: 180, height: 76, label: '게임 방법', style: 'secondary', palette: p, fontSize: 24, onPress: o.onGuide }));
 
   // 가로 배치는 카드 높이를 내용에 맞추고, 카드와 아래 버튼 묶음(약 300)을 세로 가운데에 둔다
   const card: Rect = portrait

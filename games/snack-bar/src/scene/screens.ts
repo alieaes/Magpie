@@ -68,6 +68,8 @@ export interface ShopScreenOptions extends Base {
   newStaff: boolean;
   onStart(): void;
   onSettings(): void;
+  /** 설정 왼쪽 [게임 방법] */
+  onGuide(): void;
   onUpgrades(): void;
   onStaff(): void;
   onLogin(): void;
@@ -104,6 +106,8 @@ export function buildShopScreen(o: ShopScreenOptions): Phaser.GameObjects.Contai
 
   // 설정(톱니)
   root.add(new Button(scene, { x: width - 56, y: 56, width: 72, height: 72, label: '설정', style: 'secondary', palette: p, fontSize: 22, onPress: o.onSettings }));
+  // 설정 왼쪽 [게임 방법]: 처음 하는 사람이 조작을 볼 수 있게 (docs/design/261023-02-growth-how-to-play.md §1)
+  root.add(new Button(scene, { x: width - 56 - 36 - 12 - 90, y: 56, width: 180, height: 72, label: '게임 방법', style: 'secondary', palette: p, fontSize: 22, onPress: o.onGuide }));
 
   // 상태 카드
   const cardX = landscape ? 860 : 24;

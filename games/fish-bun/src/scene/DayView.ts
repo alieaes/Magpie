@@ -45,7 +45,7 @@ export interface DayHandlers {
 }
 
 /** 손님 성격 표시 아이콘 */
-const TRAIT_ICON: Partial<Record<CustomerKind, IconName>> = {
+export const TRAIT_ICON: Partial<Record<CustomerKind, IconName>> = {
   kid: 'plusOne',
   office: 'clock',
   elder: 'noBurnt',
