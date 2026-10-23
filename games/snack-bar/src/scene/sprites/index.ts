@@ -17,7 +17,7 @@
 import type Phaser from 'phaser';
 import { bakeArt } from './bake';
 import { guestArt, guestArtKey, staffArt, staffArtKey, staticArts } from './catalog';
-import { GUEST_LOOK_LIST } from './guests';
+import { GUEST_H, GUEST_LOOK_LIST } from './guests';
 import { STATION_FRONT_MID, STATION_SIZE, traySlotDots } from './kitchen';
 import { STAFF_HAND_TOP } from './staff';
 
@@ -103,6 +103,9 @@ export function ensureStaff(
  * 쟁반 그림의 아래 끝(테두리 포함, setOrigin(0.5, 1))을 여기에 맞추면 두 손 위에 얹힌다. 쟁반·접시는 그림 위로 삐져나온다
  */
 export const STAFF_TRAY_Y = (STAFF_HAND_TOP + 1) * DOT;
+
+/** 손님 그림 높이(px, 테두리 포함). 화면이 테이블 그림 자리(누르기)를 잡을 때 쓴다 */
+export const GUEST_PX_H = (GUEST_H + 2) * DOT;
 
 /** 손님 그림 키: 머리 + 어깨를 합친 한 장. side는 앞모습(테이블 위쪽 의자) / 뒷모습(아래쪽 의자), big은 대식가(넓은 어깨) */
 export function ensureGuest(

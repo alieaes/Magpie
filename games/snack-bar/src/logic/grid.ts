@@ -19,7 +19,7 @@ export interface Cell {
   y: number;
 }
 
-/** 테이블 자리 (T1~T6 = 0~5). 위아래 칸은 손님 의자 */
+/** 테이블 자리 (T1~T6 = 0~5). 손님 의자는 위아래 칸 쪽으로 붙여 그리고, 그 칸은 길이다 */
 export const TABLE_CELLS: readonly Cell[] = [
   { x: 1, y: 1 },
   { x: 3, y: 1 },
@@ -47,12 +47,11 @@ export function inGrid(x: number, y: number): boolean {
   return x >= 0 && x < GRID_W && y >= 0 && y < GRID_H;
 }
 
-/** 캐릭터가 걸어 다닐 수 있는 칸인지: 테이블·의자 열(x = 1, 3, 5)은 가운데 줄(y = 3)만, 조리대 줄과 문은 못 지나감 */
+/** 캐릭터가 걸어 다닐 수 있는 칸인지: 테이블 칸(잠긴 테이블 포함), 조리대 줄, 문만 못 지나감. 테이블 위아래 칸은 길 */
 export function isWalkable(x: number, y: number): boolean {
   if (!inGrid(x, y) || x === STATION_X) return false;
   if (x === DOOR.x && y === DOOR.y) return false;
-  if (x % 2 === 1 && y !== 3) return false;
-  return true;
+  return !TABLE_CELLS.some((c) => c.x === x && c.y === y);
 }
 
 /** 칸에 있는 대상. 테이블·조리대가 아니면 null */
@@ -63,10 +62,12 @@ export function targetAt(x: number, y: number): Target | null {
   return table >= 0 ? { kind: 'table', index: table } : null;
 }
 
-/** 이 칸에서 dir 쪽을 바라볼 때 앞 칸의 대상 */
+/** 이 칸에서 dir 쪽을 바라볼 때 앞 칸의 대상. 테이블은 왼쪽·오른쪽에서 바라볼 때만(위아래 길에서는 지나가기만) */
 export function facedTarget(pos: Cell, dir: Dir): Target | null {
   const [dx, dy] = DIRS[dir]!;
-  return targetAt(pos.x + dx, pos.y + dy);
+  const target = targetAt(pos.x + dx, pos.y + dy);
+  if (target?.kind === 'table' && dy !== 0) return null;
+  return target;
 }
 
 /** 대상을 바라볼 수 있는 칸과 그때 방향: 테이블은 왼쪽·오른쪽 통로, 조리대 줄은 x = 6 */

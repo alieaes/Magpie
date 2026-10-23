@@ -74,25 +74,31 @@ function seat(sim: DaySim, index: number, guests: Partial<Guest>[], patience = 9
 }
 
 describe('격자', () => {
-  it('테이블·의자 열은 가운데 줄만, 조리대 줄과 문은 못 지나간다', () => {
+  it('테이블 칸(잠긴 테이블 포함)·조리대 줄·문만 못 지나가고, 테이블 위아래 칸은 길이다', () => {
     expect(isWalkable(1, 3)).toBe(true);
     expect(isWalkable(1, 1)).toBe(false);
-    expect(isWalkable(3, 0)).toBe(false);
+    expect(isWalkable(5, 5)).toBe(false);
+    for (const y of [0, 2, 4, 6]) for (const x of [1, 3, 5]) expect(isWalkable(x, y)).toBe(true);
     expect(isWalkable(7, 2)).toBe(false);
     expect(isWalkable(0, 6)).toBe(false);
     expect(isWalkable(6, 6)).toBe(true);
   });
 
-  it('바라보는 대상: 테이블은 좌우에서, 조리대는 x = 6에서 오른쪽', () => {
+  it('바라보는 대상: 테이블은 좌우에서만(위아래 길에서는 없음), 조리대는 x = 6에서 오른쪽', () => {
     expect(facedTarget({ x: 6, y: 1 }, 1)).toEqual({ kind: 'station', index: 1 });
     expect(facedTarget({ x: 6, y: 1 }, 3)).toEqual({ kind: 'table', index: 2 });
     expect(facedTarget({ x: 2, y: 5 }, 3)).toEqual({ kind: 'table', index: 3 });
     expect(facedTarget({ x: 4, y: 3 }, 2)).toBeNull();
+    expect(facedTarget({ x: 3, y: 0 }, 2)).toBeNull();
+    expect(facedTarget({ x: 3, y: 2 }, 0)).toBeNull();
+    expect(facedTarget({ x: 5, y: 4 }, 2)).toBeNull();
   });
 
-  it('길찾기: 세로 통로 사이는 가운데 줄로 돈다', () => {
-    expect(findPath({ x: 2, y: 1 }, { x: 4, y: 1 })).toEqual([2, 2, 1, 1, 0, 0]);
+  it('길찾기: 테이블 위아래 길로 가로지른다', () => {
+    expect(findPath({ x: 2, y: 1 }, { x: 4, y: 1 })).toEqual([0, 1, 1, 2]);
+    expect(findPath({ x: 0, y: 1 }, { x: 4, y: 1 })).toEqual([0, 1, 1, 1, 1, 2]);
     expect(findPath({ x: 4, y: 3 }, { x: 1, y: 1 })).toBeNull();
+    expect(findPath({ x: 4, y: 3 }, { x: 1, y: 6 })?.length).toBe(6);
     const route = routeTo({ x: 4, y: 3 }, { kind: 'station', index: 0 });
     expect(route?.dir).toBe(1);
     expect(route?.path.length).toBe(5);

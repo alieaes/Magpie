@@ -31,7 +31,7 @@ import {
 } from '../logic/rules';
 import { cellAt, cellCenter, dayGeometry, type DayGeometry, type Layout } from './layout';
 import type { Sfx } from './sound';
-import { MENU_ART, dishKey, dishMiniKey, ensureGuest, ensureStaff, iconKey, menuIconKey, propKey, stationKey, trayKey, traySlotOffsets, STAFF_TRAY_Y, STATION_FRONT_UP, type Facing, type GuestFace } from './sprites';
+import { MENU_ART, dishKey, dishMiniKey, ensureGuest, ensureStaff, iconKey, menuIconKey, propKey, stationKey, trayKey, traySlotOffsets, GUEST_PX_H, STAFF_TRAY_Y, STATION_FRONT_UP, type Facing, type GuestFace } from './sprites';
 import { BUBBLE_BAR, BUBBLE_HALF, PANEL_PAD, PATIENCE_CELLS, PATIENCE_W, framedBox, meter, panelCells, panelWidth, patienceBar, speechBubble, vGradient } from './style';
 import { Button, clockText, mix, num, textStyle, titleStyle, won, type ScenePalette } from './ui';
 
@@ -65,6 +65,8 @@ interface TableArt {
   bubbleW: number;
   patience: Phaser.GameObjects.Graphics;
   arrivedAt: number;
+  /** 누르면 이 테이블로 치는 그림 자리: 테이블 열 폭, 위 손님 머리 끝 ~ 아래 손님 아래 끝 */
+  hit: { left: number; right: number; top: number; bottom: number };
 }
 
 /** 쟁반 칸 하나 */
@@ -269,7 +271,9 @@ export class DayView {
     // 기다림 막대 줄만큼 올려 꼬리 끝은 손님 머리 위 그대로
     const bubble = this.keep(scene.add.container(c.x, up.y - g.grid.ch * 0.45 - BUBBLE_BAR).setDepth(DEPTH.bubble));
     const patience = this.keep(scene.add.graphics().setDepth(DEPTH.bubble + 1));
-    return { table, chairs, guests, dishes: [], bubble, bubbleKey: '', bubbleW: 0, patience, arrivedAt: -1000 };
+    // 손님이 없어도 손님이 앉는 자리까지 테이블로 친다. 위아래 칸의 남는 바닥은 걷기
+    const hit = { left: c.x - g.grid.cw / 2, right: c.x + g.grid.cw / 2, top: guests[0]!.y - GUEST_PX_H, bottom: guests[1]!.y };
+    return { table, chairs, guests, dishes: [], bubble, bubbleKey: '', bubbleW: 0, patience, arrivedAt: -1000, hit };
   }
 
   /** 위 정보 줄: 날짜·게임 시계·하루 진행 막대·돈·레벨·[II] */
@@ -403,9 +407,10 @@ export class DayView {
   /** 화면을 눌렀다: 바닥이면 거기까지 걷고, 테이블·조리대면 바라보는 칸까지 걸어가고, 이미 바라보고 있으면 행동 */
   pointerDown(p: Phaser.Input.Pointer, over: Phaser.GameObjects.GameObject[], sim: DaySim): void {
     if (over.length > 0) return;
+    const table = this.tableAt(p.worldX, p.worldY);
     const cell = cellAt(this.g.grid, p.worldX, p.worldY);
-    if (!cell) return;
-    const target = this.targetFor(cell.x, cell.y);
+    if (table < 0 && !cell) return;
+    const target: Target | null = table >= 0 ? { kind: 'table', index: table } : targetAt(cell!.x, cell!.y);
     if (target) {
       const faced = facedTarget(sim.pos, sim.facing);
       if (faced && faced.kind === target.kind && faced.index === target.index && this.path.length === 0) {
@@ -419,7 +424,7 @@ export class DayView {
       this.finalFace = route.dir;
       return;
     }
-    if (!isWalkable(cell.x, cell.y)) return;
+    if (!cell || !isWalkable(cell.x, cell.y)) return;
     const path = findPath(sim.pos, cell);
     if (!path) return;
     this.heldDir = null;
@@ -427,15 +432,9 @@ export class DayView {
     this.finalFace = null;
   }
 
-  /** 누른 칸의 대상. 테이블 위·아래 의자를 눌러도 그 테이블로 친다 */
-  private targetFor(x: number, y: number): Target | null {
-    const direct = targetAt(x, y);
-    if (direct) return direct;
-    if (x % 2 === 1 && y !== 3) {
-      const table = TABLE_CELLS.findIndex((c) => c.x === x && Math.abs(c.y - y) === 1);
-      if (table >= 0) return { kind: 'table', index: table };
-    }
-    return null;
+  /** 누른 자리가 그림 자리 안에 드는 테이블 번호(테이블·의자·손님 자리). 없으면 -1 */
+  private tableAt(px: number, py: number): number {
+    return this.tables.findIndex((art) => px >= art.hit.left && px < art.hit.right && py >= art.hit.top && py < art.hit.bottom);
   }
 
   /** 매 프레임: 미뤄 둔 조작 → 누르고 있는 방향 → 탭해서 걷는 길 순서로 다음 걸음을 넣는다 */
