@@ -246,21 +246,25 @@ export class DayView {
     }
   }
 
-  /** 테이블 하나: 위·아래 의자, 손님 자리, 놓인 접시, 머리 위 말풍선 */
+  /**
+   * 테이블 하나: 위·아래 의자, 손님 자리, 놓인 접시, 머리 위 말풍선.
+   * 의자는 테이블 위·아래 끝에 붙이고 손님은 그 의자에 앉힌다(위 의자 < 테이블 < 위 손님, 테이블 < 아래 의자 < 아래 손님)
+   */
   private buildTable(i: number): TableArt {
     const { scene, g } = this;
     const cell = TABLE_CELLS[i]!;
     const c = cellCenter(g.grid, cell.x, cell.y);
     const up = cellCenter(g.grid, cell.x, cell.y - 1);
-    const down = cellCenter(g.grid, cell.x, cell.y + 1);
-    const chairs = [
-      this.keep(scene.add.image(up.x, up.y + g.grid.ch * 0.3, propKey('chair')).setOrigin(0.5, 1).setDepth(up.y)),
-      this.keep(scene.add.image(down.x, down.y + g.grid.ch * 0.15, propKey('chair')).setOrigin(0.5, 1).setDepth(down.y - 20)),
-    ];
     const table = this.keep(scene.add.image(c.x, c.y + g.grid.ch * 0.35, propKey('table')).setOrigin(0.5, 1).setDepth(c.y));
+    const tableTop = table.y - table.displayHeight;
+    // 위 의자는 아래 12px를 테이블 뒤에 숨기고, 아래 의자는 위 8px를 테이블 다리 앞에 겹친다
+    const upChair = this.keep(scene.add.image(c.x, tableTop + 12, propKey('chair')).setOrigin(0.5, 1).setDepth(c.y - 2));
+    const downChair = this.keep(scene.add.image(c.x, 0, propKey('chair')).setOrigin(0.5, 1).setDepth(c.y + 1));
+    downChair.setY(table.y - 8 + downChair.displayHeight);
+    const chairs = [upChair, downChair];
     const guests = [
-      this.keep(scene.add.image(up.x, c.y - g.grid.ch * 0.18, propKey('chair')).setOrigin(0.5, 1).setDepth(c.y - 1).setVisible(false)),
-      this.keep(scene.add.image(down.x, down.y + g.grid.ch * 0.2, propKey('chair')).setOrigin(0.5, 1).setDepth(down.y).setVisible(false)),
+      this.keep(scene.add.image(c.x, c.y - g.grid.ch * 0.18, propKey('chair')).setOrigin(0.5, 1).setDepth(c.y - 1).setVisible(false)),
+      this.keep(scene.add.image(c.x, downChair.y + 4, propKey('chair')).setOrigin(0.5, 1).setDepth(c.y + 2).setVisible(false)),
     ];
     // 기다림 막대 줄만큼 올려 꼬리 끝은 손님 머리 위 그대로
     const bubble = this.keep(scene.add.container(c.x, up.y - g.grid.ch * 0.45 - BUBBLE_BAR).setDepth(DEPTH.bubble));
