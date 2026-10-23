@@ -102,6 +102,7 @@
 - 창구가 저장 버전을 기억해 가게 행동에 붙인다(불러오기·하루 시작·하루 끝·행동 결과로 갱신).
 - 하루를 보내기 전에 기록을 `localStorage`(`magpie.pendingDay.<gameId>`)에 적고, 서버가 판정하면(통과·거절·4xx) 지운다. 연결 실패·5xx면 남겨 두고 다음 `load()` 때 다시 보낸다.
 - 소리 설정은 미니게임과 같은 값을 쓴다(`client/src/composables/useSound.ts`, `magpie.muted`, `magpie.volume`). 처음 값은 셸이 `muted`·`volume`으로 넘기고, 바꾸는 곳은 게임 안 설정이다.
+- 진동 설정도 미니게임과 같은 값이다(`magpie.haptics`). 공통 함수(`@magpie/shared/haptics`)가 들고 저장하므로 셸이 넘기지 않고, 게임 안 설정에서 바로 바꾼다([haptics.md](./haptics.md)).
 
 ## 로비·랭킹
 

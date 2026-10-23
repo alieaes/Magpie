@@ -1,9 +1,11 @@
 // 복권 긁기 화면. 카드 그리기, 은박 긁기, 결과 연출, 구매·정산 패널, 시간 진행을 맡는다. 규칙 판정은 logic이 한다.
-// 근거: docs/design/261016-02-lucky-scratch.md §3
+// 진동: 긁는 동안 tick, 칸이 벗겨지면 tap, 당첨 good(4·5등)·great(1~3등), 꽝 thud.
+// 근거: docs/design/261016-02-lucky-scratch.md §3, docs/design/261023-01-haptics.md §5-2
 
 import Phaser from 'phaser';
 import { TICKS_PER_SECOND } from '@magpie/shared';
 import type { HudState, PlayResult } from '@magpie/shared/game-module';
+import { haptic } from '@magpie/shared/haptics';
 import {
   BUY_OPTIONS,
   CELL_COUNT,
@@ -411,6 +413,7 @@ export class LotteryScene extends Phaser.Scene {
     if (!touched) return;
     card.foil.render();
     this.opts.sfx.scratch(dist);
+    haptic('tick');
     if (Math.random() < 0.35 + dist / 30) {
       const w = this.cardToWorld(card, b.x, b.y);
       this.flakes.emitParticleAt(w.x, w.y, 1 + Math.floor(Math.random() * 3));
@@ -444,7 +447,7 @@ export class LotteryScene extends Phaser.Scene {
     if (this.phase === 'scratching' && !this.pendingResolve && this.isDecided(card)) this.tryResolve();
   }
 
-  /** 칸 은박을 마저 벗긴다: 빛이 번쩍, 부스러기, 그림이 톡 튀어나온다. quiet면 "샥" 소리를 내지 않는다(여러 칸을 한꺼번에 벗길 때) */
+  /** 칸 은박을 마저 벗긴다: 빛이 번쩍, 부스러기, 그림이 톡 튀어나온다. quiet면 "샥" 소리·진동을 내지 않는다(여러 칸을 한꺼번에 벗길 때) */
   private revealCell(card: CardView, i: number, quiet = false): void {
     card.revealed[i] = true;
     card.revealedCount += 1;
@@ -461,7 +464,10 @@ export class LotteryScene extends Phaser.Scene {
     const symbol = card.symbols[i]!;
     symbol.setScale(0.82);
     this.tweens.add({ targets: symbol, scale: 1, duration: 240, ease: 'Back.easeOut' });
-    if (!quiet) this.opts.sfx.peel();
+    if (!quiet) {
+      this.opts.sfx.peel();
+      haptic('tap');
+    }
 
     if (this.isDecided(card)) this.tryResolve();
   }
@@ -478,7 +484,7 @@ export class LotteryScene extends Phaser.Scene {
     return card.covered.every((n, i) => card.revealed[i] || n >= enough);
   }
 
-  /** 결과를 낼 때 아직 덮인 칸을 한꺼번에 벗긴다. 소리는 한 번만 */
+  /** 결과를 낼 때 아직 덮인 칸을 한꺼번에 벗긴다. 소리·진동은 한 번만 */
   private revealRest(card: CardView): void {
     let any = false;
     for (let i = 0; i < CELL_COUNT; i += 1) {
@@ -486,7 +492,10 @@ export class LotteryScene extends Phaser.Scene {
       this.revealCell(card, i, true);
       any = true;
     }
-    if (any) this.opts.sfx.peel();
+    if (any) {
+      this.opts.sfx.peel();
+      haptic('tap');
+    }
   }
 
   /** "한 번에 긁기" 또는 (결과를 보는 중이면) 다음 장 */
@@ -530,6 +539,7 @@ export class LotteryScene extends Phaser.Scene {
     }
     card.foil.render();
     this.opts.sfx.scratch(40);
+    haptic('tick');
     if (progress >= 1) {
       this.sweep = null;
       this.opts.sfx.scratchEnd();
@@ -594,7 +604,10 @@ export class LotteryScene extends Phaser.Scene {
         alpha: 0.92,
         duration: 150,
         ease: 'Quad.easeIn',
-        onComplete: () => this.cameras.main.shake(90, 0.003),
+        onComplete: () => {
+          this.cameras.main.shake(90, 0.003);
+          haptic('thud');
+        },
       });
       this.opts.sfx.lose();
       return 900;
@@ -627,6 +640,7 @@ export class LotteryScene extends Phaser.Scene {
     if (ticket.rank >= 4) this.opts.sfx.winSmall();
     else if (ticket.rank === 3) this.opts.sfx.winMedium();
     else this.opts.sfx.winBig();
+    haptic(ticket.rank >= 4 ? 'good' : 'great');
 
     if (ticket.rank <= 3) {
       for (const c of centers) {

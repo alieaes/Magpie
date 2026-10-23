@@ -6,10 +6,11 @@
 import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { storeToRefs } from 'pinia';
-import { PhArrowClockwise, PhFlagCheckered, PhPlay, PhSpeakerHigh, PhSpeakerSlash, PhTrophy } from '@phosphor-icons/vue';
+import { PhArrowClockwise, PhFlagCheckered, PhPlay, PhSpeakerHigh, PhSpeakerSlash, PhTrophy, PhVibrate } from '@phosphor-icons/vue';
 import { findGame, isGameId, randomSeed, type FinishPlayResponse, type Game, type PlayRejectReason } from '@magpie/shared';
 import type { GameInstance, HudState, PlayResult } from '@magpie/shared/game-module';
 import { ApiError, finishPlay, startPlay } from '../api';
+import { useHaptics } from '../composables/useHaptics';
 import { useSound } from '../composables/useSound';
 import { formatNumber } from '../format';
 import { hasGameModule, loadGameModule } from '../games/registry';
@@ -45,6 +46,8 @@ let playId: number | null = null;
 
 // 소리 끄기·음량 (브라우저에 저장)
 const { muted, volume, attach: attachSound, onVolume, toggleMuted } = useSound();
+// 진동 켜기·끄기 (진동이 되는 폰에서만 버튼이 보인다)
+const { supported: hapticsSupported, enabled: hapticsOn, toggle: toggleHaptics } = useHaptics();
 
 /** 주소의 게임. 플레이할 수 있고 코드가 등록된 게임만 */
 const game = computed<Game | null>(() => {
@@ -228,6 +231,20 @@ onBeforeUnmount(destroyGame);
         aria-label="음량"
         @input="onVolume"
       />
+      <button
+        v-if="phase === 'playing' && hapticsSupported"
+        type="button"
+        class="ghost-button icon-only haptics-toggle"
+        :class="{ 'is-off': !hapticsOn }"
+        :aria-label="hapticsOn ? '진동 끄기' : '진동 켜기'"
+        :aria-pressed="!hapticsOn"
+        @click="toggleHaptics"
+      >
+        <PhVibrate :size="18" weight="bold" />
+        <svg v-if="!hapticsOn" class="slash" viewBox="0 0 18 18" aria-hidden="true">
+          <line x1="3" y1="15" x2="15" y2="3" />
+        </svg>
+      </button>
 
       <button v-if="phase === 'playing'" type="button" class="ghost-button" @click="finish">
         <PhFlagCheckered :size="16" weight="bold" />
@@ -555,6 +572,26 @@ onBeforeUnmount(destroyGame);
   padding: 0;
 }
 
+/* 진동 버튼: 끄면 아이콘을 흐리게 하고 빗금을 긋는다 (소리 버튼의 스피커 빗금과 같은 뜻) */
+.haptics-toggle {
+  position: relative;
+}
+
+.haptics-toggle.is-off > :first-child {
+  opacity: 0.45;
+}
+
+.haptics-toggle .slash {
+  position: absolute;
+  inset: 0;
+  width: 18px;
+  height: 18px;
+  margin: auto;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+}
+
 .primary-button:disabled {
   cursor: default;
   opacity: 0.5;
@@ -599,6 +636,11 @@ onBeforeUnmount(destroyGame);
 
   .ghost-button.icon-only + .volume {
     margin-right: 0;
+  }
+
+  /* 소리 버튼만 오른쪽으로 민다. 진동 버튼은 음량 막대 바로 뒤에 붙는다 */
+  .ghost-button.haptics-toggle {
+    margin-left: 0;
   }
 
   .volume {

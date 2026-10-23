@@ -5,6 +5,7 @@
 import Phaser from 'phaser';
 import { TICKS_PER_SECOND, type SaveSnapshot } from '@magpie/shared';
 import type { GrowthSession, PlayResult } from '@magpie/shared/game-module';
+import { haptic } from '@magpie/shared/haptics';
 import {
   DAY_TICKS,
   MAX_INPUTS,
@@ -29,7 +30,7 @@ import type { TextureSet } from './art';
 import { DayView } from './DayView';
 import { canvasSize, type Layout } from './layout';
 import { REJECT_TEXT, buildSettleScreen, buildShopScreen, buildUpgradeScreen, type SettleStatus } from './screens';
-import { buildSettingsPanel, buildSoundControls } from './settings';
+import { buildSettingRows, buildSettingsPanel, hapticsRowHeight } from './settings';
 import type { Sfx } from './sound';
 import { framedBox, roundBox } from './style';
 import { Button, textStyle, titleStyle, type ScenePalette } from './ui';
@@ -346,11 +347,20 @@ export class FishBunScene extends Phaser.Scene {
     return result;
   }
 
-  /** 빵틀 누름. 빈 틀이면 고른 반죽(menu)을 붓고, 굽는 틀·깨진 틀이면 빵틀 번호만 보낸다 */
+  /**
+   * 빵틀 누름. 빈 틀이면 고른 반죽(menu)을 붓고, 굽는 틀·깨진 틀이면 빵틀 번호만 보낸다.
+   * 진동은 손가락이 닿은 이 자리에서 결과를 보고 준다: 받아들여지면 tap(황금을 꺼냈으면 good), 거절이면 deny (설계 261023-01 §5-1)
+   */
   private tapMold(index: number, menu: Menu): boolean {
-    const mold = this.run?.sim.molds[index];
+    const sim = this.run?.sim;
+    const mold = sim?.molds[index];
+    const golden = sim?.stats.golden ?? 0;
     const result = this.act(OP.tap, mold?.phase === 'empty' && !mold.broken ? tapArg(index, menu) : index);
-    if (result && !result.ok && result.reason !== 'too_fast') this.run?.view?.deniedMold(index, result.reason);
+    if (result?.ok) haptic(sim && sim.stats.golden > golden ? 'good' : 'tap');
+    else if (result && result.reason !== 'too_fast') {
+      haptic('deny');
+      this.run?.view?.deniedMold(index, result.reason);
+    }
     return result?.ok ?? false;
   }
 
@@ -385,9 +395,11 @@ export class FishBunScene extends Phaser.Scene {
     const p = this.opts.palette;
     const dim = this.add.rectangle(0, 0, width, height, 0x000000, 0.55).setOrigin(0).setInteractive();
     const cw = Math.min(560, width - 80);
-    // 소리 줄(설정)이 들어가 카드가 길다. 셸 머리줄이 없어서 장사 중 소리는 여기서 바꾼다
-    const top = height / 2 - 320;
-    const card = framedBox(this.add.graphics(), width / 2 - cw / 2, top, cw, 640, 28, p.surface, p.border);
+    // 설정 줄(소리·진동)이 들어가 카드가 길다. 셸 머리줄이 없어서 장사 중 소리·진동은 여기서 바꾼다
+    const extra = hapticsRowHeight();
+    const ch = 640 + extra;
+    const top = height / 2 - ch / 2;
+    const card = framedBox(this.add.graphics(), width / 2 - cw / 2, top, cw, ch, 28, p.surface, p.border);
     const title = this.add.text(width / 2, top + 70, '잠깐 쉬는 중', titleStyle(40, p.textStrong)).setOrigin(0.5);
     const note = this.add
       .text(width / 2, top + 140, '멈춘 동안은 시간이 흐르지 않아요.\n그만두면 오늘 장사는 저장되지 않아요.', {
@@ -395,9 +407,9 @@ export class FishBunScene extends Phaser.Scene {
         align: 'center',
       })
       .setOrigin(0.5);
-    const sound = buildSoundControls(this, { x: width / 2, y: top + 230, width: cw - 80, palette: p, sfx: this.opts.sfx, onChange: (m, v) => this.soundChanged(m, v) });
-    const resume = new Button(this, { x: width / 2, y: top + 430, width: cw - 80, height: 96, label: '계속하기', style: 'primary', palette: p, fontSize: 32, onPress: () => this.resumeDay() });
-    const quit = new Button(this, { x: width / 2, y: top + 548, width: cw - 80, height: 84, label: '오늘 장사 그만두기', style: 'secondary', palette: p, fontSize: 26, onPress: () => this.quitDay() });
+    const sound = buildSettingRows(this, { x: width / 2, y: top + 230, width: cw - 80, palette: p, sfx: this.opts.sfx, onChange: (m, v) => this.soundChanged(m, v) });
+    const resume = new Button(this, { x: width / 2, y: top + 430 + extra, width: cw - 80, height: 96, label: '계속하기', style: 'primary', palette: p, fontSize: 32, onPress: () => this.resumeDay() });
+    const quit = new Button(this, { x: width / 2, y: top + 548 + extra, width: cw - 80, height: 84, label: '오늘 장사 그만두기', style: 'secondary', palette: p, fontSize: 26, onPress: () => this.quitDay() });
     this.pauseLayer = this.add.container(0, 0, [dim, card, title, note, sound, resume, quit]).setDepth(150);
   }
 

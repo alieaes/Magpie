@@ -4,7 +4,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./game-module": "./src/game-module.ts"
+    "./game-module": "./src/game-module.ts",
+    "./haptics": "./src/haptics.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
