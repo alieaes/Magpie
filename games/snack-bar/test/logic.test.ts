@@ -146,6 +146,43 @@ describe('걷기·행동', () => {
     expect(sim.busyUntil).toBeLessThanOrEqual(sim.tick);
   });
 
+  it('걷는 중 반대 방향이면 걸어온 틱만큼 걸려 되돌아선다. 다른 방향·행동은 busy', () => {
+    const sim = quietDay();
+    must(sim, OP.move, 1);
+    run(sim, 3);
+    expect(applyInput(sim, OP.move, 0)).toEqual({ ok: false, reason: 'busy' });
+    expect(applyInput(sim, OP.move, 1)).toEqual({ ok: false, reason: 'busy' });
+    expect(applyInput(sim, OP.act, 0)).toEqual({ ok: false, reason: 'busy' });
+    must(sim, OP.move, 3);
+    expect(sim.pos).toEqual({ x: 4, y: 3 });
+    expect(sim.stepFrom).toEqual({ x: 5, y: 3 });
+    expect(sim.facing).toBe(3);
+    expect(sim.busyUntil).toBe(sim.tick + 3);
+    // 화면이 중간 자리에서 이어 그리도록 걸음 끝 = 되돌아온 시각
+    expect(sim.stepAt + BASE_STEP).toBe(sim.busyUntil);
+    // 돌아오는 중에 다시 반대: 1틱 돌아왔으니 (4,3)에서 2/9 자리, 남은 7/9만큼 걸린다
+    run(sim, 1);
+    must(sim, OP.move, 1);
+    expect(sim.pos).toEqual({ x: 5, y: 3 });
+    expect(sim.busyUntil).toBe(sim.tick + BASE_STEP - 2);
+    settle(sim);
+    // 걸음을 마친 뒤 반대 방향은 보통 걸음
+    must(sim, OP.move, 3);
+    expect(sim.busyUntil).toBe(sim.tick + BASE_STEP);
+  });
+
+  it('걸음을 시작한 틱에 되돌아서면 제자리, 일하는 중에는 되돌아서기 없음', () => {
+    const sim = quietDay();
+    must(sim, OP.move, 1);
+    must(sim, OP.move, 3);
+    expect(sim.pos).toEqual({ x: 4, y: 3 });
+    expect(sim.busyUntil).toBe(sim.tick);
+    must(sim, OP.move, 1);
+    settle(sim);
+    must(sim, OP.act, 0);
+    expect(applyInput(sim, OP.move, 3)).toEqual({ ok: false, reason: 'busy' });
+  });
+
   it('조리: 첫 누름에 재료비, 연타 수만큼 누르면 쟁반으로. 진행은 조리대에 남는다', () => {
     const sim = quietDay();
     stand(sim, 6, 0, 1);
@@ -323,6 +360,30 @@ describe('다시 돌리기', () => {
     const b = replayDay('same', inputs, initialShopState());
     expect(a.ok && b.ok).toBe(true);
     if (a.ok && b.ok) expect(a.nextState).toEqual(b.nextState);
+  });
+
+  it('되돌아서기를 섞은 입력도 화면식 진행과 다시 돌리기가 같다', () => {
+    const inputs: SnackInput[] = [
+      [0, OP.move, 1],
+      [3, OP.move, 3],
+      [4, OP.move, 1],
+      [4, OP.move, 3],
+      [20, OP.move, 0],
+      [24, OP.move, 2],
+      [40, OP.move, 1],
+    ];
+    const live = createDay(initialShopState(), 'rev');
+    for (const [t, op, arg] of inputs) {
+      while (live.tick < t) advance(live);
+      expect(applyInput(live, op, arg)).toEqual({ ok: true });
+    }
+    while (live.phase !== 'closed') advance(live);
+    const replayed = replayDay('rev', inputs, initialShopState());
+    expect(replayed.ok).toBe(true);
+    if (replayed.ok) {
+      expect(replayed.sim.pos).toEqual(live.pos);
+      expect(replayed.nextState).toEqual(settleDay(live).nextState);
+    }
   });
 
   it('지원금: 하루를 열 때 3,000원 미만이면 채운다', () => {

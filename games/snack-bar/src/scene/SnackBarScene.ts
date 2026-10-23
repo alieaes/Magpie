@@ -18,6 +18,7 @@ import {
   type DayOutcome,
   type DaySim,
   type DayStats,
+  type InputResult,
   type ShopState,
   type SnackInput,
   type StaffId,
@@ -399,13 +400,13 @@ export class SnackBarScene extends Phaser.Scene {
     }
   }
 
-  /** 입력을 지금 틱에 적용하고, 받아들여지면 기록한다 */
-  private input1(op: number, arg: number): boolean {
+  /** 입력을 지금 틱에 적용하고, 받아들여지면 기록한다. 장사 중이 아니면 사유 inactive로 실패 */
+  private input1(op: number, arg: number): InputResult {
     const run = this.activeRun();
-    if (!run || run.sim.phase === 'closed' || run.inputs.length >= MAX_INPUTS) return false;
+    if (!run || run.sim.phase === 'closed' || run.inputs.length >= MAX_INPUTS) return { ok: false, reason: 'inactive' };
     const result = applyInput(run.sim, op, arg);
     if (result.ok) run.inputs.push([run.sim.tick, op, arg]);
-    return result.ok;
+    return result;
   }
 
   /** 멈춤: 시간을 멈춘다 */

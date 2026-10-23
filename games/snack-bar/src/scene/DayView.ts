@@ -26,6 +26,7 @@ import {
   type DaySim,
   type Dir,
   type Guest,
+  type InputResult,
   type Table,
   type Target,
 } from '../logic/rules';
@@ -35,11 +36,11 @@ import { MENU_ART, dishKey, dishMiniKey, ensureGuest, ensureStaff, iconKey, menu
 import { BUBBLE_BAR, BUBBLE_HALF, PANEL_PAD, PATIENCE_CELLS, PATIENCE_W, framedBox, meter, panelCells, panelWidth, patienceBar, speechBubble, vGradient } from './style';
 import { Button, clockText, mix, num, textStyle, titleStyle, won, type ScenePalette } from './ui';
 
-/** 장면이 넘기는 조작. 받아들여지면 true */
+/** 장면이 넘기는 조작. 받아들여지지 않으면 사유(걷는 중·일하는 중이면 busy) */
 export interface DayHandlers {
-  move(dir: Dir): boolean;
-  act(): boolean;
-  give(slot: number): boolean;
+  move(dir: Dir): InputResult;
+  act(): InputResult;
+  give(slot: number): InputResult;
   pause(): void;
 }
 
@@ -52,6 +53,10 @@ const DEPTH = { floor: 0, bubble: 3000, fx: 3500, hud: 4000 } as const;
 const GAUGE_GAP = 4;
 /** 음식이 다 되면 게이지를 꽉 찬 채로 보여 주는 틱 (0.3초) */
 const COOKED_SHOW_TICKS = 18;
+/** 바로 못 한 조작을 줄 세우는 개수. 가득하면 새로 누른 것을 버린다 */
+const QUEUE_MAX = 3;
+/** 방향키를 이만큼(0.15초) 넘게 누르고 있어야 다음 걸음을 이어 간다 */
+const HOLD_TICKS = 9;
 
 /** 테이블 한 곳의 그림 */
 interface TableArt {
@@ -103,11 +108,11 @@ export class DayView {
   /** 탭해서 걷는 길과 마지막에 바라볼 방향 */
   private path: Dir[] = [];
   private finalFace: Dir | null = null;
-  /** 걷는 중·일하는 중에 누른 조작 하나를 미뤄 둔다 */
-  private pending: (() => boolean) | null = null;
-  private pendingAt = 0;
-  /** 키보드로 누르고 있는 방향 */
+  /** 걷는 중·일하는 중이라 바로 못 한 조작의 줄 (누른 순서, 덮어쓰지 않음, QUEUE_MAX개까지) */
+  private readonly queue: (() => InputResult)[] = [];
+  /** 키보드로 누르고 있는 방향과 누른 틱 */
   private heldDir: Dir | null = null;
+  private heldAt = 0;
   private closingShown = false;
   private renderTick = 0;
 
@@ -165,7 +170,7 @@ export class DayView {
     this.heldDir = null;
     this.path = [];
     this.finalFace = null;
-    this.pending = null;
+    this.queue.length = 0;
   }
 
   /** 화면 오브젝트를 기억했다가 같이 지운다 */
@@ -371,6 +376,7 @@ export class DayView {
         this.path = [];
         this.finalFace = null;
         this.heldDir = dir;
+        this.heldAt = this.renderTick;
         this.request(() => this.handlers.move(dir));
       });
       key.on('up', () => {
@@ -397,11 +403,16 @@ export class DayView {
 
   // ---------------------------------------------------------------- 조작
 
-  /** 조작 하나: 지금 할 수 있으면 바로, 걷는 중·일하는 중이면 하나만 미뤄 둔다(0.3초 안에 처리) */
-  private request(fn: () => boolean): void {
-    if (fn()) return;
-    this.pending = fn;
-    this.pendingAt = this.renderTick;
+  /**
+   * 조작 하나: 줄이 비어 있으면 바로 해 보고, 걷는 중·일하는 중이라 못 하면 줄 뒤에 선다.
+   * 줄에 무엇이 있으면 순서를 지켜 뒤에 선다. 줄이 가득하면 새로 누른 것을 버린다. 바쁜 것 말고 다른 이유로 실패하면 버린다
+   */
+  private request(fn: () => InputResult): void {
+    if (this.queue.length === 0) {
+      const result = fn();
+      if (result.ok || result.reason !== 'busy') return;
+    }
+    if (this.queue.length < QUEUE_MAX) this.queue.push(fn);
   }
 
   /** 화면을 눌렀다: 바닥이면 거기까지 걷고, 테이블·조리대면 바라보는 칸까지 걸어가고, 이미 바라보고 있으면 행동 */
@@ -437,22 +448,25 @@ export class DayView {
     return this.tables.findIndex((art) => px >= art.hit.left && px < art.hit.right && py >= art.hit.top && py < art.hit.bottom);
   }
 
-  /** 매 프레임: 미뤄 둔 조작 → 누르고 있는 방향 → 탭해서 걷는 길 순서로 다음 걸음을 넣는다 */
+  /** 매 프레임: 줄 맨 앞 → 누르고 있는 방향 → 탭해서 걷는 길 순서로 다음 조작을 넣는다 */
   update(sim: DaySim): void {
-    if (sim.tick < sim.busyUntil) return;
-    if (this.pending) {
-      const fn = this.pending;
-      this.pending = null;
-      if (this.renderTick - this.pendingAt <= 18 && fn()) return;
+    // 줄 맨 앞은 걷는 중에도 해 본다(반대 방향이면 그 자리에서 되돌아선다). 바빠서 못 하면 기다리고, 다른 이유로 실패하면 뺀다
+    const first = this.queue[0];
+    if (first) {
+      const result = first();
+      if (result.ok || result.reason !== 'busy') this.queue.shift();
+      return;
     }
+    if (sim.tick < sim.busyUntil) return;
+    // 누르고 있기: 줄이 비었을 때만, 누른 지 0.15초가 지나야 이어 걷는다(톡 누른 것은 한 칸)
     const held = this.heldDir;
     if (held !== null && this.keys[`d${held}`]?.isDown) {
-      this.handlers.move(held);
+      if (sim.tick - this.heldAt >= HOLD_TICKS) this.handlers.move(held);
       return;
     }
     if (this.path.length > 0) {
       const dir = this.path.shift()!;
-      if (!this.handlers.move(dir)) this.path = [];
+      if (!this.handlers.move(dir).ok) this.path = [];
       return;
     }
     if (this.finalFace !== null) {

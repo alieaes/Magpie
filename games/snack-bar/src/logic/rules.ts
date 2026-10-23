@@ -465,7 +465,11 @@ export function applyInput(sim: DaySim, op: number, arg: number): InputResult {
   switch (op) {
     case OP.move:
       if (!Number.isInteger(arg) || arg < 0 || arg > 3) return { ok: false, reason: 'bad_dir' };
-      if (isBusy(sim)) return { ok: false, reason: 'busy' };
+      if (isBusy(sim)) {
+        if (!canReverse(sim, arg as Dir)) return { ok: false, reason: 'busy' };
+        reverse(sim, arg as Dir);
+        return { ok: true };
+      }
       move(sim, arg as Dir);
       return { ok: true };
     case OP.act:
@@ -494,6 +498,25 @@ function move(sim: DaySim, dir: Dir): void {
   sim.pos = to;
   sim.busyUntil = sim.tick + sim.params.step;
   emit(sim, { type: 'step', from: sim.stepFrom, to });
+}
+
+/** 걷는 중이고 dir이 지금 걸음의 반대 방향(걸어온 칸 쪽)인지. 일하는 중이면 false */
+function canReverse(sim: DaySim, dir: Dir): boolean {
+  if (sim.tick >= sim.stepAt + sim.params.step) return false;
+  const [dx, dy] = DIRS[dir]!;
+  return sim.pos.x + dx === sim.stepFrom.x && sim.pos.y + dy === sim.stepFrom.y;
+}
+
+/** 되돌아서기: 걸어온 틱만큼 걸려 원래 칸으로 돌아간다. 화면이 지금 중간 자리에서 이어 그리도록 걸음 시작 틱을 옮긴다 */
+function reverse(sim: DaySim, dir: Dir): void {
+  const walked = sim.tick - sim.stepAt;
+  const from = sim.pos;
+  sim.facing = dir;
+  sim.pos = sim.stepFrom;
+  sim.stepFrom = from;
+  sim.stepAt = sim.tick - (sim.params.step - walked);
+  sim.busyUntil = sim.tick + walked;
+  emit(sim, { type: 'step', from, to: sim.pos });
 }
 
 /** 아무 일 없음 (말풍선만) */
