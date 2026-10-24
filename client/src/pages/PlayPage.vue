@@ -9,7 +9,7 @@ import { storeToRefs } from 'pinia';
 import { PhArrowClockwise, PhFlagCheckered, PhPlay, PhSpeakerHigh, PhSpeakerSlash, PhTrophy, PhVibrate } from '@phosphor-icons/vue';
 import { findGame, isGameId, randomSeed, type FinishPlayResponse, type Game, type PlayRejectReason } from '@magpie/shared';
 import type { GameInstance, HudState, PlayResult } from '@magpie/shared/game-module';
-import { ApiError, finishPlay, startPlay } from '../api';
+import { ApiError, finishPlay, sendPracticePlay, startPlay } from '../api';
 import { useHaptics } from '../composables/useHaptics';
 import { useSound } from '../composables/useSound';
 import { formatNumber } from '../format';
@@ -140,11 +140,19 @@ async function start(): Promise<void> {
   }
 }
 
-/** 판이 끝났을 때. 기록 모드면 서버에 보낸다 */
+/** 판이 끝났을 때. 기록 모드면 서버에 보낸다. 연습 모드면 점수만 남긴다(관리자 이력용, 개발용 고정 시드는 빼고) */
 async function onEnd(r: PlayResult): Promise<void> {
   result.value = r;
-  if (recording.value) await submit();
-  else phase.value = 'ended';
+  if (recording.value) {
+    await submit();
+    return;
+  }
+  phase.value = 'ended';
+  const current = game.value;
+  if (current && !fixedSeed.value) {
+    // 보내지 못해도 화면은 그대로 둔다 (docs/design/261024-02-admin-play-history.md §3)
+    sendPracticePlay(current.id, r.score).catch((err: unknown) => console.warn('[play] 연습 판 점수를 보내지 못했다', err));
+  }
 }
 
 /** 끝난 판을 서버에 보낸다. 보내지 못하면 "다시 보내기"를 띄운다 */

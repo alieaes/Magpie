@@ -10,10 +10,10 @@
 [끝]   POST /api/plays/:id/finish → 형식 → 시간 → 재계산 → 점수 검사 → accepted / rejected
 ```
 
-- **기록 모드**: 로그인 + 닉네임. 서버가 시드를 준다. 아니면 **연습 모드**(셸이 시드를 만들고 기록이 안 남는다).
+- **기록 모드**: 로그인 + 닉네임. 서버가 시드를 준다. 아니면 **연습 모드**(셸이 시드를 만들고 기록이 안 남는다). 연습 모드 판이 끝나면 점수만 `POST /api/plays/practice`로 보낸다(관리자 이력용, 아래 "비로그인 판 점수").
 - 셸은 게임 코드를 먼저 내려받고 판을 연다. 서버는 판을 연 때부터 시간을 재므로 내려받는 시간이 들어가지 않게 한다.
 - 같은 유저가 같은 게임의 판을 새로 열면 안 끝난 이전 판은 `rejected`(`abandoned`)가 된다.
-- 끝나지 않고 하루가 지난 판은 서버 시작 때와 하루 한 번 `abandoned`로 정리한다(`abandonStalePlays`).
+- 끝나지 않고 하루가 지난 판은 서버 시작 때와 하루 한 번 `abandoned`로 정리한다(`abandonStalePlays`). 대상을 먼저 읽고 기본 키로 500개씩 고친다(아래 "잠금").
 
 ## 게임 로직 규격 (`shared/src/game-logic.ts`)
 
@@ -48,13 +48,13 @@
 
 | 표 | 내용 |
 |---|---|
-| `plays` | `status`, `reject_reason`(`bad_input` / `time` / `mismatch` / `abandoned` / `admin`(관리자가 지움, [admin.md](./admin.md)) / `stale_save`(성장형: 판을 연 뒤 저장이 바뀜)), `score`(통과한 판만, 서버 점수), `client_score`(보낸 점수), `ended_at`(끝 요청 시각. 버려진 판은 NULL), `save_version`(성장형만, 판을 연 때의 저장 버전) |
+| `plays` | `ip`(판을 연 IP, 체험 이어받기는 받은 IP. 2026-10-24 배포 전 판은 NULL. 아래 "IP"), `status`, `reject_reason`(`bad_input` / `time` / `mismatch` / `abandoned` / `admin`(관리자가 지움, [admin.md](./admin.md)) / `stale_save`(성장형: 판을 연 뒤 저장이 바뀜)), `score`(통과한 판만, 서버 점수), `client_score`(보낸 점수), `ended_at`(끝 요청 시각. 버려진 판은 NULL), `save_version`(성장형만, 판을 연 때의 저장 버전) |
 | `play_replays` | 보낸 `inputs`의 JSON을 gzip. 거절된 판도 남긴다 |
 | `best_daily`, `best_alltime` | 통과한 판이 더 좋을 때만 갱신. 동점이면 먼저 달성한 기록을 둔다. 일간의 날짜는 끝 요청 시각의 KST 날짜. 성장형은 `best_alltime`만 |
 
 - 판을 닫는 것(`status = 'pending'`일 때만 바꿈), 입력 기록, 최고 기록 갱신은 한 트랜잭션이다. 같은 판의 끝 요청이 동시에 오면 하나만 처리된다.
 - 최고 기록은 `INSERT ... ON DUPLICATE KEY UPDATE`로 더 좋을 때만 값을 바꾸고(고칠 값은 `score`를 맨 끝에 둔다), 바뀌었는지는 다시 읽어 `play_id`로 본다(`server/src/plays/bests.ts`).
-- 잠금: 조건으로 찾는 UPDATE·DELETE는 맞는 줄이 없을 때 틈(gap) 잠금을 걸어 다른 유저의 INSERT와 교착이 난다. 그래서 먼저 읽고 기본 키로 고친다(판 시작의 이전 판 버리기, 관리자 기록 삭제).
+- 잠금: 조건으로 찾는 UPDATE·DELETE는 맞는 줄이 없을 때 틈(gap) 잠금을 걸어 다른 유저의 INSERT와 교착이 난다. 그래서 먼저 읽고 기본 키로 고친다(판 시작의 이전 판 버리기, 관리자 기록 삭제, 하루 지난 판 정리).
 - 최고 기록이 바뀌면 그 프로세스의 랭킹 캐시를 비운다. 다른 프로세스는 10초 안에 따라온다.
 
 ## API
@@ -64,6 +64,7 @@
 | `POST /api/plays` | `{ "gameId" }` | `200 { playId, seed }`(성장형은 `saveVersion` 추가). 비로그인 `401 UNAUTHORIZED`, 닉네임 전 `403 NICKNAME_REQUIRED`, 없는·기록할 수 없는 게임 `400 BAD_REQUEST`, 유저당 분당 20회 초과 `429 TOO_MANY_REQUESTS` |
 | `POST /api/plays/:id/finish` | `{ inputs: [], ticks, score }` | `200 { accepted: true, score, best: { today, allTime }, rank: { today } }`(성장형은 `rank: { today: null, allTime }`, 새 저장 `save` 추가) 또는 `200 { accepted: false, reason }` |
 | `POST /api/plays/adopt-trial` | `{ gameId, seed, inputs, ticks, score }` | 성장형만. 로그인 전에 체험한 하루를 이어받는다. `200 { adopted: true, save }` 또는 `{ adopted: false, reason }`(`has_record`·`bad_input`·`mismatch`·`time`). 비로그인 401, 닉네임 전 403, 시작과 같은 분당 횟수 제한 |
+| `POST /api/plays/practice` | `{ gameId, score }` | 비로그인 판 점수(아래). `204`. 없는·기록할 수 없는 게임, 점수가 정수가 아니거나 0 ~ 그 게임 `maxScore` 밖이면 `400 BAD_REQUEST`, IP당 분당 30회 초과 `429 TOO_MANY_REQUESTS` |
 
 `adopt-trial`: 저장이 시작 상태 그대로(버전 1)일 때만 받는다. 클라이언트가 정한 시드로 시작 상태에서 하루를 다시 돌려 점수를 확인하고(경과 시간 검사는 게임 시간만큼 흐른 것으로 친다), 판(통과)·입력 기록을 남기고 저장을 다음 날로 바꾼다(버전 2). 시드를 클라이언트가 정하므로 **최고 기록(랭킹)은 갱신하지 않는다**.
 
@@ -78,8 +79,25 @@
 
 - `rank.today`: 그 게임의 오늘 순위. 날짜가 바뀌는 순간이면 `null`일 수 있다.
 - 성장형("게임" 분류)은 일간 랭킹이 없다: `best_daily`에 쓰지 않아 `best.today`가 늘 `false`, 순위는 `rank.allTime`(전체 순위)으로 준다([ranking.md](./ranking.md)).
-- 형식은 `shared/src/plays.ts`(`StartPlayResponse`, `FinishPlayRequest`, `FinishPlayResponse`, `PlayRejectReason`).
+- 형식은 `shared/src/plays.ts`(`StartPlayResponse`, `FinishPlayRequest`, `FinishPlayResponse`, `PlayRejectReason`, `PracticePlayRequest`).
 - 요청 횟수 제한은 프로세스 메모리에 둔다(`server/src/lib/rate-limit.ts`, 지난 60초 안의 요청 수).
+
+### 비로그인 판 점수
+
+설계: [261024-02-admin-play-history.md](../design/261024-02-admin-play-history.md). 관리자 대시보드의 플레이 이력([admin.md](./admin.md))에만 쓴다.
+
+- 연습 모드(미니게임, `PlayPage`)·체험(성장형, 체험 창구 `finishDay`) 판이 끝나면 화면이 `POST /api/plays/practice`로 점수를 보낸다. 로그인했지만 닉네임 전인 판도 연습 모드라 보낸다. 개발용 `?seed=` 판은 보내지 않는다.
+- **점수는 화면이 보낸 값 그대로다(서버가 다시 계산하지 않는다).** 누구나 보낼 수 있고 꾸밀 수도 있다. 랭킹과는 상관없다.
+- 보내지 못해도 화면은 그대로다(콘솔 경고만, 다시 보내지 않는다).
+- 로그인과 상관없이 받는다. 요청 위조 방지(Origin 확인)는 받는다. 횟수 제한 키는 IP.
+- 표 `practice_plays`(`db/010_play_history.sql`): `id`, `game_id`, `score`, `ip`, `created_at`(받은 시각, UTC). 색인 (`game_id`, `id`). 유저와 이어지지 않는다.
+
+### IP (`server/src/lib/client-ip.ts`)
+
+- `CF-Connecting-IP`(Cloudflare가 붙인다) → 없으면 연결 주소. `::ffff:1.2.3.4` 꼴이면 `1.2.3.4`로 줄이고 45자로 자른다. 둘 다 모르면 NULL(테스트 요청 등).
+- 운영은 Cloudflare → nginx → API 서버(127.0.0.1)라 연결 주소는 늘 nginx다. nginx는 받은 헤더를 그대로 넘기므로 설정을 바꾸지 않는다.
+- Cloudflare를 거치지 않고 바로 오면 헤더를 꾸밀 수 있다. 관리자가 보는 값과 비로그인 판 점수의 횟수 제한에만 쓰고 권한에는 쓰지 않는다.
+- **보관 기간이 없다.** 지우지 않고 쌓인다. 탈퇴하면 그 유저의 판(`plays.ip` 포함)은 같이 지워지고, `practice_plays`는 누구 것인지 모르므로 남는다.
 
 ## 화면 (`client/src/pages/PlayPage.vue`)
 
@@ -87,6 +105,7 @@
 - 끝: 점수, 최고 기록을 바꿨으면 "역대 최고 기록" 또는 "오늘 최고 기록" 표시, "기록했어요 · 오늘 N위".
   거절되면 사유 문구(빨강), 보내지 못하면 "기록을 보내지 못했어요." + "다시 보내기". 보내는 동안은 "기록을 확인하는 중"이고 "다시 하기"가 꺼진다.
 - 판을 열다가 실패하면 서버 문구를 보여주고 "다시 시도". 로그인이 풀렸으면(401) 로그인 상태를 다시 받아 다음 시도는 연습 모드가 된다.
+- 연습 모드 판이 끝나면 점수를 보낸다(위 "비로그인 판 점수"). 결과 화면은 보내기와 상관없이 바로 뜬다.
 
 ## 막지 못하는 것
 

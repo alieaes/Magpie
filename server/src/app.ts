@@ -71,7 +71,7 @@ export function createApp({
     .route('/', meRoutes({ db, cookies, loginAvailable: oidc !== null, devLogin, ranking, visits }))
     .route('/', playRoutes(plays, logics))
     .route('/', saveRoutes(saves, logics))
-    .route('/', adminRoutes({ db, ranking, visits }));
+    .route('/', adminRoutes({ db, ranking, visits, logics }));
 
   const auth = new Hono<AppEnv>()
     .use(sameOrigin)

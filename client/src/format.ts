@@ -31,3 +31,10 @@ export function formatRemaining(ms: number): string {
   if (hours === 0) return `${minutes}분`;
   return minutes === 0 ? `${hours}시간` : `${hours}시간 ${minutes}분`;
 }
+
+/** 시각(ISO)을 KST "10.24 14:03" 꼴로 바꾼다 */
+export function formatKstDateTime(iso: string): string {
+  const kst = new Date(new Date(iso).getTime() + 9 * 3_600_000);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${pad(kst.getUTCMonth() + 1)}.${pad(kst.getUTCDate())} ${pad(kst.getUTCHours())}:${pad(kst.getUTCMinutes())}`;
+}

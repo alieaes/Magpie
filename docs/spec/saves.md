@@ -17,7 +17,7 @@
 | 로그인 + 닉네임 | 저장, 이어하기, 랭킹 기록. 기록이 없는 계정이면 로그인 전에 체험한 하루를 첫 하루로 이어받는다(아래) |
 | 비로그인 · 닉네임 전 · 개발용 `?seed=` | 체험: 게임이 내놓은 시작 상태(`initialState`)로 하루를 해 볼 수 있다. 서버와 이야기하지 않고 아무것도 저장하지 않는다 |
 
-체험한 하루 이어받기 ([261022-16](../design/261022-16-trial-day-adopt.md)): 체험 창구가 하루가 끝나면 `{ seed, inputs, ticks, score }`를 `localStorage`(`magpie.trialDay.<gameId>`)에 적는다(개발용 `?seed=` 제외, 다시 체험하면 덮어쓴다). 로그인 뒤 저장 창구의 `load()`가 저장 버전이 1이면 `POST /api/plays/adopt-trial`로 올려 새 저장을 받고, 서버가 판정하거나 버전이 1이 아니면 적어 둔 하루를 지운다(연결 실패·5xx면 남긴다). 이어받은 하루는 가게 상태만 이어지고 랭킹에는 들어가지 않는다([plays.md](./plays.md)).
+체험한 하루 이어받기 ([261022-16](../design/261022-16-trial-day-adopt.md)): 체험 창구가 하루가 끝나면 `{ seed, inputs, ticks, score }`를 `localStorage`(`magpie.trialDay.<gameId>`)에 적는다(개발용 `?seed=` 제외, 다시 체험하면 덮어쓴다). 같은 때 점수만 `POST /api/plays/practice`로 보낸다(관리자 이력용, [plays.md](./plays.md) "비로그인 판 점수", 실패해도 그대로). 로그인 뒤 저장 창구의 `load()`가 저장 버전이 1이면 `POST /api/plays/adopt-trial`로 올려 새 저장을 받고, 서버가 판정하거나 버전이 1이 아니면 적어 둔 하루를 지운다(연결 실패·5xx면 남긴다). 이어받은 하루는 가게 상태만 이어지고 랭킹에는 들어가지 않는다([plays.md](./plays.md)).
 
 ## 게임 로직 규격 (`shared/src/game-logic.ts`의 `GrowthLogic`)
 

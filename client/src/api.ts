@@ -3,6 +3,8 @@
 import { hc } from 'hono/client';
 import type { AppType } from '@magpie/server';
 import type {
+  AdminPlayWho,
+  AdminPlaysResponse,
   AdminVisitorsResponse,
   FinishPlayRequest,
   AdoptTrialRequest,
@@ -90,6 +92,12 @@ export async function finishPlay(playId: number, body: FinishPlayRequest): Promi
   return res.json();
 }
 
+/** 비로그인(연습 모드·체험) 판의 점수를 남긴다(관리자 이력용). 서버는 다시 계산하지 않는다. 근거: docs/design/261024-02-admin-play-history.md §3 */
+export async function sendPracticePlay(gameId: GameId, score: number): Promise<void> {
+  const res = await client.api.plays.practice.$post({ json: { gameId, score } });
+  if (!res.ok) throw await toApiError(res);
+}
+
 /** 로그인 전에 체험한 하루를 기록 없는 계정의 첫 하루로 이어받게 한다. 이어받지 못하면 사유가 온다 */
 export async function adoptTrialDay(body: AdoptTrialRequest): Promise<AdoptTrialResponse> {
   const res = await client.api.plays['adopt-trial'].$post({ json: body });
@@ -149,6 +157,13 @@ export async function adminResetRanking(gameId: string): Promise<void> {
 /** 관리자: 오늘 시간별 방문자와 전체 방문자. 근거: docs/design/261024-01-admin-dashboard.md */
 export async function fetchAdminVisitors(): Promise<AdminVisitorsResponse> {
   const res = await client.api.admin.visitors.$get();
+  if (!res.ok) throw await toApiError(res);
+  return res.json();
+}
+
+/** 관리자: 게임별 플레이 이력 50개. cursor는 앞 묶음의 nextCursor. 근거: docs/design/261024-02-admin-play-history.md §4 */
+export async function fetchAdminPlays(gameId: GameId, who: AdminPlayWho, cursor: string | null): Promise<AdminPlaysResponse> {
+  const res = await client.api.admin.plays.$get({ query: cursor ? { gameId, who, cursor } : { gameId, who } });
   if (!res.ok) throw await toApiError(res);
   return res.json();
 }

@@ -1,10 +1,15 @@
 <script setup lang="ts">
 // 관리자 대시보드(/admin). 관리자가 아니면 없는 페이지 화면을 그린다. 실제 권한 확인은 서버가 한다.
-// 근거: docs/design/261024-01-admin-dashboard.md §3
+// 근거: docs/design/261024-01-admin-dashboard.md §3, 플레이 이력 docs/design/261024-02-admin-play-history.md §5
+import { ref } from 'vue';
+import type { GameId, RankingTarget } from '@magpie/shared';
 import { fetchAdminVisitors } from '../api';
+import AdminPlayList from '../components/AdminPlayList.vue';
+import TargetTabs from '../components/TargetTabs.vue';
 import VisitorChart from '../components/VisitorChart.vue';
 import { useAsyncData } from '../composables/useAsyncData';
 import { formatNumber } from '../format';
+import { rankingTargetGroups } from '../rankingTargets';
 import { useAuthStore } from '../stores/auth';
 import NotFoundPage from './NotFoundPage.vue';
 
@@ -12,6 +17,12 @@ const auth = useAuthStore();
 
 // 관리자로 확인된 뒤에만 부른다. 로그인 상태를 받으면 다시 본다
 const visitors = useAsyncData(() => (auth.isAdmin ? fetchAdminVisitors() : Promise.resolve(null)), [() => auth.isAdmin]);
+
+// 플레이 이력 게임 탭: 플레이할 수 있는(기록할 수 있는) 게임을 분류별로. 랭킹 탭에서 총합만 뺀다
+const gameGroups = rankingTargetGroups()
+  .map((group) => ({ ...group, options: group.options.filter((o) => o.value !== 'total') }))
+  .filter((group) => group.options.length > 0);
+const selected = ref<RankingTarget>(gameGroups[0]?.options[0]?.value ?? 'apple-ten');
 </script>
 
 <template>
@@ -46,6 +57,21 @@ const visitors = useAsyncData(() => (auth.isAdmin ? fetchAdminVisitors() : Promi
           <VisitorChart v-if="visitors.data.value" :hourly="visitors.data.value.today.hourly" class="chart" />
           <div v-else class="chart skeleton-chart" />
         </template>
+      </section>
+
+      <section class="card" aria-labelledby="plays-title">
+        <h2 id="plays-title" class="section-title">플레이 이력</h2>
+        <TargetTabs v-model="selected" :groups="gameGroups" label="게임" class="game-tabs" />
+        <div v-if="selected !== 'total'" class="play-columns">
+          <div class="play-column">
+            <h3 class="column-title">로그인</h3>
+            <AdminPlayList :game-id="selected as GameId" who="member" />
+          </div>
+          <div class="play-column">
+            <h3 class="column-title">비로그인</h3>
+            <AdminPlayList :game-id="selected as GameId" who="guest" />
+          </div>
+        </div>
       </section>
     </main>
   </template>
@@ -153,6 +179,32 @@ const visitors = useAsyncData(() => (auth.isAdmin ? fetchAdminVisitors() : Promi
 
 .retry:hover {
   background: var(--surface-hover);
+}
+
+.game-tabs {
+  margin-top: 12px;
+}
+
+.play-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 32px;
+  margin-top: 20px;
+}
+
+.column-title {
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-strong);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-strong);
+}
+
+@media (max-width: 767px) {
+  .play-columns {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 28px;
+  }
 }
 
 @media (max-width: 480px) {

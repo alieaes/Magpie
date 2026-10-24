@@ -25,7 +25,7 @@ export interface SessionsTable {
 /** 판 검증 상태 */
 export type PlayStatus = 'pending' | 'accepted' | 'rejected';
 
-/** 003_plays.sql, 005_plays_reason.sql, 007_game_saves.sql */
+/** 003_plays.sql, 005_plays_reason.sql, 007_game_saves.sql, 010_play_history.sql */
 export interface PlaysTable {
   id: Generated<number>;
   user_id: number;
@@ -41,6 +41,8 @@ export interface PlaysTable {
   reject_reason: ColumnType<string | null, string | null | undefined, string | null>;
   started_at: Date;
   ended_at: Date | null;
+  /** 판을 연 IP(체험 이어받기는 받은 IP). 배포 전 판은 NULL */
+  ip: ColumnType<string | null, string | null | undefined, string | null>;
 }
 
 /** 003_plays.sql */
@@ -112,6 +114,15 @@ export interface VisitsTable {
   first_at: Date;
 }
 
+/** 010_play_history.sql. 비로그인(연습 모드·체험) 판. 점수는 화면이 보낸 값 그대로 */
+export interface PracticePlaysTable {
+  id: Generated<number>;
+  game_id: string;
+  score: number;
+  ip: string | null;
+  created_at: Date;
+}
+
 export interface Database {
   users: UsersTable;
   sessions: SessionsTable;
@@ -123,4 +134,5 @@ export interface Database {
   game_saves: GameSavesTable;
   save_actions: SaveActionsTable;
   visits: VisitsTable;
+  practice_plays: PracticePlaysTable;
 }

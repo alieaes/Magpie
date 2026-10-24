@@ -3,12 +3,12 @@
 import type { RankingTarget } from '@magpie/shared';
 import type { TargetGroup } from '../rankingTargets';
 
-defineProps<{ groups: TargetGroup[] }>();
+withDefaults(defineProps<{ groups: TargetGroup[]; label?: string }>(), { label: '랭킹 대상' });
 const target = defineModel<RankingTarget>({ required: true });
 </script>
 
 <template>
-  <div class="tabs" role="tablist" aria-label="랭킹 대상">
+  <div class="tabs" role="tablist" :aria-label="label">
     <template v-for="(group, gi) in groups" :key="group.kind">
       <span v-if="gi > 0" class="divider" aria-hidden="true" />
       <button

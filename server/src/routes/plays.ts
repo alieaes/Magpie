@@ -1,4 +1,5 @@
 // 판 시작·끝: POST /api/plays, POST /api/plays/:id/finish. 근거: docs/design/261006-08-play-submission.md §6
+// 비로그인 판 점수: POST /api/plays/practice. 근거: docs/design/261024-02-admin-play-history.md §3
 
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
@@ -6,6 +7,7 @@ import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { isGameId, type GameId } from '@magpie/shared';
 import type { AppEnv } from '../app-env';
+import { clientIp } from '../lib/client-ip';
 import { jsonError, rejectInvalid } from '../lib/errors';
 import { RateLimiter } from '../lib/rate-limit';
 import { defaultLogics, type LogicRegistry } from '../plays/logics';
@@ -14,6 +16,8 @@ import type { PlayService } from '../plays/service';
 // 유저당 판 시작은 분당 20회까지
 const START_LIMIT = 20;
 const START_WINDOW_MS = 60_000;
+// 비로그인 판 점수는 IP당 분당 30회까지
+const PRACTICE_LIMIT = 30;
 // 끝 요청 본문 상한. 사과게임 입력 기록은 최대 85개라 4KB 안팎이다
 const FINISH_MAX_BYTES = 256 * 1024;
 const INT32_MAX = 2_147_483_647;
@@ -40,9 +44,13 @@ const AdoptBody = StartBody.extend({
   score: z.int().min(-INT32_MAX).max(INT32_MAX),
 });
 
+// 비로그인 판 점수. 점수 범위는 게임 로직의 maxScore로 따로 본다
+const PracticeBody = StartBody.extend({ score: z.int().min(0).max(INT32_MAX) });
+
 /** /api/plays 라우트 */
 export function playRoutes(plays: PlayService, logics: LogicRegistry = defaultLogics) {
   const startLimiter = new RateLimiter(START_LIMIT, START_WINDOW_MS);
+  const practiceLimiter = new RateLimiter(PRACTICE_LIMIT, START_WINDOW_MS);
 
   return new Hono<AppEnv>()
     .post('/plays', zValidator('json', StartBody, rejectInvalid), async (c) => {
@@ -54,7 +62,19 @@ export function playRoutes(plays: PlayService, logics: LogicRegistry = defaultLo
       if (!startLimiter.hit(String(user.id))) {
         return jsonError(c, 429, 'TOO_MANY_REQUESTS', '판을 너무 자주 시작했어요. 잠시 뒤 다시 해 주세요.');
       }
-      return c.json(await plays.start(user.id, gameId), 200);
+      return c.json(await plays.start(user.id, gameId, clientIp(c)), 200);
+    })
+    .post('/plays/practice', zValidator('json', PracticeBody, rejectInvalid), async (c) => {
+      const { gameId, score } = c.req.valid('json');
+      const logic = logics.find(gameId);
+      if (!logic || !logics.isRecordable(gameId)) return jsonError(c, 400, 'BAD_REQUEST', '기록할 수 없는 게임입니다.');
+      if (score > logic.maxScore) return jsonError(c, 400, 'BAD_REQUEST', '점수가 범위를 벗어났습니다.');
+      const ip = clientIp(c);
+      if (!practiceLimiter.hit(ip ?? 'unknown')) {
+        return jsonError(c, 429, 'TOO_MANY_REQUESTS', '너무 자주 보냈어요. 잠시 뒤 다시 해 주세요.');
+      }
+      await plays.recordPractice(gameId, score, ip);
+      return c.body(null, 204);
     })
     .post(
       '/plays/adopt-trial',
@@ -72,7 +92,7 @@ export function playRoutes(plays: PlayService, logics: LogicRegistry = defaultLo
         if (!startLimiter.hit(String(user.id))) {
           return jsonError(c, 429, 'TOO_MANY_REQUESTS', '너무 자주 보냈어요. 잠시 뒤 다시 해 주세요.');
         }
-        return c.json(await plays.adoptTrial(user.id, gameId, { gameId, ...trial }), 200);
+        return c.json(await plays.adoptTrial(user.id, gameId, { gameId, ...trial }, clientIp(c)), 200);
       },
     )
     .post(

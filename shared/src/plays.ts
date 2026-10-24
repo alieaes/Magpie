@@ -34,6 +34,12 @@ export interface AdoptTrialRequest extends FinishPlayRequest {
   seed: string;
 }
 
+/** POST /api/plays/practice 본문: 비로그인(연습 모드·체험) 판의 점수. 서버는 다시 계산하지 않는다 (docs/design/261024-02-admin-play-history.md §3) */
+export interface PracticePlayRequest {
+  gameId: string;
+  score: number;
+}
+
 /** POST /api/plays/adopt-trial 응답. 이어받았으면 새 저장, 아니면 사유(has_record = 이미 기록이 있음) */
 export type AdoptTrialResponse =
   | { adopted: true; save: SaveSnapshot }

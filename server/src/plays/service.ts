@@ -21,6 +21,7 @@ import {
 } from '@magpie/shared';
 import { inTransaction } from '../db';
 import type { Database } from '../db/types';
+import { chunks } from '../lib/chunks';
 import type { RankingService } from '../ranking/service';
 import { ensureSave, readSave, readSaveVersion, writeSave } from '../saves/store';
 import { updateBests, type BestChange } from './bests';
@@ -38,12 +39,14 @@ export type FinishOutcome =
   | { kind: 'judged'; response: FinishPlayResponse };
 
 export interface PlayService {
-  /** 새 판을 연다. 같은 게임의 안 끝난 이전 판은 버린다(abandoned) */
-  start(userId: number, gameId: GameId): Promise<StartPlayResponse>;
+  /** 새 판을 연다. 같은 게임의 안 끝난 이전 판은 버린다(abandoned). ip는 판을 연 IP(관리자 이력용) */
+  start(userId: number, gameId: GameId, ip?: string | null): Promise<StartPlayResponse>;
   /** 끝난 판을 검사하고 저장한다 */
   finish(userId: number, playId: number, submission: FinishPlayRequest): Promise<FinishOutcome>;
   /** 로그인 전에 체험한 하루를 기록이 없는 계정의 첫 하루로 이어받는다. 랭킹에는 넣지 않는다 */
-  adoptTrial(userId: number, gameId: GameId, trial: AdoptTrialRequest): Promise<AdoptTrialResponse>;
+  adoptTrial(userId: number, gameId: GameId, trial: AdoptTrialRequest, ip?: string | null): Promise<AdoptTrialResponse>;
+  /** 비로그인(연습 모드·체험) 판의 점수를 남긴다. 점수는 화면이 보낸 값 그대로다 (docs/design/261024-02-admin-play-history.md §3) */
+  recordPractice(gameId: GameId, score: number, ip: string | null): Promise<void>;
 }
 
 export interface PlayServiceOptions {
@@ -70,7 +73,7 @@ export function createPlayService(
   }
 
   return {
-    async start(userId, gameId) {
+    async start(userId, gameId, ip = null) {
       const logic = logics.find(gameId);
       const growth = logic !== undefined && isGrowthLogic(logic) ? logic : undefined;
       return inTransaction(db, async (trx) => {
@@ -101,7 +104,7 @@ export function createPlayService(
         const seed = randomSeed();
         const inserted = await trx
           .insertInto('plays')
-          .values({ user_id: userId, game_id: gameId, seed, save_version: saveVersion ?? null, status: 'pending', started_at: at })
+          .values({ user_id: userId, game_id: gameId, seed, save_version: saveVersion ?? null, status: 'pending', started_at: at, ip })
           .executeTakeFirstOrThrow();
         const response: StartPlayResponse = { playId: Number(inserted.insertId), seed };
         if (saveVersion !== undefined) response.saveVersion = saveVersion;
@@ -185,7 +188,7 @@ export function createPlayService(
       return { kind: 'judged', response };
     },
 
-    async adoptTrial(userId, gameId, trial) {
+    async adoptTrial(userId, gameId, trial, ip = null) {
       const logic = logics.find(gameId);
       if (!logic || !isGrowthLogic(logic)) return { adopted: false, reason: 'bad_input' };
       const at = now();
@@ -214,6 +217,7 @@ export function createPlayService(
             client_score: trial.score,
             started_at: startedAt,
             ended_at: at,
+            ip,
           })
           .executeTakeFirstOrThrow();
         await trx.insertInto('play_replays').values({ play_id: Number(inserted.insertId), data: replayData }).execute();
@@ -221,16 +225,32 @@ export function createPlayService(
         return { adopted: true, save: { version: 2, state: judgement.nextState } };
       });
     },
+
+    async recordPractice(gameId, score, ip) {
+      await db.insertInto('practice_plays').values({ game_id: gameId, score, ip, created_at: now() }).execute();
+    },
   };
 }
 
 /** 끝나지 않고 하루가 지난 판을 버린 판(abandoned)으로 정리한다. 하루 한 번 돈다. 정리한 개수를 돌려준다 */
 export async function abandonStalePlays(db: Kysely<Database>, now = new Date()): Promise<number> {
-  const result = await db
-    .updateTable('plays')
-    .set({ status: 'rejected', reject_reason: 'abandoned' })
+  // 먼저 읽고 기본 키로 고친다. 조건으로 바로 UPDATE하면 대기 판 색인 범위에 틈(gap) 잠금이 걸려
+  // 그사이 판을 열거나 끝내는 다른 트랜잭션과 교착(deadlock)이 난다
+  const stale = await db
+    .selectFrom('plays')
+    .select('id')
     .where('status', '=', 'pending')
     .where('started_at', '<', new Date(now.getTime() - DAY_MS))
-    .executeTakeFirst();
-  return Number(result.numUpdatedRows);
+    .execute();
+  let updated = 0;
+  for (const ids of chunks(stale.map((p) => p.id))) {
+    const result = await db
+      .updateTable('plays')
+      .set({ status: 'rejected', reject_reason: 'abandoned' })
+      .where('id', 'in', ids)
+      .where('status', '=', 'pending')
+      .executeTakeFirst();
+    updated += Number(result.numUpdatedRows);
+  }
+  return updated;
 }

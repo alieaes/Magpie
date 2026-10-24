@@ -75,7 +75,8 @@ export interface TestApp {
   /** 유저를 만들고 세션을 연다. nickname이 null이면 닉네임 전 유저, admin이면 관리자 */
   login(options?: { nickname?: string | null; admin?: boolean }): Promise<TestUser>;
   get(path: string, cookie?: string): Promise<Response>;
-  post(path: string, body?: unknown, cookie?: string): Promise<Response>;
+  /** headers는 더 붙일 헤더 (CF-Connecting-IP 등) */
+  post(path: string, body?: unknown, cookie?: string, headers?: Record<string, string>): Promise<Response>;
   del(path: string, body?: unknown, cookie?: string): Promise<Response>;
 }
 
@@ -97,10 +98,10 @@ export function withTestApp(fn: (app: TestApp) => Promise<void>, { logics = test
     const app = createApp({ db: trx, config, ranking, logics, plays, saves, visits, oidc: null });
     let seq = 0;
     /** 우리 사이트에서 온 것처럼(Origin) JSON 본문 요청을 보낸다 */
-    const send = (method: string, path: string, body: unknown, cookie: string | undefined) =>
+    const send = (method: string, path: string, body: unknown, cookie: string | undefined, headers: Record<string, string> = {}) =>
       app.request(path, {
         method,
-        headers: { origin, 'content-type': 'application/json', ...(cookie ? { cookie } : {}) },
+        headers: { origin, 'content-type': 'application/json', ...(cookie ? { cookie } : {}), ...headers },
         body: body === undefined ? null : JSON.stringify(body),
       });
     await fn({
@@ -114,7 +115,7 @@ export function withTestApp(fn: (app: TestApp) => Promise<void>, { logics = test
         return { id: user.id, cookie: `${cookieName}=${token}` };
       },
       get: async (path, cookie) => app.request(path, { headers: cookie ? { cookie } : {} }),
-      post: async (path, body, cookie) => send('POST', path, body, cookie),
+      post: async (path, body, cookie, headers) => send('POST', path, body, cookie, headers),
       del: async (path, body, cookie) => send('DELETE', path, body, cookie),
     });
   });

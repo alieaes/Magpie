@@ -5,7 +5,7 @@
 
 import { randomSeed, type FinishPlayRequest, type GameId } from '@magpie/shared';
 import type { GrowthSession } from '@magpie/shared/game-module';
-import { ApiError, adoptTrialDay, fetchSave, finishPlay, sendSaveAction, startPlay } from '../api';
+import { ApiError, adoptTrialDay, fetchSave, finishPlay, sendPracticePlay, sendSaveAction, startPlay } from '../api';
 
 const PENDING_PREFIX = 'magpie.pendingDay.';
 const TRIAL_PREFIX = 'magpie.trialDay.';
@@ -168,8 +168,12 @@ export function createTrialSession(
       return { seed };
     },
     finishDay: async (result) => {
-      // 개발용 고정 시드 체험은 이어받지 않는다
-      if (!fixedSeed) writeTrialDay(gameId, { seed, inputs: result.inputs, ticks: result.ticks, score: result.score });
+      // 개발용 고정 시드 체험은 이어받지 않고 점수도 보내지 않는다
+      if (!fixedSeed) {
+        writeTrialDay(gameId, { seed, inputs: result.inputs, ticks: result.ticks, score: result.score });
+        // 비로그인 판 점수(관리자 이력용). 보내지 못해도 그대로 간다 (docs/design/261024-02-admin-play-history.md §3)
+        sendPracticePlay(gameId, result.score).catch((err: unknown) => console.warn('[growth] 체험 하루 점수를 보내지 못했다', err));
+      }
       return { accepted: true, score: result.score, best: { today: false, allTime: false }, rank: { today: null } };
     },
     act: async () => ({ ok: false, reason: 'trial' }),

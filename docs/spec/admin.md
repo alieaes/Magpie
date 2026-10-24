@@ -1,6 +1,6 @@
 # 스펙: 관리자
 
-설계: [261008-02-admin.md](../design/261008-02-admin.md), 게임 랭킹 초기화 [261022-08-game-ranking-reset.md](../design/261022-08-game-ranking-reset.md), 대시보드 [261024-01-admin-dashboard.md](../design/261024-01-admin-dashboard.md)
+설계: [261008-02-admin.md](../design/261008-02-admin.md), 게임 랭킹 초기화 [261022-08-game-ranking-reset.md](../design/261022-08-game-ranking-reset.md), 대시보드 [261024-01-admin-dashboard.md](../design/261024-01-admin-dashboard.md), 플레이 이력 [261024-02-admin-play-history.md](../design/261024-02-admin-play-history.md)
 
 ## 관리자 지정
 
@@ -88,3 +88,20 @@
   - y축 눈금 0·반·끝 셋. 끝 = 가장 큰 값(최소 4)의 반을 1·2·5×10ⁿ으로 올려 두 배. x축 눈금은 3시간마다(폭 420px 미만이면 6시간마다) "N시".
   - 그 시간 칸 전체가 누름 자리다. 마우스를 올리거나 누르면 칸이 옅게 칠해지고 막대 위에 "8명 14시" 말풍선. 그래프 밖으로 나가면 사라진다.
   - 화면 읽기 프로그램용으로 시간별 값을 모두 담은 숨긴 표를 같이 둔다.
+
+### 플레이 이력
+
+방문자 칸 아래. 게임별 최근 판을 로그인·비로그인으로 나눠 보여준다. 남기는 쪽(판의 IP, 비로그인 판 점수)은 [plays.md](./plays.md).
+
+| 요청 | 응답 |
+|---|---|
+| `GET /api/admin/plays?gameId=&who=member\|guest&cursor=` | `200 { who, items, nextCursor }`. 50개씩 최근 순, 다음 묶음은 `nextCursor`를 `cursor`로(더 없으면 `null`). 없는·기록할 수 없는 게임, 틀린 `who`, 모양이 틀린 커서는 `400 BAD_REQUEST`. 형식 `AdminPlaysResponse`(`shared/src/admin.ts`) |
+
+- 로그인(`member`, `server/src/admin/play-history.ts`): `plays`에서 **끝난 판만**(`ended_at` 있음, 버려진 판은 빠진다), 끝난 시각·판 번호 내림차순(색인 `ix_plays_game_ended`). 항목 `{ playId, at(끝난 시각), nickname(지금 닉네임, 없으면 null), ip(배포 전 판 null), score(통과한 판만), rejectReason(거절된 판만) }`. 커서는 `"끝난 시각 ms_판 번호"`.
+- 비로그인(`guest`): `practice_plays` 번호 내림차순. 항목 `{ id, at(받은 시각), ip, score }`. 커서는 마지막 번호.
+- 화면(`client/src/components/AdminPlayList.vue`):
+  - 게임 탭: 랭킹 탭과 같은 분류 묶음에서 총합만 뺀 것(플레이할 수 있는 게임, `TargetTabs`에 `label="게임"`). 처음에는 첫 게임, 바꾸면 두 칸을 새로 불러온다.
+  - PC(768px 이상)는 "로그인"·"비로그인" 두 칸 나란히, 좁으면 위아래.
+  - 한 줄: 시각(KST `MM.DD HH:mm`, `formatKstDateTime`) · 로그인은 `닉네임 (IP)`, 비로그인은 `IP` · 점수(천 단위 쉼표 + 게임 단위). 닉네임이 없으면 "이름 없음", IP가 없으면 "-".
+  - 거절된 판은 점수 자리에 "거절 · 사유"(흐린 빨강): 입력 이상, 시간 안 맞음, 점수 다름, 저장 바뀜, 관리자가 지움.
+  - 불러오는 동안 막대 5줄, 비었으면 "아직 없어요.", 실패하면 "불러오지 못했어요." + [다시 시도]. 다음 묶음이 있으면 아래 [더 보기](누르는 동안 "불러오는 중").
