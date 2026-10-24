@@ -15,6 +15,7 @@ import { createLogicRegistry, type LogicRegistry } from '../src/plays/logics';
 import { createPlayService } from '../src/plays/service';
 import { createRankingService } from '../src/ranking/service';
 import { createSaveService } from '../src/saves/service';
+import { createVisitService } from '../src/visits/service';
 import { testShopLogic } from './growth-fixture';
 
 loadEnvFile();
@@ -92,7 +93,8 @@ export function withTestApp(fn: (app: TestApp) => Promise<void>, { logics = test
     const ranking = createRankingService(trx, now);
     const plays = createPlayService(trx, { ranking, now, logics });
     const saves = createSaveService(trx, { logics, now });
-    const app = createApp({ db: trx, config, ranking, logics, plays, saves, oidc: null });
+    const visits = createVisitService(trx, now);
+    const app = createApp({ db: trx, config, ranking, logics, plays, saves, visits, oidc: null });
     let seq = 0;
     /** 우리 사이트에서 온 것처럼(Origin) JSON 본문 요청을 보낸다 */
     const send = (method: string, path: string, body: unknown, cookie: string | undefined) =>

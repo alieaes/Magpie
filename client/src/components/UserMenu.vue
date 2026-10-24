@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { storeToRefs } from 'pinia';
-import { PhCaretDown, PhPencilSimple, PhSignIn, PhSignOut, PhUserMinus } from '@phosphor-icons/vue';
+import { useRouter } from 'vue-router';
+import { PhCaretDown, PhChartBar, PhPencilSimple, PhSignIn, PhSignOut, PhUserMinus } from '@phosphor-icons/vue';
 import { useDismiss } from '../composables/useDismiss';
 import { useAuthStore } from '../stores/auth';
 
 const auth = useAuthStore();
+const router = useRouter();
 const { user } = storeToRefs(auth);
 
 const open = ref(false);
@@ -23,6 +25,12 @@ function initial(nickname: string | null): string {
 function openNickname(): void {
   open.value = false;
   auth.nicknameDialog = user.value?.nickname ? 'change' : 'required';
+}
+
+/** 관리자 대시보드로 간다 (docs/design/261024-01-admin-dashboard.md §3) */
+function openAdmin(): void {
+  open.value = false;
+  void router.push('/admin');
 }
 
 /** 탈퇴 확인 창을 연다 */
@@ -71,6 +79,13 @@ async function onLogout(): Promise<void> {
       </button>
 
       <div v-if="open" class="menu" role="menu">
+        <template v-if="user.isAdmin">
+          <button type="button" role="menuitem" class="menu-item" @click="openAdmin">
+            <PhChartBar :size="16" weight="bold" />
+            관리자 대시보드
+          </button>
+          <div class="menu-divider" aria-hidden="true" />
+        </template>
         <button type="button" role="menuitem" class="menu-item" @click="openNickname">
           <PhPencilSimple :size="16" weight="bold" />
           {{ user.nickname ? '닉네임 변경' : '닉네임 정하기' }}

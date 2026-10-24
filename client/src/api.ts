@@ -3,6 +3,7 @@
 import { hc } from 'hono/client';
 import type { AppType } from '@magpie/server';
 import type {
+  AdminVisitorsResponse,
   FinishPlayRequest,
   AdoptTrialRequest,
   AdoptTrialResponse,
@@ -143,6 +144,13 @@ export async function adminResetNickname(userId: number): Promise<void> {
 export async function adminResetRanking(gameId: string): Promise<void> {
   const res = await client.api.admin.games[':gameId']['reset-ranking'].$post({ param: { gameId } });
   if (!res.ok) throw await toApiError(res);
+}
+
+/** 관리자: 오늘 시간별 방문자와 전체 방문자. 근거: docs/design/261024-01-admin-dashboard.md */
+export async function fetchAdminVisitors(): Promise<AdminVisitorsResponse> {
+  const res = await client.api.admin.visitors.$get();
+  if (!res.ok) throw await toApiError(res);
+  return res.json();
 }
 
 /** 로그아웃한다 */

@@ -59,13 +59,13 @@
 
 | 요청 | 응답 |
 |---|---|
-| `GET /api/me` | `{ user: { nickname, isAdmin } \| null, loginAvailable, devLogin }`. 관리자는 [admin.md](./admin.md), `devLogin`은 위 "개발용 테스트 로그인" |
+| `GET /api/me` | `{ user: { nickname, isAdmin } \| null, loginAvailable, devLogin }`. 관리자는 [admin.md](./admin.md), `devLogin`은 위 "개발용 테스트 로그인". 방문자도 여기서 센다(방문자 쿠키, [admin.md](./admin.md) 대시보드) |
 | `PUT /api/me/nickname` `{ nickname }` | `200 { nickname }`. 비로그인 `401`, 규칙 위반 `400 NICKNAME_LENGTH / NICKNAME_CHARS / NICKNAME_RESERVED`, 중복 `409 NICKNAME_TAKEN` |
 
 ## 화면
 
 - 상단 바 "로그인": `loginAvailable`이면 켜지고, 누르면 지금 주소로 돌아오는 Google 로그인으로 간다.
-- 로그인 후: 아바타(닉네임 첫 글자, 닉네임 전이면 `?`) + 닉네임(전이면 청록 "닉네임 정하기") → 메뉴: 닉네임 정하기/변경, 로그아웃, (구분선) 탈퇴(빨강).
+- 로그인 후: 아바타(닉네임 첫 글자, 닉네임 전이면 `?`) + 닉네임(전이면 청록 "닉네임 정하기") → 메뉴: (관리자만) 관리자 대시보드·구분선, 닉네임 정하기/변경, 로그아웃, (구분선) 탈퇴(빨강).
 - 닉네임이 없으면 앱이 뜰 때 "닉네임을 정해 주세요" 창이 열린다("나중에"로 닫을 수 있음). 규칙 위반은 입력하는 대로 알려주고(막 치기 시작한 짧은 입력은 빼고), 중복은 저장할 때 서버 문구로 알려준다.
 - `?login=failed` / `?login=unavailable`로 돌아오면, 또는 탈퇴 뒤 `?account=deleted`로 오면 상단에 5초 안내를 띄우고 주소에서 지운다.
 - 로그인·로그아웃하면 랭킹 패널·페이지와 게임 카드 요약을 다시 불러온다(내 순위·내 최고).

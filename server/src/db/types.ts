@@ -105,6 +105,13 @@ export interface SaveActionsTable {
   created_at: Date;
 }
 
+/** 009_visits.sql. 방문자 쿠키가 KST 하루에 한 줄. day는 KST 날짜(YYYY-MM-DD)로 넣는다 */
+export interface VisitsTable {
+  day: ColumnType<Date, string, string>;
+  visitor_id: string;
+  first_at: Date;
+}
+
 export interface Database {
   users: UsersTable;
   sessions: SessionsTable;
@@ -115,4 +122,5 @@ export interface Database {
   admin_actions: AdminActionsTable;
   game_saves: GameSavesTable;
   save_actions: SaveActionsTable;
+  visits: VisitsTable;
 }

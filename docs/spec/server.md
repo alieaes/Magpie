@@ -108,5 +108,6 @@ pnpm 워크스페이스. TypeScript 6.0.3 고정 (vue-tsc가 TypeScript 7을 아
 | `006_users_role.sql` | `users.role`, `admin_actions` ([admin.md](./admin.md)) |
 | `007_game_saves.sql` | `game_saves`, `save_actions`, `plays.save_version` ([saves.md](./saves.md)) |
 | `008_admin_reset_ranking.sql` | `admin_actions.action`에 `reset_ranking` (게임 랭킹 초기화, [admin.md](./admin.md)) |
+| `009_visits.sql` | `visits` (방문자 수, [admin.md](./admin.md) 대시보드) |
 
 `002`는 `003`·`004`보다 늦게 만들었지만, 적용 기록(`schema_migrations`)이 파일 이름으로 남으므로 새로 생긴 파일은 순서와 상관없이 적용된다. 랭킹 표의 열은 [ranking.md](./ranking.md) 참고.

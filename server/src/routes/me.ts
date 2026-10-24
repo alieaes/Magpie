@@ -1,7 +1,9 @@
 // 내 정보: GET /api/me, PUT /api/me/nickname, DELETE /api/me(탈퇴).
+// GET /api/me에서 방문자도 센다(docs/design/261024-01-admin-dashboard.md §1).
 // 근거: docs/design/261006-07-login.md §3, §4, docs/design/261008-01-account-delete.md
 
 import { Hono } from 'hono';
+import { getCookie, setCookie } from 'hono/cookie';
 import { zValidator } from '@hono/zod-validator';
 import type { Kysely } from 'kysely';
 import { z } from 'zod';
@@ -14,6 +16,7 @@ import { DuplicateNicknameError, setNickname } from '../auth/users';
 import type { Database } from '../db/types';
 import { jsonError, rejectInvalid } from '../lib/errors';
 import type { RankingService } from '../ranking/service';
+import { VISITOR_MAX_AGE_SECONDS, isVisitorId, newVisitorId, type VisitService } from '../visits/service';
 
 export interface MeRouteDeps {
   db: Kysely<Database>;
@@ -22,12 +25,25 @@ export interface MeRouteDeps {
   /** 개발용 테스트 로그인이 켜져 있는지 */
   devLogin: boolean;
   ranking: RankingService;
+  visits: VisitService;
 }
 
 /** /api/me 라우트 */
-export function meRoutes({ db, cookies, loginAvailable, devLogin, ranking }: MeRouteDeps) {
+export function meRoutes({ db, cookies, loginAvailable, devLogin, ranking, visits }: MeRouteDeps) {
   return new Hono<AppEnv>()
-    .get('/me', (c) => {
+    .get('/me', async (c) => {
+      // 앱이 뜰 때마다 부르므로 여기서 방문자를 센다. 쿠키가 없거나 모양이 틀리면 새로 준다
+      let visitorId = getCookie(c, cookies.visitor);
+      if (!isVisitorId(visitorId)) {
+        visitorId = newVisitorId();
+        setCookie(c, cookies.visitor, visitorId, { ...cookies.base, maxAge: VISITOR_MAX_AGE_SECONDS });
+      }
+      try {
+        await visits.record(visitorId);
+      } catch (err) {
+        console.warn('[visits] 방문을 적지 못했다', err);
+      }
+
       const user = c.get('user');
       return c.json({ user: user ? { nickname: user.nickname, isAdmin: user.isAdmin } : null, loginAvailable, devLogin }, 200);
     })

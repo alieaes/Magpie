@@ -19,6 +19,7 @@ import { playRoutes } from './routes/plays';
 import { rankingRoutes } from './routes/rankings';
 import { saveRoutes } from './routes/saves';
 import { createSaveService, type SaveService } from './saves/service';
+import { createVisitService, type VisitService } from './visits/service';
 
 /** 라우트가 쓰는 의존성. 테스트에서는 서비스와 로그인 설정을 바꿔 끼울 수 있다 */
 export interface AppDeps {
@@ -29,6 +30,8 @@ export interface AppDeps {
   logics?: LogicRegistry;
   plays?: PlayService;
   saves?: SaveService;
+  /** 방문자 수. 테스트는 시각을 고정한 서비스를 끼운다 */
+  visits?: VisitService;
   /** 없으면 .env의 Google 설정으로 만든다. null이면 로그인을 막는다 */
   oidc?: OidcConfigLoader | null;
 }
@@ -48,6 +51,7 @@ export function createApp({
   logics = defaultLogics,
   plays = createPlayService(db, { ranking, logics }),
   saves = createSaveService(db, { logics }),
+  visits = createVisitService(db),
   oidc = defaultOidc(config),
 }: AppDeps) {
   const cookies = cookieSettings(config.SITE_URL);
@@ -64,10 +68,10 @@ export function createApp({
       c.header('Cache-Control', 'no-store');
     })
     .route('/', rankingRoutes(ranking, saves))
-    .route('/', meRoutes({ db, cookies, loginAvailable: oidc !== null, devLogin, ranking }))
+    .route('/', meRoutes({ db, cookies, loginAvailable: oidc !== null, devLogin, ranking, visits }))
     .route('/', playRoutes(plays, logics))
     .route('/', saveRoutes(saves, logics))
-    .route('/', adminRoutes({ db, ranking }));
+    .route('/', adminRoutes({ db, ranking, visits }));
 
   const auth = new Hono<AppEnv>()
     .use(sameOrigin)

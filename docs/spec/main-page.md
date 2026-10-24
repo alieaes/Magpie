@@ -8,6 +8,7 @@
 |---|---|
 | `/` | 메인 |
 | `/ranking?target=&period=` | 랭킹. 쿼리가 없거나 모르는 값이면 총합·일간 |
+| `/admin` | 관리자 대시보드([admin.md](./admin.md)). 관리자가 아니면 "페이지를 찾을 수 없어요" |
 | `/dev/haptics` | 개발 빌드에서만: 진동 시험 화면([haptics.md](./haptics.md)) |
 | `/play/:gameId` | 게임 화면. 사과게임([apple-ten.md](./apple-ten.md)), 복권 긁기([lucky-scratch.md](./lucky-scratch.md)), 붕어빵 가게([fish-bun.md](./fish-bun.md)), 분식집([snack-bar.md](./snack-bar.md)). 플레이 페이지 공통은 apple-ten.md. 성장형 게임은 [saves.md](./saves.md)의 셸 흐름 |
 | 그 외 | "페이지를 찾을 수 없어요" |

@@ -1,6 +1,6 @@
 # 스펙: 관리자
 
-설계: [261008-02-admin.md](../design/261008-02-admin.md), 게임 랭킹 초기화 [261022-08-game-ranking-reset.md](../design/261022-08-game-ranking-reset.md)
+설계: [261008-02-admin.md](../design/261008-02-admin.md), 게임 랭킹 초기화 [261022-08-game-ranking-reset.md](../design/261022-08-game-ranking-reset.md), 대시보드 [261024-01-admin-dashboard.md](../design/261024-01-admin-dashboard.md)
 
 ## 관리자 지정
 
@@ -63,3 +63,28 @@
 - 처리하면 랭킹을 다시 불러온다. 닉네임 초기화 뒤에는 로그인 상태도 다시 받는다(자기 닉네임이면 닉네임 창이 열린다).
 - 게임 랭킹 초기화: 랭킹 페이지의 **게임 분류 탭에서만** 시간 줄 오른쪽 끝에 [랭킹 초기화](작은 버튼, 빨강 글씨). 참여자가 0명이면 꺼진다. 메인 패널에는 없다.
   - 확인 창: "붕어빵 가게 랭킹을 초기화할까요? 12명의 기록이 지워지고, 가게 저장은 그대로예요. 되돌릴 수 없어요."(N은 지금 보이는 참여자 수), 버튼 "초기화".
+
+## 대시보드 (`/admin`)
+
+- 관리자만. 관리자가 아니면(비로그인 포함) 없는 페이지 화면(`NotFoundPage`)을 그리고, 로그인 상태를 받기 전에는 아무것도 그리지 않는다. 실제 권한 확인은 API가 한다.
+- 들어가는 곳: 유저 메뉴 맨 위 "관리자 대시보드"(관리자만, 아래 구분선).
+- 페이지(`client/src/pages/AdminPage.vue`)를 열 때 한 번 불러온다. 실패하면 "방문자를 불러오지 못했어요." + [다시 시도].
+
+### 방문자
+
+- **방문자 = 방문자 쿠키(브라우저 하나)가 KST 하루에 한 번.** 로그인과 상관없이 센다. 쿠키를 지우거나 다른 브라우저면 다른 방문자다.
+- 세는 곳: `GET /api/me`(앱이 뜰 때 부른다, `server/src/routes/me.ts`). 쿠키가 없거나 모양이 틀리면(22자 base64url이 아니면) 새로 만들어 준다. 적기에 실패해도 `/api/me`는 그대로 답한다(로그만 남긴다).
+- 쿠키: 개발 `magpie_vid`, https `__Host-magpie_vid`. 무작위 16바이트 base64url(22자), 1년(다시 와도 늘리지 않음), HttpOnly, SameSite=Lax, Path=/, https면 Secure.
+- 표 `visits`(`db/009_visits.sql`): `day`(KST 날짜), `visitor_id`(쿠키 값), `first_at`(UTC, 그날 처음 온 시각), 기본 키 (`day`, `visitor_id`). `INSERT IGNORE`로 넣는다. IP·유저 번호는 남기지 않는다.
+- **오늘** = KST 오늘 방문자 수, **전체** = `visits` 줄 수(날마다 센 방문자의 합, 2026-10-24 배포부터).
+- 서비스: `server/src/visits/service.ts`(`createVisitService`, 테스트는 시각을 고정한 서비스를 `createApp`에 끼운다).
+
+| 요청 | 응답 |
+|---|---|
+| `GET /api/admin/visitors` | `200 { today: { day, total, hourly[24] }, allTime }`. `hourly[h]`는 KST `h`시에 그날 처음 온 방문자 수, 합이 `total`. 형식 `AdminVisitorsResponse`(`shared/src/admin.ts`) |
+
+- 화면: "오늘 N명", "전체 N명", 그 아래 "오늘 시간별 방문자" 막대 24개(`client/src/components/VisitorChart.vue`, 인라인 SVG).
+  - 그릴 때 실제 폭을 재서(ResizeObserver) 그 픽셀로 그린다. 막대 폭 최대 24px, 막대 사이 2px 이상, 위 끝만 4px 둥글게. 색은 액센트(`--accent`).
+  - y축 눈금 0·반·끝 셋. 끝 = 가장 큰 값(최소 4)의 반을 1·2·5×10ⁿ으로 올려 두 배. x축 눈금은 3시간마다(폭 420px 미만이면 6시간마다) "N시".
+  - 그 시간 칸 전체가 누름 자리다. 마우스를 올리거나 누르면 칸이 옅게 칠해지고 막대 위에 "8명 14시" 말풍선. 그래프 밖으로 나가면 사라진다.
+  - 화면 읽기 프로그램용으로 시간별 값을 모두 담은 숨긴 표를 같이 둔다.

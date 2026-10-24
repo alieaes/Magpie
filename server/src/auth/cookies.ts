@@ -5,6 +5,8 @@ export interface CookieSettings {
   session: string;
   /** 로그인 도중 잠깐 쓰는 값(state, nonce, PKCE) */
   oauth: string;
+  /** 방문자 수를 세는 브라우저 구분 값 (docs/design/261024-01-admin-dashboard.md §1) */
+  visitor: string;
   base: { httpOnly: true; secure: boolean; sameSite: 'Lax'; path: '/' };
 }
 
@@ -20,6 +22,7 @@ export function cookieSettings(siteUrl: string): CookieSettings {
     secure,
     session: `${prefix}magpie_session`,
     oauth: `${prefix}magpie_oauth`,
+    visitor: `${prefix}magpie_vid`,
     base: { httpOnly: true, secure, sameSite: 'Lax', path: '/' },
   };
 }

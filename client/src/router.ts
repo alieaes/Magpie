@@ -8,6 +8,8 @@ export const router = createRouter({
     { path: '/', name: 'home', component: HomePage },
     { path: '/ranking', name: 'ranking', component: () => import('./pages/RankingPage.vue') },
     { path: '/play/:gameId', name: 'play', component: () => import('./pages/PlayPage.vue') },
+    // 관리자 대시보드. 관리자가 아니면 페이지가 없는 페이지 화면을 그린다 (docs/design/261024-01-admin-dashboard.md §3)
+    { path: '/admin', name: 'admin', component: () => import('./pages/AdminPage.vue') },
     // 개발 빌드에서만: 진동 시험 화면 (docs/design/261023-01-haptics.md §6)
     ...(import.meta.env.DEV ? [{ path: '/dev/haptics', name: 'dev-haptics', component: () => import('./pages/dev/HapticsLab.vue') }] : []),
     { path: '/:pathMatch(.*)*', name: 'not-found', component: () => import('./pages/NotFoundPage.vue') },
